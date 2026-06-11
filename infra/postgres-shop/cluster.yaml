@@ -1,0 +1,37 @@
+# Shop source OLTP database — CloudNativePG single-instance cluster.
+# Seeded at first init via postInitApplicationSQL from the shop-seed-sql ConfigMap.
+# RW service: shop-db-rw.data-platform.svc:5432
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: shop-db
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.8
+
+  bootstrap:
+    initdb:
+      database: shop
+      owner: shop
+      secret:
+        name: shop-db-app          # basic-auth secret (username: shop / password: shop)
+      postInitApplicationSQLRefs:
+        configMapRefs:
+          - name: shop-seed-sql
+            key: seed.sql
+
+  storage:
+    size: 10Gi
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+
+  # Lab footprint: skip the default rolling-update supervision niceties.
+  primaryUpdateStrategy: unsupervised
