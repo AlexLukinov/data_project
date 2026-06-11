@@ -23,8 +23,8 @@ Recorded 2026-06-11. All images verified to have **arm64** variants (Apple Silic
 | ClickHouse operator | altinity/altinity-clickhouse-operator | 0.27.1 | operator 0.27.x |
 | ClickHouse server | CHI `clickhouse.altinity.com/v1` | — | `altinity/clickhouse-server:25.8.16.10002.altinitystable` |
 | Airflow | apache-airflow/airflow | 1.16.0 (chart appVersion 2.10.5; we pin image to 2.11.1) | base `apache/airflow:2.11.1-python3.12` → `airflow-lab:dev` |
-| Strimzi | strimzi/strimzi-kafka-operator | 1.0.0 | `quay.io/strimzi/operator:1.0.0`; Kafka 4.0.0; CRDs `kafka.strimzi.io/v1` |
-| Kafka UI | plain manifests | — | `ghcr.io/kafbat/kafka-ui:1.5.0` |
+| Strimzi | strimzi/strimzi-kafka-operator | 1.0.0 | `quay.io/strimzi/operator:1.0.0`; Kafka 4.2.0 (op 1.0.0 supports 4.1.x–4.2.0); CRDs `kafka.strimzi.io/v1` |
+| Kafka UI | plain manifests | — | `ghcr.io/kafbat/kafka-ui:v1.0.0` |
 | Event generator | plain Deployment | — | `python:3.12-slim` → `event-gen:dev` |
 | Trino | trino/trino | 1.42.2 | `trinodb/trino:480` |
 | Spark operator | spark-operator/spark-operator | 2.5.0 | CRD `sparkoperator.k8s.io/v1beta2` |

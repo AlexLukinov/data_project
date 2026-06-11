@@ -124,7 +124,8 @@ query: repos ## Phase 7a: Trino (coordinator-only) + clickhouse catalog
 .PHONY: spark-demo
 spark-demo: repos ## Phase 7b: spark operator + run the demo SparkApplication once
 	$(HELM) upgrade --install spark-operator spark-operator/spark-operator \
-	  --version $(SPARK_CHART_VER) -n spark-operator --create-namespace --wait
+	  --version $(SPARK_CHART_VER) -n spark-operator --create-namespace \
+	  --set "spark.jobNamespaces={$(NS)}" --wait
 	minikube image build -t spark-s3a:dev infra/spark/ -p $(PROFILE)
 	$(KUBE) apply -f infra/spark/rbac.yaml
 	$(KUBE) delete sparkapplication shop-daily-revenue -n $(NS) --ignore-not-found
