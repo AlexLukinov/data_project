@@ -63,9 +63,13 @@ postgres: ## Phase 2: CloudNativePG operator + shop cluster (seeded)
 .PHONY: clickhouse
 clickhouse: ## Phase 3: Altinity operator + CHI + bootstrap SQL
 	$(HELM) upgrade --install clickhouse-operator altinity/altinity-clickhouse-operator \
-	  --version $(CH_OP_CHART_VER) -n $(NS)
+	  --version $(CH_OP_CHART_VER) -n $(NS) --wait
 	$(KUBE) apply -f infra/clickhouse/chi.yaml
-	$(KUBE) wait --for=condition=Ready chi/platform --timeout=300s || sleep 30
+	@echo "waiting for clickhouse pod to be created by the operator..."
+	@for i in $$(seq 1 60); do \
+	  $(KUBE) get pod -l clickhouse.altinity.com/chi=platform 2>/dev/null | grep -q chi && break || sleep 5; \
+	done
+	$(KUBE) wait --for=condition=Ready pod -l clickhouse.altinity.com/chi=platform --timeout=300s
 	bash infra/clickhouse/bootstrap.sh
 
 .PHONY: airflow-image

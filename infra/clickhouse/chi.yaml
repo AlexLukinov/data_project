@@ -1,0 +1,48 @@
+# ClickHouseInstallation — cluster 'platform', 1 shard x 1 replica (no Keeper needed).
+# Operator creates ClusterIP service 'clickhouse-platform' exposing HTTP 8123 + native 9000.
+# User admin/admin reachable from any pod in the namespace (lab).
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: platform
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse
+      dataVolumeClaimTemplate: data
+  configuration:
+    users:
+      admin/password: admin
+      admin/profile: default
+      admin/quota: default
+      admin/access_management: "1"
+      admin/networks/ip:
+        - "0.0.0.0/0"        # lab only: any pod in the namespace
+    clusters:
+      - name: platform
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+  templates:
+    podTemplates:
+      - name: clickhouse
+        spec:
+          containers:
+            - name: clickhouse
+              image: altinity/clickhouse-server:25.8.16.10002.altinitystable
+              resources:
+                requests:
+                  memory: 1Gi
+                  cpu: 500m
+                limits:
+                  memory: 2Gi
+    volumeClaimTemplates:
+      - name: data
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 10Gi
