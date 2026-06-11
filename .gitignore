@@ -1,0 +1,26 @@
+# Secrets (real ones — lab secrets in infra/secrets.yaml are intentionally committed)
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# dbt
+dbt/shop_dwh/target/
+dbt/shop_dwh/dbt_packages/
+dbt/shop_dwh/logs/
+.user.yml
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local kube/helm junk
+*.tmp
+kubeconfig

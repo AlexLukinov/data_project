@@ -1,0 +1,14 @@
+Data Platform Lab — access table   (run: bash scripts/port-forwards.sh)
+
+  Service           Local URL                Credentials
+  ----------------  -----------------------  ----------------------
+  MinIO console     http://localhost:9001    minioadmin / minioadmin
+  MinIO API         http://localhost:9002    minioadmin / minioadmin   (-> svc :9000)
+  Airflow           http://localhost:8080    admin / admin
+  ClickHouse HTTP   http://localhost:8123    admin / admin
+  Kafka UI          http://localhost:8081    (no auth)
+  Trino             http://localhost:8082    any username, no password
+  Postgres shop     localhost:5433           shop / shop               (-> svc :5432)
+
+  Note: ClickHouse native port 9000 collides with MinIO API 9000 on the host.
+        Do NOT port-forward CH native; use HTTP 8123.
