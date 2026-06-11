@@ -78,12 +78,15 @@ airflow-image: ## Build the custom airflow-lab:dev image into minikube
 
 .PHONY: airflow
 airflow: airflow-image ## Phase 4: Airflow (LocalExecutor) + batch DAG
+	$(KUBE) apply -f infra/airflow/airflow-meta.yaml
+	$(KUBE) wait --for=condition=Ready cluster/airflow-meta --timeout=300s
 	$(HELM) upgrade --install airflow apache-airflow/airflow --version $(AIRFLOW_CHART_VER) \
-	  -n $(NS) -f infra/airflow/values.yaml --timeout 10m
+	  -n $(NS) -f infra/airflow/values.yaml --timeout 12m
 	@echo ">> Airflow up. Run: make sync-dags"
 
 .PHONY: sync-dags
 sync-dags: ## Copy dags/ and dbt/ into the Airflow dags PVC via the scheduler pod
+	$(KUBE) exec $(SCHED_POD) -c scheduler -- mkdir -p /opt/airflow/dags/dbt
 	$(KUBE) cp dags/. $(SCHED_POD):/opt/airflow/dags/ -c scheduler
 	$(KUBE) cp dbt/.  $(SCHED_POD):/opt/airflow/dags/dbt/ -c scheduler
 	@echo ">> synced dags/ and dbt/ to scheduler PVC"

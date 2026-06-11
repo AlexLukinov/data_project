@@ -1,0 +1,93 @@
+# Airflow — chart apache-airflow/airflow 1.16.0 (appVersion 2.10.5), image overridden to
+# our airflow-lab:dev (2.11.1). LocalExecutor, external CNPG metadata DB.
+executor: LocalExecutor
+airflowVersion: "2.11.1"
+
+images:
+  airflow:
+    repository: airflow-lab
+    tag: dev
+    pullPolicy: Never        # image is built into minikube via `minikube image build`
+
+# External metadata DB (CNPG airflow-meta) — the chart's bitnami postgres subchart is disabled.
+postgresql:
+  enabled: false
+data:
+  metadataConnection:
+    user: airflow
+    pass: airflow
+    protocol: postgresql
+    host: airflow-meta-rw.data-platform.svc
+    port: 5432
+    db: airflow
+    sslmode: disable
+
+# LocalExecutor: no celery/redis/flower
+redis:
+  enabled: false
+flower:
+  enabled: false
+
+# Trim the footprint: no deferrable-operator triggerer, no statsd exporter in the lab.
+triggerer:
+  enabled: false
+statsd:
+  enabled: false
+
+# Fixed lab keys so `helm upgrade` is idempotent (no key rotation that would break
+# stored connections). Lab-only — do not reuse.
+fernetKey: "kyLYL5yGHRpa-8tlM6fZ-3VUxdccWtfnRwcRV-WQQn4="
+webserverSecretKey: "69d9578b52d0887b1457ecb3ec122562"
+
+# DAGs on a persistent volume (single-node RWO). `make sync-dags` kubectl-cp's into it.
+dags:
+  persistence:
+    enabled: true
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  gitSync:
+    enabled: false
+
+scheduler:
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+
+webserver:
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    password: admin
+    email: admin@example.com
+    firstName: admin
+    lastName: user
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+
+# Connections + service endpoints consumed by the DAG tasks.
+# AIRFLOW_CONN_SHOP_PG -> conn_id 'shop_pg' (PostgresHook). The rest are plain env.
+extraEnv: |
+  - name: AIRFLOW_CONN_SHOP_PG
+    value: "postgres://shop:shop@shop-db-rw.data-platform.svc:5432/shop"
+  - name: MINIO_ENDPOINT
+    value: "minio.data-platform.svc:9000"
+  - name: MINIO_ACCESS_KEY
+    value: "minioadmin"
+  - name: MINIO_SECRET_KEY
+    value: "minioadmin"
+  - name: CLICKHOUSE_HOST
+    value: "clickhouse-platform.data-platform.svc"
+  - name: CLICKHOUSE_PORT
+    value: "8123"
+  - name: CLICKHOUSE_USER
+    value: "admin"
+  - name: CLICKHOUSE_PASSWORD
+    value: "admin"

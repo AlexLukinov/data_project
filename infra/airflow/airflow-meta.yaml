@@ -1,0 +1,40 @@
+# Dedicated metadata DB for Airflow, via CloudNativePG — we deliberately do NOT use the
+# Airflow chart's bundled postgresql (it's the bitnami subchart, whose free images were
+# deprecated Aug 2025). Keeps us on one consistent, OSS Postgres operator.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-meta-app
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+type: kubernetes.io/basic-auth
+stringData:
+  username: airflow
+  password: airflow
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: airflow-meta
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.8
+  bootstrap:
+    initdb:
+      database: airflow
+      owner: airflow
+      secret:
+        name: airflow-meta-app
+  storage:
+    size: 2Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+  primaryUpdateStrategy: unsupervised

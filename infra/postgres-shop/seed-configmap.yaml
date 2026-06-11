@@ -66,3 +66,7 @@ data:
     FROM generate_series(1, 10000) o(id)
     CROSS JOIN generate_series(1, 3) s
     ON CONFLICT (id) DO NOTHING;
+
+    -- This seed runs as the postgres superuser (CNPG postInitApplicationSQL), so the tables
+    -- are owned by postgres. Grant the application user 'shop' read access for extraction.
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO shop;
