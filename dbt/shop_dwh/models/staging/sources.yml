@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw            # ClickHouse database loaded by the Airflow batch DAG
+    tables:
+      - name: customers
+      - name: orders
+      - name: order_items

@@ -1,0 +1,14 @@
+# dbt-clickhouse profile. Credentials/host come from env vars injected into the Airflow
+# scheduler pod (see infra/airflow/values.yaml extraEnv). HTTP interface on 8123.
+shop_dwh:
+  target: lab
+  outputs:
+    lab:
+      type: clickhouse
+      driver: http
+      host: "{{ env_var('CLICKHOUSE_HOST') }}"
+      port: "{{ env_var('CLICKHOUSE_PORT') | int }}"
+      user: "{{ env_var('CLICKHOUSE_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      schema: marts
+      secure: False

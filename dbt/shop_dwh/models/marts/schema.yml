@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: fct_orders
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+
+  - name: daily_revenue
+    columns:
+      - name: order_date
+        tests: [not_null, unique]
