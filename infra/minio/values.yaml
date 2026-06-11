@@ -1,0 +1,44 @@
+# MinIO — standalone, single replica. Chart: minio/minio 5.4.0
+# Root creds come from the centralized lab secret (keys rootUser / rootPassword).
+mode: standalone
+replicas: 1
+
+existingSecret: minio-root
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+
+# API service (cluster DNS: minio.data-platform.svc:9000)
+service:
+  type: ClusterIP
+  port: 9000
+
+# Console service (cluster DNS: minio-console.data-platform.svc:9001)
+consoleService:
+  type: ClusterIP
+  port: 9001
+
+# We create buckets + the smoke object with our own mc Job (infra/minio/bucket-init-job.yaml),
+# so the chart's bucket/policy provisioning stays disabled.
+buckets: []
+policies: []
+users: []
+
+# Pin the image (chart default appVersion, but be explicit).
+image:
+  repository: quay.io/minio/minio
+  tag: RELEASE.2024-12-18T13-15-44Z
+  pullPolicy: IfNotPresent
+
+mcImage:
+  repository: minio/mc
+  tag: RELEASE.2025-08-13T08-35-41Z-cpuv1
+  pullPolicy: IfNotPresent
