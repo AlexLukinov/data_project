@@ -8,8 +8,12 @@ echo "== minio pods =="
 kubectl -n "$NS" rollout status deploy/minio --timeout=120s 2>/dev/null \
   || kubectl -n "$NS" rollout status statefulset/minio --timeout=120s
 
-echo "== bucket-init job =="
-kubectl -n "$NS" wait --for=condition=complete job/minio-bucket-init --timeout=120s
+echo "== bucket-init job (TTL may have GC'd it after completion) =="
+if kubectl -n "$NS" get job/minio-bucket-init >/dev/null 2>&1; then
+  kubectl -n "$NS" wait --for=condition=complete job/minio-bucket-init --timeout=120s
+else
+  echo "  job already garbage-collected (ttlSecondsAfterFinished) — verifying buckets directly"
+fi
 
 U=$(kubectl -n "$NS" get secret minio-root -o jsonpath='{.data.rootUser}' | base64 -d)
 P=$(kubectl -n "$NS" get secret minio-root -o jsonpath='{.data.rootPassword}' | base64 -d)
