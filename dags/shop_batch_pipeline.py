@@ -43,7 +43,9 @@ def extract_to_minio(ds: str, **_) -> None:
         for col in FLOAT_COLUMNS & set(df.columns):
             df[col] = df[col].astype(float)
         buf = io.BytesIO()
-        df.to_parquet(buf, index=False)
+        # Microsecond timestamps for portability: pandas defaults to nanoseconds, which
+        # Spark 3.5 cannot read (Illegal Parquet type INT64 TIMESTAMP(NANOS)).
+        df.to_parquet(buf, index=False, coerce_timestamps="us", allow_truncated_timestamps=True)
         buf.seek(0)
         client.put_object(RAW_BUCKET, f"shop/{table}/dt={ds}/data.parquet",
                           buf, length=buf.getbuffer().nbytes)

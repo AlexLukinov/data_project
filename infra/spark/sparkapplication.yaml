@@ -1,0 +1,33 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: shop-daily-revenue
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: spark-s3a:dev
+  imagePullPolicy: Never            # built into minikube via `minikube image build`
+  mainApplicationFile: local:///opt/spark/work-dir/job.py
+  sparkVersion: 3.5.3
+  restartPolicy:
+    type: Never
+  hadoopConf:
+    fs.s3a.endpoint: http://minio.data-platform.svc:9000
+    fs.s3a.access.key: minioadmin
+    fs.s3a.secret.key: minioadmin
+    fs.s3a.path.style.access: "true"
+    fs.s3a.connection.ssl.enabled: "false"
+    fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+  driver:
+    cores: 1
+    memory: 512m
+    serviceAccount: spark
+  executor:
+    cores: 1
+    instances: 1
+    memory: 512m
