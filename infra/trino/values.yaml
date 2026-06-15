@@ -1,0 +1,32 @@
+# Trino coordinator-only (workers=0, coordinator schedules work), ~1Gi heap.
+# Catalogs: clickhouse (JDBC over HTTP 8123) + built-in tpch.
+server:
+  workers: 0
+
+image:
+  tag: "480"
+
+coordinator:
+  jvm:
+    maxHeapSize: "1G"
+  config:
+    nodeScheduler:
+      includeCoordinator: true        # single node acts as coordinator + worker
+    query:
+      maxMemoryPerNode: "512MB"
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 250m
+    limits:
+      memory: 1536Mi
+
+catalogs:
+  clickhouse: |
+    connector.name=clickhouse
+    connection-url=jdbc:clickhouse://clickhouse-platform.data-platform.svc:8123/
+    connection-user=admin
+    connection-password=admin
+  tpch: |
+    connector.name=tpch
+    tpch.splits-per-node=4
