@@ -16,12 +16,13 @@ for i in $(seq 1 60); do
 done
 [ "$STATE" = "COMPLETED" ] || { echo "FAIL: SparkApplication did not complete in time"; exit 1; }
 
-echo "== verify output object in spark bucket =="
+echo "== verify Iceberg table data written to the lakehouse bucket =="
 OUT=$(kubectl -n "$NS" run mc-p7b-$$ --rm -i --restart=Never \
   --image=minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1 \
   --env="MC_HOST_local=http://minioadmin:minioadmin@minio:9000" --command -- \
-  sh -c 'mc ls --recursive local/spark/output/' 2>/dev/null)
-echo "$OUT"
-echo "$OUT" | grep -q '\.parquet' || { echo "FAIL: no parquet under spark/output/"; exit 1; }
+  sh -c 'mc ls --recursive local/lakehouse/warehouse/shop/' 2>/dev/null)
+echo "$OUT" | grep -q 'metadata.json' || { echo "FAIL: no Iceberg metadata under lakehouse/warehouse/shop/"; exit 1; }
+echo "$OUT" | grep -q 'order_date_month=' || { echo "FAIL: no month-partitioned data files under lakehouse/warehouse/shop/"; exit 1; }
+echo "  Iceberg data + metadata present (month-partitioned)"
 
-echo "PASS: Phase 7b Spark smoke green (COMPLETED + output written to MinIO)."
+echo "PASS: Phase 7b Spark smoke green (COMPLETED + partitioned Iceberg written to MinIO)."

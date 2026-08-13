@@ -36,7 +36,7 @@ spec:
               set -eu
               echo "waiting for minio..."
               for i in $(seq 1 30); do mc ready local && break || sleep 3; done
-              for b in raw staging dwh spark; do
+              for b in raw staging dwh spark lakehouse; do
                 mc mb --ignore-existing "local/$b"
               done
               printf 'id,name\n1,alpha\n2,beta\n3,gamma\n' > /tmp/smoke.csv

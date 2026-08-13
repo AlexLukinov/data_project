@@ -1,0 +1,114 @@
+# Project Nessie — Iceberg REST catalog for the lakehouse layer.
+# Both Trino and Spark talk to it via the standard Iceberg REST API (/iceberg).
+# Version store: ROCKSDB on a PVC (survives `make down`). Table data + metadata
+# live in MinIO bucket `lakehouse` (Nessie writes metadata server-side, so it
+# needs S3 access itself). Lab creds: minioadmin/minioadmin (path-style, no TLS).
+# API + Iceberg REST: nessie.data-platform.svc:19120
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nessie-rocksdb
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+    app.kubernetes.io/name: nessie
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nessie
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+    app.kubernetes.io/name: nessie
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # single RocksDB writer on a RWO PVC
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nessie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: data-platform-lab
+        app.kubernetes.io/name: nessie
+    spec:
+      securityContext:
+        fsGroup: 185          # Nessie (Quarkus/UBI) runs as uid 185, gid 0
+      containers:
+        - name: nessie
+          image: ghcr.io/projectnessie/nessie:0.108.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 19120 }
+            - { name: mgmt, containerPort: 9000 }
+          env:
+            # ── version store: persistent RocksDB on the PVC ──
+            - { name: NESSIE_VERSION_STORE_TYPE, value: "ROCKSDB" }
+            - { name: NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH, value: "/nessie/data" }
+            # ── Iceberg REST catalog: default warehouse -> MinIO ──
+            - { name: NESSIE_CATALOG_DEFAULT_WAREHOUSE, value: "warehouse" }
+            - { name: NESSIE_CATALOG_WAREHOUSES_WAREHOUSE_LOCATION, value: "s3://lakehouse/warehouse" }
+            # ── S3 (MinIO) access used by Nessie to write table metadata ──
+            - { name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION, value: "us-east-1" }
+            - { name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ENDPOINT, value: "http://minio.data-platform.svc:9000" }
+            - { name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_PATH_STYLE_ACCESS, value: "true" }
+            - { name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_AUTH_TYPE, value: "STATIC" }
+            # access-key is a secret *reference* (URN) -> the named secret 'miniocreds', whose
+            # .name/.secret hold the real MinIO id/key. Those live in an ad-hoc config path that
+            # SmallRye's strict mapping doesn't know, so we disable validate-unknown and feed the
+            # values as JVM system properties (found by the secret resolver's explicit lookup),
+            # sourced from the minio-root secret via K8s $(VAR) interpolation.
+            - { name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ACCESS_KEY, value: "urn:nessie-secret:quarkus:nessie.catalog.secrets.miniocreds" }
+            - { name: SMALLRYE_CONFIG_MAPPING_VALIDATE_UNKNOWN, value: "false" }
+            - name: MINIO_USER
+              valueFrom:
+                secretKeyRef: { name: minio-root, key: rootUser }
+            - name: MINIO_PASS
+              valueFrom:
+                secretKeyRef: { name: minio-root, key: rootPassword }
+            - name: JAVA_OPTS_APPEND
+              value: >-
+                -Dnessie.catalog.secrets.miniocreds.name=$(MINIO_USER)
+                -Dnessie.catalog.secrets.miniocreds.secret=$(MINIO_PASS)
+          readinessProbe:
+            httpGet: { path: /q/health/ready, port: 9000 }   # Quarkus mgmt interface
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /q/health/live, port: 9000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 200m
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - { name: rocksdb, mountPath: /nessie/data }
+      volumes:
+        - name: rocksdb
+          persistentVolumeClaim:
+            claimName: nessie-rocksdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nessie
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+    app.kubernetes.io/name: nessie
+spec:
+  selector:
+    app.kubernetes.io/name: nessie
+  ports:
+    - { name: http, port: 19120, targetPort: 19120 }

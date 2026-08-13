@@ -1,5 +1,6 @@
 # Trino coordinator-only (workers=0, coordinator schedules work), ~1Gi heap.
-# Catalogs: clickhouse (JDBC over HTTP 8123) + built-in tpch.
+# Catalogs: clickhouse (JDBC over HTTP 8123) + iceberg (Nessie REST, main branch) +
+# iceberg_history (native Nessie, pinned to tag 'history_demo' for git-style time travel) + tpch.
 server:
   workers: 0
 
@@ -27,6 +28,29 @@ catalogs:
     connection-url=jdbc:clickhouse://clickhouse-platform.data-platform.svc:8123/
     connection-user=admin
     connection-password=admin
+  iceberg: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://nessie.data-platform.svc:19120/iceberg
+    iceberg.rest-catalog.warehouse=warehouse
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio.data-platform.svc:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=minioadmin
+    s3.aws-secret-key=minioadmin
+  iceberg_history: |
+    connector.name=iceberg
+    iceberg.catalog.type=nessie
+    iceberg.nessie-catalog.uri=http://nessie.data-platform.svc:19120/api/v2
+    iceberg.nessie-catalog.ref=history_demo
+    iceberg.nessie-catalog.default-warehouse-dir=s3://lakehouse/warehouse
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio.data-platform.svc:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=minioadmin
+    s3.aws-secret-key=minioadmin
   tpch: |
     connector.name=tpch
     tpch.splits-per-node=4

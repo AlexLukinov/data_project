@@ -15,6 +15,7 @@ spec:
   sparkVersion: 3.5.3
   restartPolicy:
     type: Never
+  # s3a stack: read the raw parquet source from MinIO (path-style, no TLS).
   hadoopConf:
     fs.s3a.endpoint: http://minio.data-platform.svc:9000
     fs.s3a.access.key: minioadmin
@@ -23,6 +24,19 @@ spec:
     fs.s3a.connection.ssl.enabled: "false"
     fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
     fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+  # Iceberg catalog 'lake' over the Nessie REST API; data written to MinIO via S3FileIO.
+  sparkConf:
+    spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+    spark.sql.catalog.lake: org.apache.iceberg.spark.SparkCatalog
+    spark.sql.catalog.lake.type: rest
+    spark.sql.catalog.lake.uri: http://nessie.data-platform.svc:19120/iceberg
+    spark.sql.catalog.lake.warehouse: warehouse
+    spark.sql.catalog.lake.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+    spark.sql.catalog.lake.s3.endpoint: http://minio.data-platform.svc:9000
+    spark.sql.catalog.lake.s3.path-style-access: "true"
+    spark.sql.catalog.lake.s3.access-key-id: minioadmin
+    spark.sql.catalog.lake.s3.secret-access-key: minioadmin
+    spark.sql.catalog.lake.client.region: us-east-1
   driver:
     cores: 1
     memory: 512m
