@@ -21,4 +21,7 @@ pf clickhouse    8123:8123 clickhouse-platform
 pf kafka-ui      8081:8080 kafka-ui
 pf trino         8082:8080 trino
 pf postgres      5433:5432 shop-db-rw
+pf nessie        19120:19120 nessie              # Nessie UI + Iceberg REST + /api/v2
+pf kafka-connect 8083:8083   debezium-connect-api # Debezium connector REST API
+pf greengage     7000:7000   greengage            # Greengage coordinator (psql -U gpadmin, not a UI)
 echo "Done. Logs in /tmp/pf-*.log . Stop all: pkill -f 'kubectl.*port-forward'"

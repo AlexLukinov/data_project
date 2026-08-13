@@ -132,6 +132,44 @@ spark-demo: repos ## Phase 7b: spark operator + run the demo SparkApplication on
 	$(KUBE) apply -f infra/spark/sparkapplication.yaml
 	@echo ">> SparkApplication submitted. Watch: kubectl -n $(NS) get sparkapplication -w"
 
+# ── lakehouse (phase 8) ──────────────────────────────────────────────────────
+.PHONY: lakehouse
+lakehouse: ## Phase 8: Nessie (Iceberg REST catalog) over the MinIO 'lakehouse' bucket
+	$(KUBE) apply -f infra/lakehouse/nessie.yaml
+	$(KUBE) rollout status deploy/nessie --timeout=180s
+	@echo ">> nessie up. 'make query' exposes it as the trino 'iceberg' catalog;"
+	@echo "   'make spark-demo' writes a partitioned Iceberg table into it."
+
+# ── cdc (phase 9) ────────────────────────────────────────────────────────────
+.PHONY: cdc
+cdc: ## Phase 9: Debezium CDC (Strimzi Connect) -> Kafka -> Airflow -> ClickHouse staging
+	$(KUBE) exec -i shop-db-1 -- psql -U postgres -d shop -v ON_ERROR_STOP=1 < infra/cdc/setup-postgres-cdc.sql
+	minikube image build -t kafka-connect-debezium:dev infra/cdc/ -p $(PROFILE)
+	$(KUBE) apply -f infra/cdc/kafka-connect.yaml
+	$(KUBE) wait kafkaconnect/debezium --for=condition=Ready --timeout=300s
+	$(KUBE) apply -f infra/cdc/debezium-connector.yaml
+	$(KUBE) wait kafkaconnector/shop-postgres --for=condition=Ready --timeout=180s
+	@echo ">> CDC live. Consumer needs confluent-kafka: 'make airflow && make sync-dags',"
+	@echo "   then run it: airflow dags trigger shop_cdc_consumer (or 'make smoke')."
+
+# ── mpp (phase 10) ───────────────────────────────────────────────────────────
+.PHONY: mpp
+mpp: ## Phase 10: single-host Greengage (Greenplum fork, amd64 emulated) + shop dataset
+	docker build --platform linux/amd64 -t greengage-demo:dev infra/greengage/   # amd64: build on host
+	minikube -p $(PROFILE) image load greengage-demo:dev                          # then load into the node
+	$(KUBE) apply -f infra/greengage/greengage.yaml
+	$(KUBE) rollout status statefulset/greengage --timeout=600s
+	$(KUBE) exec -i greengage-0 -- runuser -u gpadmin -- psql -d postgres -v ON_ERROR_STOP=1 < infra/greengage/seed.sql
+	@echo ">> Greengage seeded. Show data motion:"
+	@echo "   kubectl -n $(NS) exec greengage-0 -- psql -d postgres -c \\"
+	@echo "     'EXPLAIN SELECT c.city,count(*) FROM orders o JOIN customers c ON o.customer_id=c.id GROUP BY 1'"
+
+# ── data quality (phase 11) ──────────────────────────────────────────────────
+.PHONY: dq
+dq: ## Phase 11: run dbt data-quality tests (not_null / unique / relationships)
+	$(KUBE) exec $(SCHED_POD) -c scheduler -- /opt/dbt-venv/bin/dbt test \
+	  --project-dir /opt/airflow/dags/dbt/shop_dwh --profiles-dir /opt/airflow/dags/dbt/shop_dwh
+
 # ── ops ──────────────────────────────────────────────────────────────────────
 .PHONY: smoke
 smoke: ## Run smoke tests for every installed component

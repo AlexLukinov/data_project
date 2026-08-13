@@ -28,7 +28,12 @@ Recorded 2026-06-11. All images verified to have **arm64** variants (Apple Silic
 | Event generator | plain Deployment | — | `python:3.12-slim` → `event-gen:dev` |
 | Trino | trino/trino | 1.42.2 | `trinodb/trino:480` |
 | Spark operator | spark-operator/spark-operator | 2.5.0 | CRD `sparkoperator.k8s.io/v1beta2` |
-| Spark job image | custom | — | `apache/spark:3.5.3` + hadoop-aws 3.3.4 + aws-java-sdk-bundle 1.12.262 |
+| Spark job image | custom | — | `apache/spark:3.5.3` + JDK 17 + hadoop-aws 3.3.4 + aws-java-sdk-bundle 1.12.262 + iceberg-spark-runtime-3.5_2.12 1.11.0 + iceberg-aws-bundle 1.11.0 |
+| Nessie (Iceberg REST catalog) | plain Deployment | — | `ghcr.io/projectnessie/nessie:0.108.4` (RocksDB store on PVC) |
+| Kafka Connect (Debezium) | Strimzi `KafkaConnect` | — | `quay.io/strimzi/kafka:1.0.0-kafka-4.2.0` + Debezium PG connector 3.1.1.Final → `kafka-connect-debezium:dev` |
+| plugin downloader stage | — | — | `alpine:3.21` (build-time only) |
+| Greengage (MPP) | plain StatefulSet | — | `greengagedb/ggdb7_ubuntu:7.5.0` (**amd64-only, runs emulated**) → `greengage-demo:dev` |
+| smoke curl image | — | — | `curlimages/curl:8.11.1` |
 
 ### Airflow Python libs (baked into `airflow-lab:dev`)
 
@@ -47,3 +52,45 @@ Recorded 2026-06-11. All images verified to have **arm64** variants (Apple Silic
 - **kafbat/kafka-ui** — Provectus archived its kafka-ui; kafbat is the maintained fork.
 - **Strimzi 1.0.0 / Kafka 4.0** — KRaft is mandatory (no Zookeeper), CRDs are `v1`.
 - **Spark operator** — moved from GoogleCloudPlatform to `kubeflow/spark-operator`.
+
+## Phase 8 — lakehouse (Iceberg + Nessie)
+
+- **Nessie 0.108.4 as the Iceberg REST catalog** — both Trino and Spark speak the standard
+  Iceberg REST API to it; Nessie writes table metadata to MinIO server-side, so it holds the
+  MinIO creds (via a `urn:nessie-secret:quarkus:…` reference; `SMALLRYE_CONFIG_MAPPING_VALIDATE_UNKNOWN=false`
+  lets the secret-map values arrive as JVM system properties). Health lives on the Quarkus
+  **mgmt port 9000**, not 19120. Version store is **RocksDB** on a PVC (survives `make down`).
+- **Iceberg 1.11.0 needs Java 17** — the arm64 `apache/spark:*-java17-*` images actually ship
+  Java 11, so the Spark image installs `openjdk-17-jre-headless` and points `JAVA_HOME` at it.
+- **Time travel is Nessie-native (git-style)** — Nessie keeps history as commits/branches/tags,
+  not as retained Iceberg snapshots, so `FOR VERSION AS OF <snapshot>` does not apply. Instead a
+  Nessie **tag** pins a point-in-time state and a second Trino catalog (`iceberg_history`, native
+  `nessie` type) reads it; the phase-8 smoke proves old-vs-new through Trino SQL.
+
+## Phase 9 — CDC (Debezium)
+
+- **Debezium PG connector 3.1.1.Final on Strimzi Kafka Connect 4.2.0** — a custom Connect image
+  bakes the connector plugin (built via a multi-stage `alpine` downloader, no reliance on tools in
+  the Strimzi base). Connector managed declaratively as a `KafkaConnector` CR.
+- **shop-db needs no wal_level change** — CNPG already runs `wal_level=logical`; CDC setup only
+  grants `shop` REPLICATION and creates publication `dbz_publication` (see `infra/cdc/setup-postgres-cdc.sql`).
+- **Strimzi 1.0.0 promoted `groupId`/`*StorageTopic`** from `spec.config` to first-class
+  `KafkaConnect` spec fields.
+- **Connect memory** — a 1Gi limit OOM-kills the worker mid-snapshot (re-snapshot loop); bumped to
+  2Gi limit / 1Gi request with `-Xmx 1024m` for off-heap headroom.
+- **Idempotent landing** — the Airflow `shop_cdc_consumer` DAG (confluent-kafka, added to the image)
+  writes into `staging.cdc_events`, a `ReplacingMergeTree(_version)` keyed by `(source_table, id)`;
+  duplicate deliveries collapse to the latest version, so the deduped state matches the source.
+
+## Phase 10 — MPP (Greengage)
+
+- **⚠️ Greengage is amd64-only** — no arm64 image exists (all `greengagedb/ggdbN_*` tags are amd64),
+  which breaks the stand's "all images arm64" rule. It runs here **under Docker Desktop's amd64
+  emulation** (deliberate, documented exception): functional but slow. Single-host demo cluster
+  (1 coordinator + 2 primary segments, no mirrors) via the source-tree `gpdemo` (`demo_cluster.sh`,
+  which needs no ssh) inside one pod, data on a PVC.
+- **Image quirks** — the base ships GPHOME as a tarball and has **no gpadmin user**; the Dockerfile
+  creates gpadmin and extracts GPHOME. Greengage renamed `greenplum_path.sh` → **`greengage_path.sh`**.
+- **Concept demonstrated** — `orders` and `customers` are distributed by different keys, so a join on
+  `customer_id` plans a **Motion** node (redistribute/broadcast) — the phase-10 smoke asserts segment
+  distribution + a Motion in the plan.
