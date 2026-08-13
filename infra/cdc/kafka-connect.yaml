@@ -1,0 +1,42 @@
+# Strimzi Kafka Connect cluster hosting the Debezium PostgreSQL connector.
+# Custom image (built into minikube) carries the connector plugin. The
+# use-connector-resources annotation lets us manage connectors via KafkaConnector CRs.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnect
+metadata:
+  name: debezium
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/part-of: data-platform-lab
+  annotations:
+    strimzi.io/use-connector-resources: "true"
+spec:
+  version: 4.2.0
+  replicas: 1
+  bootstrapServers: platform-kafka-bootstrap.data-platform.svc:9092
+  image: kafka-connect-debezium:dev
+  # Strimzi 1.0.0 promoted these four from `config` to first-class spec fields.
+  groupId: connect-debezium
+  offsetStorageTopic: connect-offsets
+  configStorageTopic: connect-configs
+  statusStorageTopic: connect-status
+  config:
+    config.storage.replication.factor: 1
+    offset.storage.replication.factor: 1
+    status.storage.replication.factor: 1
+    # Plain-JSON messages (no schema wrapper) so the Airflow consumer stays simple.
+    key.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable: false
+    value.converter.schemas.enable: false
+  # Heap capped below the container limit so snapshotting has off-heap/direct-buffer headroom
+  # (a 1Gi limit OOM-kills the worker mid-snapshot).
+  jvmOptions:
+    "-Xms": "512m"
+    "-Xmx": "1024m"
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 250m
+    limits:
+      memory: 2Gi

@@ -91,3 +91,5 @@ extraEnv: |
     value: "admin"
   - name: CLICKHOUSE_PASSWORD
     value: "admin"
+  - name: KAFKA_BOOTSTRAP
+    value: "platform-kafka-bootstrap.data-platform.svc:9092"

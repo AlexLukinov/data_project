@@ -12,6 +12,7 @@ ARG CONSTRAINTS="https://raw.githubusercontent.com/apache/airflow/constraints-${
 RUN pip install --no-cache-dir --constraint "${CONSTRAINTS}" \
       apache-airflow-providers-postgres \
       clickhouse-connect \
+      confluent-kafka \
       minio \
       pyarrow \
       pandas
