@@ -10,12 +10,29 @@ models:
     columns:
       - name: order_id
         tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: amount
+        tests: [not_null]
       - name: status
         tests:
           - accepted_values:
-              values: ['pending', 'paid', 'shipped', 'delivered', 'cancelled']
+              arguments:
+                values: ['pending', 'paid', 'shipped', 'delivered', 'cancelled']
 
   - name: stg_order_items
     columns:
       - name: order_item_id
         tests: [not_null, unique]
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id

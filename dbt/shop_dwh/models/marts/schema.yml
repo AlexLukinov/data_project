@@ -5,8 +5,19 @@ models:
     columns:
       - name: order_id
         tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: amount
+        tests: [not_null]
 
   - name: daily_revenue
     columns:
       - name: order_date
         tests: [not_null, unique]
+      - name: revenue
+        tests: [not_null]
