@@ -3,7 +3,7 @@
 > Source of truth for progress, read by Claude Code (see `CLAUDE.md` in the repo root).
 > Update the marker below and check off `- [x]` items as you go — together with Claude Code, once a result is confirmed working.
 
-**Current sprint: 2**
+**Current sprint: 4**
 
 Check items off as you go (`- [x]`). Each sprint = 1 week, ~15-20h.
 
@@ -51,9 +51,9 @@ Two layers:
 ### Sprint 3 (Week 3) — materialized views
 **Recap:** 10 min — write an EXPLAIN query from memory and explain the plan, no docs
 
-- [ ] Create a materialized view with an aggregation
-- [ ] Use -State/-Merge combinators (e.g. uniqState/uniqMerge)
-- [ ] Build an incremental-aggregation example on an event stream
+- [x] Create a materialized view with an aggregation
+- [x] Use -State/-Merge combinators (e.g. uniqState/uniqMerge)
+- [x] Build an incremental-aggregation example on an event stream
 
 **Reading**
 - [ ] ClickHouse docs: Materialized Views, AggregatingMergeTree
@@ -61,7 +61,7 @@ Two layers:
 
 **Repetition**
 - [ ] Daily Anki review
-- [ ] Anki cards for the week
+- [x] Anki cards for the week
 
 ### Sprint 4 (Week 4) — Month 1 checkpoint
 **Recap:** 10 min — sketch the structure of a materialized view from memory
