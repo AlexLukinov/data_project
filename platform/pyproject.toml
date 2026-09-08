@@ -1,0 +1,91 @@
+[project]
+name = "poker-platform"
+version = "0.1.0"
+description = "Cloud poker hand-analysis platform — ingestion, parsing, stats, API"
+requires-python = ">=3.12"
+
+# Runtime deps for every service. Kept in one place because this is a uv *workspace*:
+# core/ parser/ ingestion/ api/ are packages in one virtualenv, so `core` is importable
+# everywhere without publishing it — and the future Spark re-parse job imports the SAME
+# parser the API uses instead of a divergent copy.
+dependencies = [
+    "pydantic[email]>=2.9",
+    "pydantic-settings>=2.6",
+    "polars>=1.17",
+    "clickhouse-connect>=0.8",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.17",
+    "pyjwt>=2.10",
+    "argon2-cffi>=23.1",
+    "redis>=5.2",
+    "confluent-kafka>=2.6",
+    "boto3>=1.35",
+    "zstandard>=0.23",
+    "phevaluator>=0.5.3",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-boto3",
+]
+dbt = [
+    # dbt pins click/jinja2 versions that clash with the app deps — same lesson as the lab,
+    # where dbt lives in its own venv inside the Airflow image. `make dbt-install` creates
+    # .venv-dbt separately; never add dbt to the main dependency set.
+    "dbt-core~=1.9",
+    "dbt-clickhouse~=1.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "parser", "ingestion", "api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "D"]
+ignore = [
+    "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
+    "ANN401", # Any is banned by convention anyway; this rule fires on **kwargs
+    # Docstring-prose rules that fight clear writing. "The opportunity count behind this
+    # stat." is a better first line than a forced imperative, and a noun-phrase summary of a
+    # property reads correctly. Keeping D otherwise (D1xx: things MUST be documented).
+    "D400", "D401", "D415",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ANN"]
+"migrations/*" = ["D", "ANN", "N"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["confluent_kafka.*", "clickhouse_connect.*", "phevaluator.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: needs the docker-compose stack running (deselect with '-m \"not integration\"')",
+]

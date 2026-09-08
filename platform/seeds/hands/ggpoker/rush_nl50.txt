@@ -1,0 +1,74 @@
+Poker Hand #RC1851234567: Hold'em No Limit ($0.25/$0.50) - 2026/01/16 14:22:31
+Table 'RushAndCash2847561' 6-max Seat #1 is the button
+Seat 1: 6a4f2b91 ($52.30 in chips)
+Seat 2: Hero ($50.00 in chips)
+Seat 3: c81d7e40 ($38.75 in chips)
+Seat 4: 2f9a0c53 ($61.05 in chips)
+Seat 5: 7b3e1d68 ($44.20 in chips)
+Seat 6: e50c8a17 ($29.90 in chips)
+Hero: posts small blind $0.25
+c81d7e40: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Qh Qs]
+2f9a0c53: folds
+7b3e1d68: folds
+e50c8a17: folds
+6a4f2b91: raises $1.00 to $1.50
+Hero: raises $4.50 to $6.00
+c81d7e40: folds
+6a4f2b91: calls $4.50
+*** FLOP *** [8h 5d 2s]
+Hero: bets $7.00
+6a4f2b91: folds
+Uncalled bet ($7.00) returned to Hero
+Hero collected $11.94 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $12.50 | Rake $0.56
+Board [8h 5d 2s]
+Seat 1: 6a4f2b91 (button) folded on the Flop
+Seat 2: Hero (small blind) collected ($11.94)
+Seat 3: c81d7e40 (big blind) folded before Flop
+Seat 4: 2f9a0c53 folded before Flop (didn't bet)
+Seat 5: 7b3e1d68 folded before Flop (didn't bet)
+Seat 6: e50c8a17 folded before Flop (didn't bet)
+
+Poker Hand #RC1851234891: Hold'em No Limit ($0.25/$0.50) - 2026/01/16 14:24:05
+Table 'RushAndCash2847603' 6-max Seat #4 is the button
+Seat 1: 91ac3d22 ($50.00 in chips)
+Seat 2: 4d0b7f16 ($47.80 in chips)
+Seat 3: Hero ($61.94 in chips)
+Seat 4: ab12cd34 ($33.15 in chips)
+Seat 5: 5e6f7a80 ($52.60 in chips)
+Seat 6: 0c9d8e71 ($40.25 in chips)
+5e6f7a80: posts small blind $0.25
+0c9d8e71: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [7d 7c]
+91ac3d22: folds
+4d0b7f16: folds
+Hero: raises $0.75 to $1.25
+ab12cd34: calls $1.25
+5e6f7a80: folds
+0c9d8e71: calls $0.75
+*** FLOP *** [7h Kc 3d]
+0c9d8e71: checks
+Hero: bets $2.50
+ab12cd34: folds
+0c9d8e71: calls $2.50
+*** TURN *** [7h Kc 3d] [Jh]
+0c9d8e71: checks
+Hero: bets $6.00
+0c9d8e71: folds
+Uncalled bet ($6.00) returned to Hero
+Hero collected $8.60 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $9.00 | Rake $0.40
+Board [7h Kc 3d Jh]
+Seat 1: 91ac3d22 folded before Flop (didn't bet)
+Seat 2: 4d0b7f16 folded before Flop (didn't bet)
+Seat 3: Hero collected ($8.60)
+Seat 4: ab12cd34 (button) folded on the Flop
+Seat 5: 5e6f7a80 (small blind) folded before Flop
+Seat 6: 0c9d8e71 (big blind) folded on the Turn

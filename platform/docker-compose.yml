@@ -1,0 +1,165 @@
+# Local dev stack for the poker platform. Five services, deliberately — NOT the minikube lab.
+# See docs/POKER_DECISIONS.md ADR-015 for why the two environments stay separate.
+#
+# Memory limits are conservative because the minikube lab may be running alongside
+# (it takes ~12 GiB of Docker's ~19.5 GiB). If the stack is sluggish, free the lab first:
+#   cd .. && make down          # scales the lab to zero, keeps its PVCs
+#
+# Every service has a healthcheck and every dependent uses `condition: service_healthy`,
+# so `make up` returning means the stack is actually usable, not merely started.
+
+name: poker-platform
+
+services:
+  clickhouse:
+    # Same Altinity-stable line the lab pins — avoids the upstream 25.8.10+ DDL regression.
+    image: altinity/clickhouse-server:25.8.16.10002.altinitystable
+    container_name: poker-clickhouse
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-poker}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-poker}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      # 8124 -> 8123 HTTP interface. Not 8123 on the host: the minikube lab's ClickHouse
+      # port-forward already owns that.
+      # Native 9000 is deliberately NOT published: it collides with MinIO's API port,
+      # the exact trap documented in the lab's CLAUDE.md.
+      - "127.0.0.1:8124:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    deploy:
+      resources:
+        limits: { memory: 2G }
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER:-poker}",
+             "--password", "${CLICKHOUSE_PASSWORD:-poker}", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  postgres:
+    image: postgres:16.8-alpine
+    container_name: poker-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-poker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-poker}
+      POSTGRES_DB: ${POSTGRES_DB:-poker}
+    ports:
+      # 5434, not 5432/5433 — the lab already forwards shop-db on 5433.
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits: { memory: 512M }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poker} -d ${POSTGRES_DB:-poker}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    # KRaft mode: no ZooKeeper. One broker that is also its own controller — the minimal
+    # useful Kafka. The upgrade path to a real cluster is replicas + RF>1, nothing structural.
+    image: bitnamilegacy/kafka:3.9.0
+    container_name: poker-kafka
+    environment:
+      KAFKA_CFG_NODE_ID: "0"
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      # TWO client listeners, and the reason is the classic Kafka gotcha: a broker replies to
+      # every connection with its ADVERTISED address, and the client then reconnects to that.
+      # Advertising only `kafka:9092` means host-side clients get told to dial a hostname that
+      # exists only inside the compose network, and fail after connecting successfully.
+      #   PLAINTEXT -> in-network clients (other containers)
+      #   EXTERNAL  -> host-side clients (the API, workers, tests running via `uv run`)
+      # Advertised as 127.0.0.1, not localhost: the port is bound IPv4-only, and `localhost`
+      # resolves to ::1 first on macOS.
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://127.0.0.1:9094
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "127.0.0.1:9094:9094"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    deploy:
+      resources:
+        limits: { memory: 1G }
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: poker-redis
+    # Cache only — nothing in Redis is authoritative, so LRU eviction is correct behaviour,
+    # not data loss.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru",
+              "--save", ""]
+    ports:
+      - "127.0.0.1:6380:6379"
+    deploy:
+      resources:
+        limits: { memory: 320M }
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: poker-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      # 9010/9011 — the minikube lab already forwards its own MinIO on 9001/9002.
+      - "127.0.0.1:9010:9000"
+      - "127.0.0.1:9011:9001"
+    volumes:
+      - minio-data:/data
+    deploy:
+      resources:
+        limits: { memory: 512M }
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    # Creates the buckets once, then exits. `make up` waits for it to complete.
+    image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+    container_name: poker-minio-init
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MC_HOST_local: "http://${MINIO_ACCESS_KEY:-minioadmin}:${MINIO_SECRET_KEY:-minioadmin}@minio:9000"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for b in poker-raw poker-lake; do mc mb --ignore-existing "local/$$b"; done
+        mc ls local
+        echo "buckets ready"
+
+volumes:
+  clickhouse-data:
+  postgres-data:
+  kafka-data:
+  minio-data:

@@ -1,0 +1,99 @@
+"""Configuration. One settings object, read from the environment.
+
+`pydantic-settings` rather than scattered `os.environ` calls: a missing or malformed setting
+fails at startup with a readable error, instead of at 3am inside a worker with a KeyError.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Every knob the platform reads. Defaults match `docker-compose.yml`."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # -- ClickHouse ------------------------------------------------------------
+    clickhouse_host: str = "localhost"
+    clickhouse_port: int = 8124
+    clickhouse_user: str = "poker"
+    clickhouse_password: str = "poker"
+
+    # -- Postgres --------------------------------------------------------------
+    postgres_host: str = "localhost"
+    postgres_port: int = 5434
+    postgres_user: str = "poker"
+    postgres_password: str = "poker"
+    postgres_db: str = "poker"
+
+    # -- Redis -----------------------------------------------------------------
+    redis_url: str = "redis://localhost:6380/0"
+    stats_cache_ttl_seconds: int = 300
+
+    # -- Object storage (S3-compatible) ---------------------------------------
+    s3_endpoint: str = "http://localhost:9010"
+    s3_access_key: str = "minioadmin"
+    s3_secret_key: str = "minioadmin"
+    s3_raw_bucket: str = "poker-raw"
+    s3_region: str = "us-east-1"
+
+    # -- Kafka -----------------------------------------------------------------
+    kafka_bootstrap: str = "127.0.0.1:9094"
+    kafka_uploads_topic: str = "hands.uploads.v1"
+    kafka_bulk_topic: str = "hands.bulkimport.v1"
+    kafka_deadletter_topic: str = "hands.deadletter.v1"
+    kafka_consumer_group: str = "parser-workers"
+
+    # -- Auth ------------------------------------------------------------------
+    jwt_secret: str = Field(default="dev-only-not-a-real-secret-change-me")
+    jwt_algorithm: str = "HS256"
+    access_token_minutes: int = 30
+    """Short-lived by policy. Refresh lives in an HttpOnly cookie, never in JS-reachable
+    storage."""
+    refresh_token_days: int = 14
+
+    # -- Ingestion -------------------------------------------------------------
+    insert_batch_size: int = 5_000
+    """Rows per ClickHouse insert. One insert = one part; thousands of tiny inserts hit
+    TOO_MANY_PARTS. Batching is not an optimization here, it is a correctness constraint."""
+    max_upload_bytes: int = 200 * 1024 * 1024
+
+    @property
+    def postgres_dsn(self) -> str:
+        """Async SQLAlchemy DSN."""
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def postgres_sync_dsn(self) -> str:
+        """SQLAlchemy sync DSN (driver-qualified).
+
+        NOT interchangeable with `postgres_libpq_dsn`: SQLAlchemy needs the `+psycopg`
+        dialect suffix, and libpq rejects it outright ("missing = in connection info
+        string"). Two properties rather than one, because the failure is a runtime error in a
+        code path that only runs after a successful ingest.
+        """
+        return (
+            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def postgres_libpq_dsn(self) -> str:
+        """Plain libpq URI, for direct `psycopg.connect()` in the worker."""
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Return the process-wide settings singleton."""
+    return Settings()

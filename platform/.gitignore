@@ -1,0 +1,32 @@
+# Secrets — .env.example is committed, .env never is
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-dbt/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# dbt
+dbt/poker_dwh/target/
+dbt/poker_dwh/dbt_packages/
+dbt/poker_dwh/logs/
+logs/
+
+# Real hand histories — NEVER commit these. They contain other players' screen names and
+# betting behaviour, which is third-party personal data (GDPR / 152-ФЗ). The committed
+# corpus under seeds/hands/ is synthetic and safe.
+seeds/private/
+*.hh
+*.hhs
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

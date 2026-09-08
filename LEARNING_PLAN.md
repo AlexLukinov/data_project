@@ -3,7 +3,7 @@
 > Source of truth for progress, read by Claude Code (see `CLAUDE.md` in the repo root).
 > Update the marker below and check off `- [x]` items as you go — together with Claude Code, once a result is confirmed working.
 
-**Current sprint: 4**
+**Current sprint: 5**
 
 Check items off as you go (`- [x]`). Each sprint = 1 week, ~15-20h.
 
@@ -66,16 +66,16 @@ Two layers:
 ### Sprint 4 (Week 4) — Month 1 checkpoint
 **Recap:** 10 min — sketch the structure of a materialized view from memory
 
-- [ ] Manually (no Airflow yet) move data shop-db → ClickHouse with a single Python script
-- [ ] Solve 10-15 interview-style SQL problems on window functions/CTEs in ClickHouse dialect
-- [ ] Short README: takeaways from month 1
+- [x] Manually (no Airflow yet) move data shop-db → ClickHouse with a single Python script
+- [x] Solve 10-15 interview-style SQL problems on window functions/CTEs in ClickHouse dialect
+- [x] Short README: takeaways from month 1
 
 **Reading**
-- [ ] DDIA, ch. 6
+- [x] DDIA, ch. 6
 
 **Repetition**
-- [ ] Daily Anki review
-- [ ] Anki cards for the week (put them in a separate "ClickHouse" deck for easy future review)
+- [x] Daily Anki review
+- [x] Anki cards for the week (put them in a separate "ClickHouse" deck for easy future review)
 
 ---
 

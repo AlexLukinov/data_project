@@ -53,8 +53,11 @@ scheduler:
     requests:
       memory: 512Mi
       cpu: 100m
+    # LocalExecutor forks task subprocesses inside this pod, so task memory comes out of
+    # this limit. At 1Gi the scheduler sat at ~930Mi idle and a task could OOM the whole
+    # orchestrator, not just itself.
     limits:
-      memory: 1Gi
+      memory: 2Gi
 
 webserver:
   defaultUser:
@@ -70,11 +73,16 @@ webserver:
       memory: 512Mi
       cpu: 100m
     limits:
-      memory: 1Gi
+      memory: 1536Mi
 
 # Connections + service endpoints consumed by the DAG tasks.
 # AIRFLOW_CONN_SHOP_PG -> conn_id 'shop_pg' (PostgresHook). The rest are plain env.
 extraEnv: |
+  # Root cause of 92 webserver OOMKills: each gunicorn sync worker imports every DAG file
+  # and holds a full Airflow app (~250Mi). 4 workers overran the 1Gi limit; 2 is plenty
+  # for a single-user lab.
+  - name: AIRFLOW__WEBSERVER__WORKERS
+    value: "2"
   - name: AIRFLOW_CONN_SHOP_PG
     value: "postgres://shop:shop@shop-db-rw.data-platform.svc:5432/shop"
   - name: MINIO_ENDPOINT

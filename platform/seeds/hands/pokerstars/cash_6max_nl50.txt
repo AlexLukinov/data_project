@@ -1,0 +1,78 @@
+PokerStars Hand #245678901234:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/01/15 10:23:45 ET
+Table 'Aludra II' 6-max Seat #3 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: RiverRat88 ($48.25 in chips)
+Seat 3: CallingStation ($62.10 in chips)
+Seat 4: TiltMonster ($50.00 in chips)
+Seat 5: NitPicker ($33.40 in chips)
+Seat 6: SlowRoller ($51.75 in chips)
+TiltMonster: posts small blind $0.25
+NitPicker: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ac Kd]
+SlowRoller: folds
+Hero: raises $1.00 to $1.50
+RiverRat88: folds
+CallingStation: calls $1.50
+TiltMonster: folds
+NitPicker: folds
+*** FLOP *** [Ah 7c 2d]
+Hero: bets $2.00
+CallingStation: calls $2.00
+*** TURN *** [Ah 7c 2d] [9s]
+Hero: bets $5.50
+CallingStation: folds
+Uncalled bet ($5.50) returned to Hero
+Hero collected $7.40 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $7.75 | Rake $0.35
+Board [Ah 7c 2d 9s]
+Seat 1: Hero collected ($7.40)
+Seat 2: RiverRat88 folded before Flop (didn't bet)
+Seat 3: CallingStation (button) folded on the Turn
+Seat 4: TiltMonster (small blind) folded before Flop
+Seat 5: NitPicker (big blind) folded before Flop
+Seat 6: SlowRoller folded before Flop (didn't bet)
+
+PokerStars Hand #245678901235:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/01/15 10:26:12 ET
+Table 'Aludra II' 6-max Seat #1 is the button
+Seat 1: Hero ($53.90 in chips)
+Seat 2: RiverRat88 ($48.25 in chips)
+Seat 3: CallingStation ($58.60 in chips)
+Seat 4: TiltMonster ($49.75 in chips)
+Seat 5: NitPicker ($32.90 in chips)
+Seat 6: SlowRoller ($51.75 in chips)
+RiverRat88: posts small blind $0.25
+CallingStation: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kd]
+TiltMonster: folds
+NitPicker: folds
+SlowRoller: folds
+Hero: raises $1.00 to $1.50
+RiverRat88: folds
+CallingStation: calls $1.00
+*** FLOP *** [Kh 9d 4s]
+CallingStation: checks
+Hero: bets $1.50
+CallingStation: calls $1.50
+*** TURN *** [Kh 9d 4s] [2c]
+CallingStation: checks
+Hero: checks
+*** RIVER *** [Kh 9d 4s 2c] [Qs]
+CallingStation: bets $3.00
+Hero: calls $3.00
+*** SHOW DOWN ***
+CallingStation: shows [Kc Ts] (a pair of Kings)
+Hero: shows [Ah Kd] (a pair of Kings - Ace kicker)
+Hero collected $11.70 from pot
+*** SUMMARY ***
+Total pot $12.25 | Rake $0.55
+Board [Kh 9d 4s 2c Qs]
+Seat 1: Hero (button) showed [Ah Kd] and won ($11.70) with a pair of Kings
+Seat 2: RiverRat88 (small blind) folded before Flop
+Seat 3: CallingStation (big blind) showed [Kc Ts] and lost with a pair of Kings
+Seat 4: TiltMonster folded before Flop (didn't bet)
+Seat 5: NitPicker folded before Flop (didn't bet)
+Seat 6: SlowRoller folded before Flop (didn't bet)

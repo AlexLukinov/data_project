@@ -1,0 +1,23 @@
+name: poker_dwh
+version: "1.0.0"
+config-version: 2
+profile: poker_dwh
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# Schemas map straight onto ClickHouse databases (see macros/generate_schema_name.sql),
+# instead of dbt's default <target_schema>_<custom_schema> concatenation.
+models:
+  poker_dwh:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table

@@ -24,3 +24,11 @@ dbt/shop_dwh/logs/
 # Local kube/helm junk
 *.tmp
 kubeconfig
+
+# Real hand-history exports — NEVER commit. They contain other players' screen names and
+# betting behaviour: third-party personal data (GDPR / 152-ФЗ). Synthetic corpus for tests
+# lives in platform/seeds/hands/ and is safe.
+*.zip
+*_HH_*
+*-HH-*
+hand_histories/

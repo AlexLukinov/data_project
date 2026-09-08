@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: core
+    schema: core
+    description: >
+      Landing tables written by the parser workers. Owned by ClickHouse migrations
+      (ch/migrations/), NOT by dbt — dbt reads them, it does not create them.
+      See docs/POKER_DECISIONS.md ADR-017.
+    tables:
+      - name: hands
+      - name: hand_players
+      - name: actions
+      - name: pot_winners

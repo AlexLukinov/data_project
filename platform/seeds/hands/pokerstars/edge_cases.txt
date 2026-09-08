@@ -1,0 +1,141 @@
+PokerStars Hand #245678901300:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/01/15 11:02:03 ET
+Table 'Sirona' 6-max Seat #6 is the button
+Seat 1: ShortStack ($12.00 in chips)
+Seat 2: BigStack ($50.00 in chips)
+Seat 3: Hero ($30.00 in chips)
+Seat 4: MidStack ($30.00 in chips)
+Seat 5: FoldEmAll ($27.15 in chips)
+Seat 6: ButtonBoy ($44.60 in chips)
+ShortStack: posts small blind $0.25
+BigStack: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah As]
+Hero: raises $1.50 to $2.00
+MidStack: raises $4.00 to $6.00
+FoldEmAll: folds
+ButtonBoy: folds
+ShortStack: folds
+BigStack: folds
+Hero: raises $24.00 to $30.00 and is all-in
+MidStack: calls $24.00 and is all-in
+*** FLOP *** [Ts 7h 2c]
+*** TURN *** [Ts 7h 2c] [Kd]
+*** RIVER *** [Ts 7h 2c Kd] [3s]
+*** SHOW DOWN ***
+Hero: shows [Ah As] (a pair of Aces)
+MidStack: shows [Qh Qd] (a pair of Queens)
+Hero collected $59.55 from pot
+*** SUMMARY ***
+Total pot $60.75 | Rake $1.20
+Board [Ts 7h 2c Kd 3s]
+Seat 1: ShortStack (small blind) folded before Flop
+Seat 2: BigStack (big blind) folded before Flop
+Seat 3: Hero showed [Ah As] and won ($59.55) with a pair of Aces
+Seat 4: MidStack showed [Qh Qd] and lost with a pair of Queens
+Seat 5: FoldEmAll folded before Flop (didn't bet)
+Seat 6: ButtonBoy (button) folded before Flop (didn't bet)
+
+PokerStars Hand #245678901301:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/01/15 11:08:44 ET
+Table 'Sirona' 6-max Seat #6 is the button
+Seat 1: ShortStack ($12.00 in chips)
+Seat 2: BigStack ($50.00 in chips)
+Seat 3: Hero ($50.00 in chips)
+Seat 4: MidStack ($12.00 in chips)
+Seat 5: FoldEmAll ($27.15 in chips)
+Seat 6: ButtonBoy ($30.00 in chips)
+ShortStack: posts small blind $0.25
+BigStack: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah As]
+Hero: raises $1.50 to $2.00
+MidStack: calls $2.00
+FoldEmAll: folds
+ButtonBoy: raises $28.00 to $30.00 and is all-in
+ShortStack: folds
+BigStack: folds
+Hero: calls $28.00
+MidStack: calls $10.00 and is all-in
+*** FLOP *** [Ts 7h 2c]
+*** TURN *** [Ts 7h 2c] [Kd]
+*** RIVER *** [Ts 7h 2c Kd] [3s]
+*** SHOW DOWN ***
+Hero: shows [Ah As] (a pair of Aces)
+MidStack: shows [Qh Qd] (a pair of Queens)
+ButtonBoy: shows [Kc Ks] (three of a kind, Kings)
+ButtonBoy collected $35.20 from main pot
+ButtonBoy collected $34.55 from side pot
+*** SUMMARY ***
+Total pot $72.75 Main pot $36.75 Side pot $36.00 | Rake $3.00
+Board [Ts 7h 2c Kd 3s]
+Seat 1: ShortStack (small blind) folded before Flop
+Seat 2: BigStack (big blind) folded before Flop
+Seat 3: Hero showed [Ah As] and lost with a pair of Aces
+Seat 4: MidStack showed [Qh Qd] and lost with a pair of Queens
+Seat 5: FoldEmAll folded before Flop (didn't bet)
+Seat 6: ButtonBoy (button) showed [Kc Ks] and won ($69.75) with three of a kind, Kings
+
+PokerStars Hand #245678901302:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/01/15 11:15:20 ET
+Table 'Heads Up III' 2-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: DuelPartner ($50.00 in chips)
+Hero: posts small blind $0.25
+DuelPartner: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ac 9c]
+Hero: raises $0.75 to $1.25
+DuelPartner: calls $0.75
+*** FLOP *** [Ah Kd 7c]
+DuelPartner: checks
+Hero: bets $1.50
+DuelPartner: calls $1.50
+*** TURN *** [Ah Kd 7c] [2s]
+DuelPartner: checks
+Hero: checks
+*** RIVER *** [Ah Kd 7c 2s] [3h]
+DuelPartner: checks
+Hero: checks
+*** SHOW DOWN ***
+DuelPartner: shows [As 9s] (a pair of Aces)
+Hero: shows [Ac 9c] (a pair of Aces)
+Hero collected $2.63 from pot
+DuelPartner collected $2.62 from pot
+*** SUMMARY ***
+Total pot $5.50 | Rake $0.25
+Board [Ah Kd 7c 2s 3h]
+Seat 1: Hero (button) (small blind) showed [Ac 9c] and won ($2.63) with a pair of Aces
+Seat 2: DuelPartner (big blind) showed [As 9s] and won ($2.62) with a pair of Aces
+
+PokerStars Hand #245678901303:  Omaha Pot Limit ($0.25/$0.50 USD) - 2026/01/15 11:31:07 ET
+Table 'Omaha Delta' 6-max Seat #4 is the button
+Seat 1: PotLimitPro ($60.00 in chips)
+Seat 2: Hero ($50.00 in chips)
+Seat 3: OmahaOllie ($44.30 in chips)
+Seat 4: ButtonBoy ($51.20 in chips)
+Seat 5: SplashyStan ($38.90 in chips)
+Seat 6: FourCards ($47.65 in chips)
+SplashyStan: posts small blind $0.25
+FourCards: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh 9c 8c]
+PotLimitPro: folds
+Hero: raises $1.25 to $1.75
+OmahaOllie: folds
+ButtonBoy: folds
+SplashyStan: folds
+FourCards: calls $1.25
+*** FLOP *** [9h 8d 3c]
+FourCards: checks
+Hero: bets $2.50
+FourCards: folds
+Uncalled bet ($2.50) returned to Hero
+Hero collected $3.57 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $3.75 | Rake $0.18
+Board [9h 8d 3c]
+Seat 1: PotLimitPro folded before Flop (didn't bet)
+Seat 2: Hero collected ($3.57)
+Seat 3: OmahaOllie folded before Flop (didn't bet)
+Seat 4: ButtonBoy (button) folded before Flop (didn't bet)
+Seat 5: SplashyStan (small blind) folded before Flop
+Seat 6: FourCards (big blind) folded on the Flop

@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: player_hand_flags
+    description: >
+      One row per (hand, player) with an opportunity/action counter pair per stat.
+      Every statistic in the product is sum(action)/sum(opportunity) over this table.
+    columns:
+      - name: user_id
+        description: Tenant key. Leads every ORDER BY in the system.
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: hands
+        tests: [not_null]
+
+  - name: stats_daily
+    description: Daily rollup read by the API and the dashboard.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: hands
+        tests: [not_null]
+
+  - name: dim_stat_definitions
+    columns:
+      - name: code
+        tests: [not_null, unique]
+
+# ---------------------------------------------------------------------------------------
+# The two singular tests below are worth more than every not_null test in this file.
+#
+# They encode LAWS OF POKER. A not_null test catches a plumbing failure; these catch a
+# *logic* failure — the kind that produces plausible, wrong numbers and no error anywhere.
+# That is the worst failure mode an analytics product has, and it is the one thing users
+# cannot detect for themselves.
+# ---------------------------------------------------------------------------------------

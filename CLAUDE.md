@@ -28,6 +28,10 @@ check whether we're going back to the plan.
 
 ### At the start of every session
 - Read `LEARNING_PLAN.md`, find the "Current sprint" marker and the first unchecked item in it.
+- Read `docs/POKER_STATUS.md` — the cross-session state of the **poker platform build** (current
+  phase marker, phase board, blockers, session log). It is to the product what `LEARNING_PLAN.md`
+  is to the learning track. Update it at the end of every session; flip a checkbox only when the
+  thing runs and is verified (golden rule 1).
 - Briefly (1-2 sentences) remind me where we left off — not a summary of the whole plan.
 - If the current sprint has a **Recap** or **Review** block, start there: ask 2-3 questions on
   earlier material and make me answer from memory before moving on. Don't hint right away — let
@@ -92,7 +96,13 @@ check whether we're going back to the plan.
 - DAGs: `dags/` · dbt project: `dbt/shop_dwh/` · event generator: `generator/`
 - Cluster bootstrap: `cluster/up.sh` · smoke tests: `scripts/smoke/`
 - Lab credentials: `infra/secrets.yaml` (lab-only admin/admin-style; intentionally committed).
-- Docs: `docs/ARCHITECTURE.md`, `docs/versions.md`.
+- Lab docs: `docs/ARCHITECTURE.md`, `docs/versions.md`, `docs/data-quality.md`, `docs/drills/`.
+- **Poker platform docs** (the product; separate from the lab): `docs/POKER_STATUS.md` (live
+  progress — read first), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`,
+  `POKER_ARCHITECTURE.md`, `POKER_DATA_MODEL.md`, `POKER_DECISIONS.md` (ADRs),
+  `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md`. Prefixed because `docs/ARCHITECTURE.md` is
+  the lab's. The product gets its own docker-compose stack; the minikube lab stays the learning
+  artifact (ADR-015).
 
 ## The make-target contract
 

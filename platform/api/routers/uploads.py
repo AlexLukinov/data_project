@@ -1,0 +1,161 @@
+"""Hand-history ingestion. **The contract the future desktop HUD agent will use.**
+
+Design rules, from docs/POKER_DECISIONS.md ADR-014 — worth keeping stable because by the time
+the agent ships, this contract is load-bearing on machines you do not control:
+
+  1. **Content-addressed idempotency.** Re-uploading the same bytes is a no-op, not a
+     duplicate. An agent that crashes and re-scans a folder must be harmless.
+  2. **Tenancy from the token, never from the payload.** There is no `user_id` parameter.
+  3. **Clients send raw text, never parsed structures.** The server parses. That is what makes
+     "fix the parser, re-parse everything" possible and keeps the agent thin.
+
+The endpoint does no parsing: it stores the bytes, records the row, publishes a pointer, and
+returns 202. Under 200 ms regardless of file size.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
+
+from api.deps import CurrentUserDep, SessionDep, hero_names_for
+from api.models_pg import Upload
+from api.schemas import UploadAccepted, UploadResponse
+from api.settings import get_settings
+from core.enums import Site
+from ingestion.bus import UploadMessage, publish_upload
+from ingestion.storage import decode_upload, object_key, put_raw, sha256_of
+from parser.errors import FormatDetectionError
+from parser.registry import sniff, supported_sites
+
+log = logging.getLogger(__name__)
+router = APIRouter(prefix="/v1", tags=["ingestion"])
+
+BULK_THRESHOLD_BYTES = 5 * 1024 * 1024
+"""Above this, route to the isolated bulk topic so one user's backfill cannot starve
+everyone else's live uploads sharing a partition."""
+
+
+@router.get("/sites")
+async def sites() -> dict[str, list[str]]:
+    """Networks with a registered parser. Adding one is a new file in `parser/sites/`."""
+    return {"sites": [s.value for s in supported_sites()]}
+
+
+@router.post(
+    "/uploads",
+    response_model=UploadAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_upload(
+    user: CurrentUserDep,
+    session: SessionDep,
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI's dependency idiom
+    site: str = Form(default=""),
+) -> UploadAccepted:
+    """Accept a hand-history file. Returns immediately; parsing happens downstream."""
+    settings = get_settings()
+    data = await file.read()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
+    if len(data) > settings.max_upload_bytes:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File too large")
+
+    text = decode_upload(data)
+
+    # Users mislabel uploads constantly, and a wrong `site` yields ZERO parsed hands rather
+    # than an error -- so sniffing is a robustness feature, not a convenience.
+    if site:
+        try:
+            resolved = Site(site)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown site {site!r}") from exc
+    else:
+        try:
+            resolved = sniff(text)
+        except FormatDetectionError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Could not detect the hand-history format; pass `site` explicitly",
+            ) from exc
+
+    digest = sha256_of(data)
+
+    # Idempotency: the same bytes from the same user are the same upload.
+    existing = await session.execute(
+        select(Upload).where(Upload.user_id == user.id, Upload.sha256 == digest)
+    )
+    previous = existing.scalar_one_or_none()
+    if previous is not None:
+        return UploadAccepted(upload_id=previous.id, status=previous.status, dedupe="duplicate")
+
+    upload_id = uuid.uuid4()
+    key = object_key(
+        tenant_id=user.tenant_id,
+        site=resolved.value,
+        upload_id=str(upload_id),
+        filename=file.filename or "upload.txt",
+    )
+    put_raw(key, text.encode("utf-8"))
+
+    upload = Upload(
+        id=upload_id,
+        user_id=user.id,
+        site=resolved.value,
+        filename=file.filename or "",
+        object_key=key,
+        sha256=digest,
+        byte_size=len(data),
+        status="queued",
+    )
+    session.add(upload)
+    await session.commit()
+
+    hero_names = await hero_names_for(session, user.id, resolved.value)
+    publish_upload(
+        UploadMessage(
+            upload_id=str(upload_id),
+            tenant_id=user.tenant_id,
+            site=resolved.value,
+            object_key=key,
+            sha256=digest,
+            hero_names=hero_names,
+        ),
+        bulk=len(data) > BULK_THRESHOLD_BYTES,
+    )
+    return UploadAccepted(upload_id=upload_id, status="queued", dedupe="new")
+
+
+@router.get("/uploads", response_model=list[UploadResponse])
+async def list_uploads(user: CurrentUserDep, session: SessionDep, limit: int = 50) -> list[Upload]:
+    """Recent uploads for this user.
+
+    Doubles as the first observability tool: status and per-file counts answer most
+    operational questions before any dashboard exists.
+    """
+    result = await session.execute(
+        select(Upload)
+        .where(Upload.user_id == user.id)
+        .order_by(Upload.created_at.desc())
+        .limit(min(limit, 200))
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/uploads/{upload_id}", response_model=UploadResponse)
+async def get_upload(upload_id: uuid.UUID, user: CurrentUserDep, session: SessionDep) -> Upload:
+    """One upload's status.
+
+    Scoped by `user_id` in the WHERE clause, not merely by the path parameter: an upload id
+    belonging to another tenant must 404, not 403, and certainly not 200.
+    """
+    result = await session.execute(
+        select(Upload).where(Upload.id == upload_id, Upload.user_id == user.id)
+    )
+    upload = result.scalar_one_or_none()
+    if upload is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Upload not found")
+    return upload
