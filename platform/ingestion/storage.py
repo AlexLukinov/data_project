@@ -49,16 +49,24 @@ def sha256_of(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def object_key(*, tenant_id: int, site: str, upload_id: str, filename: str) -> str:
+def object_key(*, tenant_id: int, site: str, digest: str, filename: str) -> str:
     """Build the storage path.
 
     Layout is `site=/user_id=/ingested_date=/` — Hive-style partitioning, so batch tools
     (Spark, in Phase 3) can prune on any of those without reading objects, and so a tenant's
     data is contiguous under one prefix for lifecycle rules and per-prefix IAM.
+
+    **Named by content hash, not by upload id.** Re-importing the same archive after a parser
+    fix is a routine operation — it is how `parser_version < N` gets repaired — and a random
+    key per attempt would leave a full orphaned copy of the raw text in object storage every
+    time. Keying on the digest makes the write idempotent: the same bytes always land on the
+    same object, so a re-import overwrites rather than accumulates. This also makes the
+    storage layout agree with the `uq_uploads_user_sha256` constraint, which already treats
+    content as the identity of an upload.
     """
     day = datetime.now(UTC).strftime("%Y-%m-%d")
     safe = filename.replace("/", "_")[-120:] or "upload.txt"
-    return f"site={site}/user_id={tenant_id:08d}/ingested_date={day}/{upload_id}-{safe}.zst"
+    return f"site={site}/user_id={tenant_id:08d}/ingested_date={day}/{digest[:16]}-{safe}.zst"
 
 
 def put_raw(key: str, data: bytes) -> int:

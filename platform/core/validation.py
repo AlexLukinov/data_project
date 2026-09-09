@@ -179,8 +179,8 @@ def _check_cards(hand: CanonicalHand) -> list[Finding]:
 
 
 def _check_pot_math(hand: CanonicalHand) -> list[Finding]:
-    """The load-bearing check: contributed - returned == awarded + rake."""
-    contributed = sum(contributed_by_seat(hand).values(), Decimal(0))
+    """The load-bearing check: contributed + house money - returned == awarded + rake."""
+    contributed = sum(contributed_by_seat(hand).values(), Decimal(0)) + hand.cash_drop
     awarded = sum(awarded_by_seat(hand).values(), Decimal(0))
 
     if not hand.pot_winners:

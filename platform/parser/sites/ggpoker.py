@@ -3,13 +3,20 @@
 GG's text export is PokerStars-derived, so the line grammar is reused wholesale. What is
 *not* reused is player identity, and that is the architecturally important part:
 
-**GGPoker anonymizes opponents.** Every non-hero seat carries a per-hand pseudonym with no
-relationship to the same human's pseudonym in the next hand. This is deliberate on GG's part
-and no parser trick defeats it. The model handles it by:
+**GG's own export anonymizes opponents; observed-pool exports do not.** Which one you are
+holding is detected, never assumed — see `_anonymize` for why that distinction cost real data.
+
+In an anonymized export every non-hero seat carries a **session-scoped** pseudonym. Measured
+on a real 19,813-hand export: an alias recurs across roughly 2.8 tables (so it is NOT per-hand,
+as this file previously claimed), but day-over-day overlap is 5-19% and **0 of 9,596 aliases
+survived across 4+ chunk files**. So an alias is usable for "same villain, same session" and
+worthless across sessions. Since Rush & Cash dissolves the table every hand, that window is
+narrow enough that cross-hand opponent identity is effectively unavailable. The model handles
+it by:
 
     player_key    = None        <- no cross-hand identity exists
     is_anonymized = 1
-    anon_alias    = "1a2b3c4d"  <- valid WITHIN this hand only
+    anon_alias    = "1a2b3c4d"  <- kept for within-session grouping; never a player identity
 
 Downstream, exactly one rule follows: opponent-level stats are gated on
 `player_key IS NOT NULL`, in one place in the dbt intermediate layer. Hero stats work
@@ -17,9 +24,9 @@ normally on every site, and anonymous opponents still feed population baselines 
 say "this villain folds too much", but you can say "the NL50 pool folds to a button steal 62%
 of the time", which is what the AI coaching layer consumes anyway.
 
-⚠️  **Validate against real exports before trusting this.** It is written to the documented
-format shape; GG has changed its export format before and will again. The regression corpus
-in `seeds/hands/ggpoker/` is the guard.
+Validated against two real exports: a 19,813-hand personal Rush & Cash export (anonymized) and
+a ~9.1M-hand observed-pool export (real names). GG has changed its export format before and
+will again — the regression corpus in `seeds/hands/ggpoker/` is the guard.
 """
 
 from __future__ import annotations
@@ -35,16 +42,26 @@ from parser.sites.pokerstars import PokerStarsParser
 GG_HEADER = re.compile(r"^Poker\s+Hand\s+#(?P<hid>[A-Z]{0,3}\d+):")
 HERO_ALIAS = "hero"
 RUSH_TABLE = re.compile(r"Rush\s*(?:And|&)?\s*Cash", re.IGNORECASE)
-PARSER_VERSION = 2
-"""Bumped when `_anonymize` was corrected: hands parsed by v1 have wrongly-nulled
-`player_key` values and need re-parsing (`WHERE parser_version < 2`)."""
+PARSER_VERSION = 4
+"""Re-parse marker. v2 corrected the blanket-anonymization bug; v3 corrected the alias regex
+and made detection table-level; v4 added Cash Drop parsing, which rescued 56,872 hands the
+validator had been correctly rejecting as unbalanced. Hands from an older version carry wrong
+`player_key` values or are missing entirely — re-import with `WHERE parser_version < 4`."""
 
-_HEX_ALIAS = re.compile(r"^[0-9a-f]{8}$")
+_HEX_ALIAS = re.compile(r"^[0-9a-f]{1,8}$")
+"""GG aliases are a uint32 rendered with `%x` — leading zeros stripped, NOT zero-padded.
+
+Measured over a 19,813-hand export, alias lengths were 8: 36,374 · 7: 2,250 · 6: 149 · 5: 3.
+Those ratios are 1, 1/16, 1/256, 1/4096 to within a rounding error, which is exactly the
+distribution of a uniformly random 32-bit integer printed as hex. An earlier `{8}` anchor
+therefore missed 6.2% of aliases and leaked them downstream as though they were real,
+trackable screen names."""
+
 _SEAT_ALIAS = re.compile(r"^(?:Player|Seat|Villain)[ _]?\d+$", re.IGNORECASE)
 
 
 def _looks_anonymous(name: str) -> bool:
-    """True when a screen name is a machine-generated per-hand alias, not a human handle."""
+    """True when a screen name has the shape of a machine-generated alias."""
     return bool(_HEX_ALIAS.match(name) or _SEAT_ALIAS.match(name))
 
 
@@ -109,21 +126,32 @@ class GGPokerParser(PokerStarsParser):
     def _anonymize(hand: CanonicalHand) -> None:
         """Strip cross-hand identity from anonymized seats — and ONLY those.
 
-        **Corrected against a real 147k-hand export.** The original implementation assumed
-        every GG table anonymizes opponents and nulled `player_key` unconditionally. Real
-        Rush & Cash exports carry genuine screen names (`sample_`, `QueenSample`,
-        `Sample Name`), so that assumption silently destroyed usable opponent identity on
-        every hand.
+        **Detection is per TABLE, then per seat.** Two signals must agree before a name is
+        discarded: the hand as a whole must look anonymized (at least half its non-hero seats
+        carry alias-shaped names), and the individual name must be alias-shaped. Both real
+        exports confirm this is the right split — a personal export anonymizes *every*
+        opponent, and an observed-pool export anonymizes *none* — so a mixed hand is evidence
+        of a misparse, not of a partly-anonymous table.
 
-        Anonymization is now DETECTED per seat, not assumed per site: GG's anonymous tables
-        emit machine-generated aliases (8 hex characters, or `Player`/`Seat` + digits), which
-        are distinguishable from human screen names. When in doubt the name is kept — losing
-        a real identity is worse than carrying an alias that never recurs, because a
-        never-recurring key simply produces a one-hand sample nobody will look at.
+        Requiring both signals is what makes the short aliases safe to match. `[0-9a-f]{1,8}`
+        alone would also match genuine screen names like `dead`, `cafe` or `beef`; requiring
+        the rest of the table to agree means a real handle survives unless the whole table
+        happens to be hex words. Conversely a real player literally named `Hero` cannot
+        anonymize a table of real names on their own.
+
+        History: v1 assumed every GG table anonymizes and nulled `player_key` unconditionally,
+        destroying 881k real opponent identities in the population export. v2 detected per
+        seat but anchored the alias regex at exactly 8 hex characters, leaking the 6.2% of
+        aliases that render shorter (see `_HEX_ALIAS`).
         """
-        for player in hand.players:
-            if player.is_hero or not _looks_anonymous(player.screen_name):
-                continue
+        others = [p for p in hand.players if not p.is_hero]
+        if not others:
+            return
+        shaped = [p for p in others if _looks_anonymous(p.screen_name)]
+        if len(shaped) * 2 < len(others):
+            # A real-name table. A hex-looking handle here is somebody's actual screen name.
+            return
+        for player in shaped:
             player.is_anonymized = True
             player.anon_alias = player.screen_name
             player.player_key = None

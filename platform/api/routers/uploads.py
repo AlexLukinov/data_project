@@ -96,7 +96,7 @@ async def create_upload(
     key = object_key(
         tenant_id=user.tenant_id,
         site=resolved.value,
-        upload_id=str(upload_id),
+        digest=digest,
         filename=file.filename or "upload.txt",
     )
     put_raw(key, text.encode("utf-8"))

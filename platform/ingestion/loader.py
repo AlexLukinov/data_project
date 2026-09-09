@@ -18,6 +18,7 @@ locked decision and this module deliberately computes nothing a statistic depend
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 
 HANDS_COLUMNS = [
     "user_id",
+    "dataset",
     "hand_uid",
     "site",
     "site_hand_id",
@@ -56,6 +58,7 @@ HANDS_COLUMNS = [
     "total_pot",
     "rake",
     "jackpot_drop",
+    "cash_drop",
     "hero_seat",
     "tournament_id",
     "tz_source",
@@ -80,9 +83,11 @@ HANDS_COLUMNS = [
     "unparsed_count",
     "unparsed_lines",
     "extra",
+    "parsed_at",
 ]
 PLAYERS_COLUMNS = [
     "user_id",
+    "dataset",
     "hand_uid",
     "played_at_utc",
     "seat",
@@ -109,6 +114,7 @@ PLAYERS_COLUMNS = [
     "bounty_won",
     "was_eliminated",
     "extra",
+    "parsed_at",
 ]
 ACTIONS_COLUMNS = [
     "user_id",
@@ -124,22 +130,55 @@ ACTIONS_COLUMNS = [
     "to_call",
     "is_allin",
     "is_voluntary",
+    "parsed_at",
 ]
-WINNERS_COLUMNS = ["user_id", "hand_uid", "played_at_utc", "pot_index", "seat", "amount_won"]
+WINNERS_COLUMNS = [
+    "user_id",
+    "hand_uid",
+    "played_at_utc",
+    "pot_index",
+    "seat",
+    "amount_won",
+    "parsed_at",
+]
 
 
 def _board_slot(board: tuple[str, ...], index: int) -> str:
     return board[index] if len(board) > index else ""
 
 
+DATASET_HERO = "hero"
+DATASET_POPULATION = "population"
+"""`hero` = hands the user played (a Hero seat exists). `population` = observed pool hands.
+Mixing the two makes every win-rate meaningless, so the distinction is carried explicitly
+rather than inferred from a null hero seat -- see ch/migrations/0007_dataset.sql."""
+
+
 def to_rows(
-    hands: list[CanonicalHand], tenant_id: int
+    hands: list[CanonicalHand],
+    tenant_id: int,
+    dataset: str = DATASET_HERO,
+    parsed_at: datetime | None = None,
 ) -> tuple[list[list[Any]], list[list[Any]], list[list[Any]], list[list[Any]]]:
     """Flatten canonical hands into the four ClickHouse row sets.
 
     `tenant_id` is a required argument, not a field read off the hand: tenancy comes from the
-    authenticated request, never from parsed content.
+    authenticated request, never from parsed content. `dataset` is likewise supplied by the
+    caller — it is a property of the import, not of the hand text.
+
+    `parsed_at` is stamped explicitly rather than left to the column's `now64(3)` default,
+    because the default is evaluated per INSERT and this batch becomes four separate INSERTs.
+    That gave one hand four timestamps milliseconds apart, which is wrong twice over: it is the
+    ReplacingMergeTree version column, so a re-parse could collapse the four tables
+    inconsistently; and it is the watermark the incremental dbt models read, where a skew
+    between `hands` and `actions` makes them disagree about which partitions are dirty.
+
+    **Datetimes stay timezone-AWARE all the way into the driver.** clickhouse-connect reads a
+    naive datetime as *local* time and converts it to UTC, so stripping tzinfo silently shifts
+    every timestamp by the host's UTC offset — and makes the stored data depend on which
+    machine ran the import. `parser/base.py` already returns aware UTC; keep it that way.
     """
+    stamped = parsed_at or datetime.now(UTC)
     hand_rows: list[list[Any]] = []
     player_rows: list[list[Any]] = []
     action_rows: list[list[Any]] = []
@@ -147,12 +186,15 @@ def to_rows(
 
     for hand in hands:
         uid = hand.hand_uid
-        ts = hand.played_at_utc.replace(tzinfo=None)
+        # Aware, NOT naive -- see the note in this function's docstring. `.replace(tzinfo=None)`
+        # here shifted every hand in the database by the importing host's UTC offset.
+        ts = hand.played_at_utc
         bb = hand.big_blind or Decimal(1)
 
         hand_rows.append(
             [
                 tenant_id,
+                dataset,
                 uid,
                 hand.site.value,
                 hand.site_hand_id,
@@ -179,6 +221,7 @@ def to_rows(
                 hand.total_pot,
                 hand.rake,
                 hand.jackpot_drop,
+                hand.cash_drop,
                 hand.hero_seat,
                 hand.tournament_id or "",
                 hand.tz_source,
@@ -201,6 +244,7 @@ def to_rows(
                 len(hand.unparsed_lines),
                 list(hand.unparsed_lines),
                 dict(hand.extra),
+                stamped,
             ]
         )
 
@@ -208,6 +252,7 @@ def to_rows(
             player_rows.append(
                 [
                     tenant_id,
+                    dataset,
                     uid,
                     ts,
                     player.seat,
@@ -236,6 +281,7 @@ def to_rows(
                     player.bounty_won,
                     int(player.was_eliminated),
                     dict(player.extra),
+                    stamped,
                 ]
             )
 
@@ -255,6 +301,7 @@ def to_rows(
                     action.to_call,
                     int(action.is_allin),
                     int(action.is_voluntary),
+                    stamped,
                 ]
             )
 
@@ -267,18 +314,24 @@ def to_rows(
                     winner.pot_index,
                     winner.seat,
                     winner.amount_won,
+                    stamped,
                 ]
             )
 
     return hand_rows, player_rows, action_rows, winner_rows
 
 
-def insert_hands(client: Client, hands: list[CanonicalHand], tenant_id: int) -> dict[str, int]:
+def insert_hands(
+    client: Client,
+    hands: list[CanonicalHand],
+    tenant_id: int,
+    dataset: str = DATASET_HERO,
+) -> dict[str, int]:
     """Insert a batch of hands into every core table. Returns per-table row counts."""
     if not hands:
         return {"hands": 0, "hand_players": 0, "actions": 0, "pot_winners": 0}
 
-    hand_rows, player_rows, action_rows, winner_rows = to_rows(hands, tenant_id)
+    hand_rows, player_rows, action_rows, winner_rows = to_rows(hands, tenant_id, dataset)
 
     client.insert("core.hands", hand_rows, column_names=HANDS_COLUMNS)
     client.insert("core.hand_players", player_rows, column_names=PLAYERS_COLUMNS)
@@ -296,12 +349,14 @@ def insert_hands(client: Client, hands: list[CanonicalHand], tenant_id: int) -> 
     return counts
 
 
-def normalize_frame(hands: list[CanonicalHand], tenant_id: int) -> pl.DataFrame:
+def normalize_frame(
+    hands: list[CanonicalHand], tenant_id: int, dataset: str = DATASET_HERO
+) -> pl.DataFrame:
     """Build a Polars frame of hand-level rows.
 
     Used for bulk paths where derived columns are computed vectorized rather than per hand.
     Kept separate from `insert_hands` so the simple path stays simple; this is where the
     Phase-3 Spark re-parse job and any future bulk transform hook in.
     """
-    hand_rows, _, _, _ = to_rows(hands, tenant_id)
+    hand_rows, _, _, _ = to_rows(hands, tenant_id, dataset)
     return pl.DataFrame(hand_rows, schema=HANDS_COLUMNS, orient="row")

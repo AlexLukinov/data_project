@@ -224,6 +224,16 @@ class CanonicalHand:
     """Deductions taken from the pot ALONGSIDE rake — GG prints Jackpot / Bingo / Fortune /
     Tax, PokerStars has its own promotional drops. Not rake, and not won by anyone, so the
     pot only reconciles when they are accounted for separately."""
+    cash_drop: Decimal = ZERO
+    """Money the HOUSE adds to the pot, in the opposite direction to every other amount here.
+
+    GG's Cash Drop promotion prints `Cash Drop to Pot : total $2.50` and the winner collects
+    that much more than the players put in. It is genuinely won money — it belongs in net_won
+    and therefore in win-rate — but it never came out of anybody's stack, so it is the one
+    term that sits on the CONTRIBUTED side of the reconciliation rather than the awarded side.
+
+    Kept separate from `jackpot_drop` deliberately: they have opposite signs, and adding a
+    negative jackpot would make `rake + jackpot_drop` stop meaning "what the house took"."""
     # -- context ---------------------------------------------------------------
     table_name: str = ""
     hero_seat: int | None = None

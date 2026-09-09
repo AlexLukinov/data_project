@@ -98,6 +98,16 @@ RAKE = re.compile(r"\bRake\s+(?:[^\d]*)(?P<rake>[\d,.]+)")
 # Deductions that are NOT rake but still leave the pot. GG prints four of them; each is small
 # and all four together are why 8% of real hands failed reconciliation after the rake fix.
 DROPS = re.compile(r"\b(?:Jackpot|Bingo|Fortune|Tax)\s+(?:[^\d]*)([\d,.]+)")
+CASH_DROP = re.compile(
+    r"^Cash\s+Drop\s+to\s+Pot\s*:?\s*total\s+(?:[^\d]*)(?P<amt>[\d,.]+)", re.IGNORECASE
+)
+"""GG's Cash Drop promotion: `Cash Drop to Pot : total $2.50`.
+
+The house ADDS this to the pot, so the winner collects more than the players contributed.
+Every other money line in a hand history moves chips from players to the pot or back; this is
+the only one that creates them, which is why it needs its own field rather than folding into
+`jackpot_drop` (whose sign is the opposite). Left unparsed it broke pot reconciliation on
+0.6% of a real 9M-hand corpus -- every one of which was then discarded by the validator."""
 BOARD = re.compile(r"^Board\s+\[(?P<cards>[^\]]+)\]")
 STREET_MARK = re.compile(r"^\*\*\*\s+(?P<name>[A-Z ]+?)\s+\*\*\*(?P<rest>.*)$")
 CARDS_IN_BRACKETS = re.compile(r"\[([^\]]+)\]")
@@ -417,6 +427,10 @@ class PokerStarsParser:
             state.note_kind("total")
             self._total_pot_line(line, state)
             return
+        if line.startswith("Cash Drop"):
+            state.note_kind("cash_drop")
+            self._cash_drop_line(line, state)
+            return
         if line.startswith("Board "):
             state.note_kind("board")
             self._board_line(line, state)
@@ -619,6 +633,13 @@ class PokerStarsParser:
         rake_match = RAKE.search(line)
         state.hand.rake = parse_money(rake_match.group("rake") if rake_match else "")
         state.hand.jackpot_drop = sum((parse_money(v) for v in DROPS.findall(line)), Decimal(0))
+
+    def _cash_drop_line(self, line: str, state: _State) -> None:
+        """Record house-added money. Additive: some formats print more than one drop line."""
+        match = CASH_DROP.match(line)
+        if not match:
+            return
+        state.hand.cash_drop += parse_money(match.group("amt"))
 
     def _board_line(self, line: str, state: _State) -> None:
         match = BOARD.match(line)

@@ -117,7 +117,7 @@ async def publish_corpus(user_id: uuid.UUID, tenant_id: int) -> int:
             key = object_key(
                 tenant_id=tenant_id,
                 site=site.value,
-                upload_id=str(upload_id),
+                digest=digest,
                 filename=path.name,
             )
             put_raw(key, data)
