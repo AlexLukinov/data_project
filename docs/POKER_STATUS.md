@@ -32,10 +32,10 @@ the pool is reachable over HTTP. Work is on branch **`feat/incremental-chain-and
 2. Read `docs/POKER_PLAN.md` `## Status` → **B.1**: move `Settings`/`get_settings` to
    `core/settings.py` and the ClickHouse client factory to `ingestion/clickhouse.py`; make
    `api/db.py`'s engine lazy. "Done means" is in the step.
-3. Continue down phase B in order (B.2 import-linter, B.3 sinks, **B.4 test databases** — until
-   B.4 lands, never run `make test-all` or `make seed` against this stack: they write synthetic
-   hands into the analysis tables). Tick a step only when verified; update the plan's Status
-   and §6 and this block at the end.
+3. Continue down phase B in order. (B.1–B.4 landed 2026-09-09: layering enforced, sinks behind
+   Protocols, and `make test-all` / `make seed` now run in their own test environment — the
+   integration conftest refuses to start against the analysis databases.) Tick a step only
+   when verified; update the plan's Status and §6 and this block at the end.
 
 **Time-independent fingerprint** (`marts.player_hand_flags`, purged corpus, verified 2026-09-09
 after a rebuild from empty; the rollup `marts.stats_daily` reproduces every figure exactly):

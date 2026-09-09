@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: core
-    schema: core
+    schema: "{{ env_var('CLICKHOUSE_DB_PREFIX', '') }}core"
     description: >
       Landing tables written by the parser workers. Owned by ClickHouse migrations
       (ch/migrations/), NOT by dbt — dbt reads them, it does not create them.

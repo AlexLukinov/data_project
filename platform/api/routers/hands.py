@@ -10,8 +10,12 @@ from fastapi import APIRouter, HTTPException, status
 from api.db import clickhouse
 from api.deps import CurrentUserDep
 from api.schemas import HandDetail, HandSummary
+from core.settings import get_settings
 
 router = APIRouter(prefix="/v1/hands", tags=["hands"])
+
+CORE = get_settings().db("core")
+"""The core database, prefixed for the test suite and bare in production."""
 
 
 @router.get("", response_model=list[HandSummary])
@@ -37,8 +41,8 @@ async def list_hands(
         "concat(h.board_flop_1,' ',h.board_flop_2,' ',h.board_flop_3,' ',"
         "h.board_turn,' ',h.board_river) AS board, "
         "p.net_won_bb, p.went_to_showdown "
-        "FROM core.hands AS h FINAL "
-        "INNER JOIN core.hand_players AS p FINAL "
+        f"FROM {CORE}.hands AS h FINAL "
+        f"INNER JOIN {CORE}.hand_players AS p FINAL "
         "  ON p.user_id = h.user_id AND p.hand_uid = h.hand_uid "
         f"WHERE {' AND '.join(where)} "
         "ORDER BY h.played_at_utc DESC LIMIT {limit:UInt32}"
@@ -74,7 +78,7 @@ async def get_hand(hand_uid: str, user: CurrentUserDep) -> HandDetail:
         "SELECT hand_uid, site, site_hand_id, played_at_utc, game_type, stake_level, "
         "big_blind, board_flop_1, board_flop_2, board_flop_3, board_turn, board_river, "
         "total_pot, rake "
-        "FROM core.hands FINAL "
+        f"FROM {CORE}.hands FINAL "
         "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String} LIMIT 1",
         parameters=params,
     ).result_rows
@@ -85,14 +89,14 @@ async def get_hand(hand_uid: str, user: CurrentUserDep) -> HandDetail:
     players = client.query(
         "SELECT seat, screen_name, position, is_hero, is_anonymized, starting_stack, "
         "hole_cards, net_won, net_won_bb, went_to_showdown, won_hand "
-        "FROM core.hand_players FINAL "
+        f"FROM {CORE}.hand_players FINAL "
         "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String} ORDER BY seat",
         parameters=params,
     )
     actions = client.query(
         "SELECT action_index, street, seat, action_type, amount, amount_to, pot_before, "
         "to_call, is_allin "
-        "FROM core.actions FINAL "
+        f"FROM {CORE}.actions FINAL "
         "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String} "
         "ORDER BY action_index",
         parameters=params,

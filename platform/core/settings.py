@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     clickhouse_port: int = 8124
     clickhouse_user: str = "poker"
     clickhouse_password: str = "poker"
+    clickhouse_db_prefix: str = ""
+    """Prepended to every ClickHouse database name (`core`, `staging`, `intermediate`,
+    `marts`, `_meta`). Empty for the real analysis databases; `test_` for the integration
+    suite and `make seed`, so synthetic hands can never land next to the founder's real ones
+    (docs/POKER_AUDIT.md B12). dbt reads the same value from the environment."""
 
     # -- Postgres --------------------------------------------------------------
     postgres_host: str = "localhost"
@@ -84,6 +89,10 @@ class Settings(BaseSettings):
     """Rows per ClickHouse insert. One insert = one part; thousands of tiny inserts hit
     TOO_MANY_PARTS. Batching is not an optimization here, it is a correctness constraint."""
     max_upload_bytes: int = 200 * 1024 * 1024
+
+    def db(self, name: str) -> str:
+        """The ClickHouse database for a logical name: `db("core")` -> `core` or `test_core`."""
+        return f"{self.clickhouse_db_prefix}{name}"
 
     @property
     def postgres_dsn(self) -> str:

@@ -40,6 +40,16 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    # The suite provisions and drops its own databases; these names are what it insists on
+    # (see platform/Makefile TEST_ENV and tests/integration/conftest.py).
+    env:
+      CLICKHOUSE_DB_PREFIX: test_
+      POSTGRES_DB: poker_test
+      S3_RAW_BUCKET: poker-raw-test
+      KAFKA_UPLOADS_TOPIC: test.hands.uploads.v1
+      KAFKA_BULK_TOPIC: test.hands.bulkimport.v1
+      KAFKA_CONSUMER_GROUP: test-parser-workers
+      REDIS_URL: redis://localhost:6380/1
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -48,14 +58,12 @@ jobs:
       - run: uv sync --group dev
       - name: Start the stack
         run: docker compose up -d --wait
-      - name: Migrate
-        run: |
-          uv run alembic upgrade head
-          uv run python -m ch.migrate
       - name: Install dbt
         run: |
           uv venv .venv-dbt --python 3.12
           VIRTUAL_ENV=.venv-dbt uv pip install "dbt-core~=1.9" "dbt-clickhouse~=1.8"
+      - name: Provision the test databases (Postgres, ClickHouse, bucket, empty dbt tables)
+        run: uv run python -m api.provision
       - name: Seed and build
         run: |
           uv run python -m scripts.seed

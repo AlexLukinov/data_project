@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal
 
+from core.settings import get_settings
 from ingestion.loader import DATASET_HERO, DATASET_POPULATION
 
 Dataset = Literal["hero", "population"]
@@ -84,8 +85,10 @@ FINE_FILTERABLE: dict[str, tuple[str, str]] = {
 
 FILTERABLE: dict[str, tuple[str, str]] = {**COARSE_FILTERABLE, **FINE_FILTERABLE}
 
-ROLLUP_TABLE = "marts.stats_daily"
-FACT_TABLE = "marts.player_hand_flags"
+MARTS = get_settings().db("marts")
+"""The marts database, prefixed for the test suite (`test_marts`) and bare in production."""
+ROLLUP_TABLE = f"{MARTS}.stats_daily"
+FACT_TABLE = f"{MARTS}.player_hand_flags"
 ROLLUP_DATE = "day"
 FACT_DATE = "played_date"
 

@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from api.queries import STATS, StatsQuery, TimelineQuery
+from api.queries import FACT_TABLE, ROLLUP_TABLE, STATS, StatsQuery, TimelineQuery
 
 
 def test_tenant_is_always_in_the_where_clause() -> None:
@@ -253,10 +253,10 @@ def test_timeline_fine_filter_moves_to_the_fact_table() -> None:
     """Regression for AUDIT B4: the timeline hardcoded the rollup and any fine filter was a
     runtime UNKNOWN_IDENTIFIER."""
     sql, _ = TimelineQuery(tenant_id=1, filters={"spr_bucket": ["1-3"]}).build()
-    assert "FROM marts.player_hand_flags AS s" in sql
+    assert f"FROM {FACT_TABLE} AS s" in sql
     assert "s.played_date AS day" in sql
     sql, _ = TimelineQuery(tenant_id=1, filters={"site": ["ggpoker"]}).build()
-    assert "FROM marts.stats_daily AS s" in sql
+    assert f"FROM {ROLLUP_TABLE} AS s" in sql
     assert "s.day AS day" in sql
 
 
@@ -272,14 +272,14 @@ def test_timeline_carries_the_dataset_guard() -> None:
 def test_coarse_dimensions_use_the_rollup() -> None:
     """Cheap questions stay on the small pre-aggregated table."""
     sql, _ = StatsQuery(tenant_id=1, group_by=["position"], filters={"site": ["ggpoker"]}).build()
-    assert "FROM marts.stats_daily AS s" in sql
+    assert f"FROM {ROLLUP_TABLE} AS s" in sql
     assert "s.day >= " not in sql  # no date bounds requested
 
 
 def test_fine_dimensions_fall_through_to_the_fact_table() -> None:
     """Anything the rollup cannot answer must silently move to the full per-hand grain."""
     sql, _ = StatsQuery(tenant_id=1, group_by=["spr_bucket"]).build()
-    assert "FROM marts.player_hand_flags AS s" in sql
+    assert f"FROM {FACT_TABLE} AS s" in sql
 
 
 def test_fine_filter_switches_the_date_column_too() -> None:
@@ -287,7 +287,7 @@ def test_fine_filter_switches_the_date_column_too() -> None:
     sql, _ = StatsQuery(
         tenant_id=1, date_from=date(2025, 1, 1), filters={"hand_class": ["AKs"]}
     ).build()
-    assert "FROM marts.player_hand_flags AS s" in sql
+    assert f"FROM {FACT_TABLE} AS s" in sql
     assert "s.played_date >= {date_from:Date}" in sql
     assert "s.day" not in sql
 

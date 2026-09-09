@@ -160,15 +160,17 @@ async def amain() -> int:
     else:
         log.info("nothing new to publish")
 
+    from core.settings import get_settings
     from ingestion.clickhouse import clickhouse
 
+    core = get_settings().db("core")
     counts = (
         clickhouse()
         .query(
-            "SELECT (SELECT count() FROM core.hands FINAL), "
-            "(SELECT count() FROM core.hand_players FINAL), "
-            "(SELECT count() FROM core.actions FINAL), "
-            "(SELECT count() FROM core.parse_failures)"
+            f"SELECT (SELECT count() FROM {core}.hands FINAL), "
+            f"(SELECT count() FROM {core}.hand_players FINAL), "
+            f"(SELECT count() FROM {core}.actions FINAL), "
+            f"(SELECT count() FROM {core}.parse_failures)"
         )
         .result_rows[0]
     )

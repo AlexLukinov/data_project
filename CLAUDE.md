@@ -189,11 +189,12 @@ Redis 6380 · MinIO 9010/9011**.
 |---|---|
 | `make up` / `make down` / `make ps` | start / stop (volumes kept) / status |
 | `make migrate` | Alembic (Postgres) + `ch/migrations/*.sql` (ClickHouse) |
-| `make seed` | migrate + load the 8-hand corpus + build dbt |
-| `make dbt-build` / `make dbt-test` | run the dbt models / tests only |
+| `make seed` | provision the **test** databases + load the 8-hand corpus there + build dbt there |
+| `make dbt-build` / `make dbt-test` | run the dbt models / tests against the real marts |
 | `make api` / `make worker` | FastAPI on :8000 (dashboard `/`, docs `/docs`) / Kafka parser worker |
-| `make check` | lint + typecheck + unit tests — what CI runs |
-| `make test-all` | includes integration tests (needs `make up && make seed`) |
+| `make check` | lint + typecheck + import-linter + unit tests — what CI runs |
+| `make test-all` | includes integration tests, in the test environment (needs `make up`) |
+| `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 
 - **dbt lives in `platform/.venv-dbt`**, not the app venv — its pins clash with the app's, same
@@ -206,9 +207,11 @@ Redis 6380 · MinIO 9010/9011**.
   ADR-026), `web/` (Nuxt 4).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
   `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.
-- **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. The seed
-  corpus and test uploads must never land there (until plan step B.4 adds a `test_` database
-  prefix, the integration suite purges what it wrote; don't run `make seed` against the real DB).
+- **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. Tests and
+  the seed corpus use a separate environment: `make test-all` and `make seed` set `TEST_ENV`
+  (`CLICKHOUSE_DB_PREFIX=test_`, `POSTGRES_DB=poker_test`, a `-test` bucket, `test.` Kafka
+  topics, Redis db 1), the integration conftest **refuses to start** without it, and it
+  provisions and drops those databases itself. Never set `CLICKHOUSE_DB_PREFIX` in `.env`.
 - **ClickHouse runs at 4 GB by default** (`CLICKHOUSE_MEM`), sized as a production node
   (`infra/clickhouse/small-node.xml` + `limits.xml`). Never bootstrap the mart chain with a
   one-shot `dbt build --full-refresh`; use `uv run python scripts/backfill.py` (ADR-019).

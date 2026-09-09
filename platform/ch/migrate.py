@@ -35,6 +35,27 @@ VERSION_RE = re.compile(r"^(?P<version>\d{4})_(?P<name>[a-z0-9_]+)\.sql$")
 # splitter is a dependency we do not need.
 _STATEMENT_SPLIT = re.compile(r";\s*(?:\n|$)")
 
+DATABASES: tuple[str, ...] = ("core", "staging", "intermediate", "marts", "_meta")
+"""Every logical database the migrations create or touch. `Settings.clickhouse_db_prefix` is
+applied to all of them at apply time, so one set of migration files provisions both the real
+analysis databases and the `test_`-prefixed ones the test suite uses."""
+
+_DB_QUALIFIER = re.compile(r"\b(" + "|".join(DATABASES) + r")(?=\.)")
+_CREATE_DB = re.compile(r"(CREATE DATABASE IF NOT EXISTS\s+)(" + "|".join(DATABASES) + r")\b")
+
+
+def prefixed(sql: str, prefix: str) -> str:
+    """Rewrite `core.hands` -> `<prefix>core.hands` and `CREATE DATABASE ... core` likewise.
+
+    Migration files are append-only and name the databases literally; the prefix is a
+    deployment property, so it is applied here rather than written into 8 files. Only a
+    database name immediately followed by a dot, or named in CREATE DATABASE, is touched.
+    """
+    if not prefix:
+        return sql
+    sql = _DB_QUALIFIER.sub(lambda m: f"{prefix}{m.group(1)}", sql)
+    return _CREATE_DB.sub(lambda m: f"{m.group(1)}{prefix}{m.group(2)}", sql)
+
 
 def connect() -> Client:
     """Open a ClickHouse client from settings."""
@@ -47,11 +68,16 @@ def connect() -> Client:
     )
 
 
+def _meta() -> str:
+    """The bookkeeping database, prefixed like everything else."""
+    return get_settings().db("_meta")
+
+
 def ensure_bookkeeping(client: Client) -> None:
     """Create the table that records which migrations have run."""
-    client.command("CREATE DATABASE IF NOT EXISTS _meta")
+    client.command(f"CREATE DATABASE IF NOT EXISTS {_meta()}")
     client.command(
-        "CREATE TABLE IF NOT EXISTS _meta.schema_migrations ("
+        f"CREATE TABLE IF NOT EXISTS {_meta()}.schema_migrations ("
         "version String, name String, applied_at DateTime64(3,'UTC') DEFAULT now64(3)) "
         "ENGINE = ReplacingMergeTree(applied_at) ORDER BY version"
     )
@@ -59,7 +85,7 @@ def ensure_bookkeeping(client: Client) -> None:
 
 def applied_versions(client: Client) -> set[str]:
     """Versions already applied, per the bookkeeping table."""
-    rows = client.query("SELECT version FROM _meta.schema_migrations FINAL").result_rows
+    rows = client.query(f"SELECT version FROM {_meta()}.schema_migrations FINAL").result_rows
     return {row[0] for row in rows}
 
 
@@ -76,12 +102,27 @@ def discover() -> list[tuple[str, str, Path]]:
 
 def apply(client: Client, version: str, name: str, path: Path) -> int:
     """Execute one migration file. Returns the number of statements run."""
-    sql = path.read_text(encoding="utf-8")
+    sql = prefixed(path.read_text(encoding="utf-8"), get_settings().clickhouse_db_prefix)
     statements = [s.strip() for s in _STATEMENT_SPLIT.split(sql) if s.strip()]
     for statement in statements:
         client.command(statement)
-    client.insert("_meta.schema_migrations", [[version, name]], column_names=["version", "name"])
+    client.insert(
+        f"{_meta()}.schema_migrations", [[version, name]], column_names=["version", "name"]
+    )
     return len(statements)
+
+
+def drop_all(client: Client) -> None:
+    """Drop every prefixed database.
+
+    **Refuses to run without a prefix**: the unprefixed databases are the founder's analysis
+    data, and no code path may delete them.
+    """
+    prefix = get_settings().clickhouse_db_prefix
+    if not prefix:
+        raise RuntimeError("refusing to drop the unprefixed (real) ClickHouse databases")
+    for name in DATABASES:
+        client.command(f"DROP DATABASE IF EXISTS {prefix}{name}")
 
 
 def migrate() -> int:

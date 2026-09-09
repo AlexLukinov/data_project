@@ -26,6 +26,7 @@ import polars as pl
 from clickhouse_connect.driver.client import Client
 
 from core.models import ZERO, CanonicalHand
+from core.settings import get_settings
 
 log = logging.getLogger(__name__)
 
@@ -334,11 +335,12 @@ def insert_hands(
 
     hand_rows, player_rows, action_rows, winner_rows = to_rows(hands, tenant_id, dataset)
 
-    client.insert("core.hands", hand_rows, column_names=HANDS_COLUMNS)
-    client.insert("core.hand_players", player_rows, column_names=PLAYERS_COLUMNS)
-    client.insert("core.actions", action_rows, column_names=ACTIONS_COLUMNS)
+    core = get_settings().db("core")
+    client.insert(f"{core}.hands", hand_rows, column_names=HANDS_COLUMNS)
+    client.insert(f"{core}.hand_players", player_rows, column_names=PLAYERS_COLUMNS)
+    client.insert(f"{core}.actions", action_rows, column_names=ACTIONS_COLUMNS)
     if winner_rows:
-        client.insert("core.pot_winners", winner_rows, column_names=WINNERS_COLUMNS)
+        client.insert(f"{core}.pot_winners", winner_rows, column_names=WINNERS_COLUMNS)
 
     counts = {
         "hands": len(hand_rows),

@@ -12,7 +12,9 @@ poker_dwh:
       port: "{{ env_var('CLICKHOUSE_PORT', '8124') | int }}"
       user: "{{ env_var('CLICKHOUSE_USER', 'poker') }}"
       password: "{{ env_var('CLICKHOUSE_PASSWORD', 'poker') }}"
-      schema: marts
+      # Same prefix the models' schemas get (macros/generate_schema_name.sql): `test_marts`
+      # for the integration suite, `marts` for the real data.
+      schema: "{{ env_var('CLICKHOUSE_DB_PREFIX', '') }}marts"
       secure: False
       connect_timeout: 30
       send_receive_timeout: 3600

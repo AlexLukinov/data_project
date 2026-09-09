@@ -1,39 +1,82 @@
-"""Integration-test fixtures.
+"""Integration-test fixtures: their own databases, provisioned per session, never the real ones.
 
-**The event-loop problem, and why this fixture exists.** The engine is process-wide (lazily built,
-then cached), and asyncpg binds its connection pool to whichever event loop first uses it.
-pytest-asyncio gives each test a fresh loop, so the second test to run inherits a pool bound
-to a dead loop and fails with "attached to a different loop".
+**The guard comes first.** The founder's analysis lives in the unprefixed ClickHouse databases
+and the `poker` Postgres database. This suite writes synthetic hands, so it may only run with
+`CLICKHOUSE_DB_PREFIX=test_` and a Postgres database whose name ends in `_test` -- both set by
+`make test-all` and by CI. Anything else aborts the session before a single test runs. An
+earlier version wrote into the real tables and purged afterwards; a leak from that left 384
+synthetic rows behind and moved measured hero VPIP from 22.425% to 22.484% -- a plausible
+number, quietly wrong, in a database whose purpose is deciding how to play
+(docs/POKER_AUDIT.md B12).
 
-Disposing the engine after every test drops the pool, so the next test builds a fresh one on
-its own loop. It costs a handful of connection handshakes per test, which is nothing next to
-the clarity of not sharing global async state between tests.
-
-Production is unaffected: a long-lived server has exactly one loop, which is the case the
-module-level engine is designed for.
-
-**These tests write into the SAME ClickHouse the founder analyses.** The database name is
-hardcoded (`core.*`) throughout the codebase, so there is no test database to point them at
-without a wider refactor. Until there is, `_purge_test_tenants` below is what keeps the
-analysis tables free of synthetic hands — see the note on that fixture.
+**The event-loop problem.** The engine is process-wide (lazily built, then cached), and
+asyncpg binds its connection pool to whichever event loop first uses it. pytest-asyncio gives
+each test a fresh loop, so the second test would inherit a pool bound to a dead loop and fail
+with "attached to a different loop". Disposing the engine after every test drops the pool.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 
-import psycopg
 import pytest
 
+from api import provision
 from api.db import get_engine
+from ch import migrate as ch_migrate
 from core.settings import get_settings
 from ingestion.clickhouse import clickhouse
 
-CORE_TABLES = ("hands", "hand_players", "actions", "pot_winners")
+TEST_PREFIX = "test_"
+TEST_DB_SUFFIX = "_test"
+TEST_BUCKET_SUFFIX = "-test"
+TEST_TOPIC_PREFIX = "test."
+REAL_REDIS_DB = "/0"
 
-TEST_EMAIL_PREFIX = "e2e-"
-"""Integration tests register users as `e2e-<hex>@example.com`; that prefix is the only thing
-distinguishing a throwaway tenant from a real one."""
+
+def _refuse_unless_test_databases() -> None:
+    """Every store a test can touch must be the test one, or the session does not start."""
+    settings = get_settings()
+    problems = []
+    if settings.clickhouse_db_prefix != TEST_PREFIX:
+        problems.append(f"CLICKHOUSE_DB_PREFIX must be {TEST_PREFIX!r}")
+    if not settings.postgres_db.endswith(TEST_DB_SUFFIX):
+        problems.append(f"POSTGRES_DB must end in {TEST_DB_SUFFIX!r}")
+    if not settings.s3_raw_bucket.endswith(TEST_BUCKET_SUFFIX):
+        problems.append(f"S3_RAW_BUCKET must end in {TEST_BUCKET_SUFFIX!r} (raw text is forever)")
+    for topic in (settings.kafka_uploads_topic, settings.kafka_bulk_topic):
+        if not topic.startswith(TEST_TOPIC_PREFIX):
+            problems.append(f"Kafka topics must start with {TEST_TOPIC_PREFIX!r}, got {topic!r}")
+    if not settings.kafka_consumer_group.startswith("test"):
+        problems.append(
+            "KAFKA_CONSUMER_GROUP must be a test group (a real one would consume "
+            "real uploads into the test tables)"
+        )
+    if settings.redis_url.rstrip("/").endswith(REAL_REDIS_DB):
+        problems.append(
+            "REDIS_URL must use a logical database other than /0 (tenant ids "
+            "collide between the real and test Postgres databases)"
+        )
+    if problems:
+        pytest.exit(
+            "refusing to run integration tests against the analysis databases: "
+            + "; ".join(problems)
+            + ". Use `make test-all`.",
+            returncode=3,
+        )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_databases() -> Iterator[None]:
+    """Provision empty test databases for the session and drop them afterwards."""
+    _refuse_unless_test_databases()
+    client = clickhouse()
+    ch_migrate.drop_all(client)
+    provision.drop_postgres_database()
+    provision.provision()
+    yield
+    ch_migrate.drop_all(client)
+    provision.drop_postgres_database()
 
 
 @pytest.fixture(autouse=True)
@@ -41,35 +84,3 @@ async def _dispose_engine() -> AsyncIterator[None]:
     """Drop the asyncpg pool after each test so the next test gets a fresh one."""
     yield
     await get_engine().dispose()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _purge_test_tenants() -> Iterator[None]:
-    """Delete every synthetic hand this suite wrote, once the session ends.
-
-    **Why this is not merely tidiness.** The seed corpus is deliberately pathological — side
-    pots, 3-bet all-ins, split pots — so its VPIP is around 41% against a real ~22%. Left in
-    `core.*` it flows into `marts.player_hand_flags` on the next dbt run and shifts any query
-    that is not scoped to a single `user_id`. A previous run left 384 such rows behind and they
-    moved measured hero VPIP from 22.425% to 22.484%: a plausible number, quietly wrong, in a
-    database whose entire purpose is deciding how to play.
-
-    Scoped by the `e2e-` email prefix rather than by "not tenant 1", so it stays correct if
-    real accounts are ever added.
-    """
-    yield
-    with psycopg.connect(get_settings().postgres_dsn.replace("+asyncpg", ""), autocommit=True) as c:
-        rows = c.execute(
-            "SELECT DISTINCT tenant_id FROM users WHERE email LIKE %s", (f"{TEST_EMAIL_PREFIX}%",)
-        ).fetchall()
-    # Comma-joined, not `tuple(...)`: a one-element tuple formats as `(5,)` and the trailing
-    # comma is not valid in a SQL IN list. Values are ints straight from the DB, never text.
-    tenants = ",".join(str(int(r[0])) for r in rows)
-    if not tenants:
-        return
-    client = clickhouse()
-    for table in CORE_TABLES:
-        client.command(
-            f"ALTER TABLE core.{table} DELETE WHERE user_id IN ({tenants}) "
-            f"SETTINGS mutations_sync=2"
-        )

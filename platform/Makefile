@@ -14,6 +14,15 @@ export CLICKHOUSE_PORT     ?= 8124
 export CLICKHOUSE_USER     ?= poker
 export CLICKHOUSE_PASSWORD ?= poker
 
+# The TEST environment: its own ClickHouse databases (`test_core`, `test_marts`, ...), its own
+# Postgres database, raw bucket, Kafka topics + consumer group, and Redis logical database.
+# Every target that loads synthetic hands (seed, test-all) runs under this, so nothing a test
+# does can touch the founder's real hands, raw text, queue or cache (ADR-023). The integration
+# conftest refuses to run unless every one of these is set.
+TEST_ENV := CLICKHOUSE_DB_PREFIX=test_ POSTGRES_DB=poker_test S3_RAW_BUCKET=poker-raw-test \
+  KAFKA_UPLOADS_TOPIC=test.hands.uploads.v1 KAFKA_BULK_TOPIC=test.hands.bulkimport.v1 \
+  KAFKA_CONSUMER_GROUP=test-parser-workers REDIS_URL=redis://localhost:6380/1
+
 .PHONY: help
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -71,10 +80,12 @@ ch-migrate: ## Apply ClickHouse SQL migrations
 
 # ── data ─────────────────────────────────────────────────────────────────────
 .PHONY: seed
-seed: migrate ## Migrate, load the sample hand corpus, and build the dbt models
-	$(UV) python -m scripts.seed
-	$(MAKE) dbt-build
-	@echo ">> seeded. Start the API with: make api"
+seed: ## Provision the TEST databases, load the sample corpus into them, build dbt there
+	$(TEST_ENV) $(UV) python -m api.provision
+	$(TEST_ENV) $(UV) python -m scripts.seed
+	$(TEST_ENV) $(DBT) build --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
+	@echo ">> seeded the test databases (test_core, test_marts, poker_test)."
+	@echo ">> To serve them: $(TEST_ENV) make api"
 
 .PHONY: dbt-build
 dbt-build: ## Run dbt (models + tests)
@@ -104,8 +115,8 @@ test: ## Run unit tests (no stack required)
 	$(UV) pytest -q -m "not integration"
 
 .PHONY: test-all
-test-all: ## Run every test, including integration (needs `make up && make seed`)
-	$(UV) pytest -q
+test-all: ## Run every test, including integration, against the TEST databases (needs `make up`)
+	$(TEST_ENV) $(UV) pytest -q
 
 .PHONY: lint
 lint: ## Lint and format-check

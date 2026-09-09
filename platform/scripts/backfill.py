@@ -77,16 +77,17 @@ def _dirty_partitions() -> list[tuple[int, int]]:
     because ingest order and partition order are unrelated. If the two ever disagree, the loop
     stops while work remains.
     """
+    prefix = os.environ.get("CLICKHOUSE_DB_PREFIX", "")
     sql = (
         "SELECT src.m AS m, coalesce(pr.rows, 0) AS rows FROM ("
         f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, max(parsed_at) AS src_max"
-        "  FROM core.hands GROUP BY m"
+        f"  FROM {prefix}core.hands GROUP BY m"
         ") AS src LEFT JOIN ("
         f"  SELECT {PARTITION_EXPR}(day) AS m, max(src_parsed_at) AS built_max"
-        "  FROM marts.stats_daily GROUP BY m"
+        f"  FROM {prefix}marts.stats_daily GROUP BY m"
         ") AS built ON built.m = src.m LEFT JOIN ("
         f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, count() AS rows"
-        "  FROM core.hand_players GROUP BY m"
+        f"  FROM {prefix}core.hand_players GROUP BY m"
         ") AS pr ON pr.m = src.m "
         "WHERE src.src_max > built.built_max ORDER BY m FORMAT TSV"
     )
@@ -126,6 +127,7 @@ def _drop_scratch_tables() -> None:
     the memory limit leaves them, and they accumulate (22 of them, 396 MiB, were found after
     one bad afternoon). Called only after a failed pass, when no dbt process is running.
     """
+    prefix = os.environ.get("CLICKHOUSE_DB_PREFIX", "")
     listing = subprocess.run(
         [
             "docker",
@@ -136,8 +138,8 @@ def _drop_scratch_tables() -> None:
             "clickhouse-client",
             "-q",
             "SELECT concat(database, '.', name) FROM system.tables "
-            "WHERE database IN ('intermediate', 'marts') AND name LIKE '%__dbt_new_data%' "
-            "FORMAT TSVRaw",
+            f"WHERE database IN ('{prefix}intermediate', '{prefix}marts') "
+            "AND name LIKE '%__dbt_new_data%' FORMAT TSVRaw",
         ],
         cwd=PLATFORM,
         capture_output=True,

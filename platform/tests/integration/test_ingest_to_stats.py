@@ -15,6 +15,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.main import app
+from core.settings import get_settings
 from ingestion import worker
 from ingestion.clickhouse import clickhouse
 
@@ -150,7 +151,8 @@ async def test_worker_reprocessing_does_not_duplicate_hands() -> None:
         rows = (
             clickhouse()
             .query(
-                "SELECT raw_object_key FROM core.hands FINAL WHERE hand_uid = {uid:String} LIMIT 1",
+                f"SELECT raw_object_key FROM {get_settings().db('core')}.hands FINAL "
+                "WHERE hand_uid = {uid:String} LIMIT 1",
                 parameters={
                     "uid": (await c.get("/v1/hands", headers=_auth(token))).json()[0]["hand_uid"]
                 },

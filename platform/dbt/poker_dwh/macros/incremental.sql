@@ -164,7 +164,7 @@
         ) as src
         left join (
             select toYYYYMMDD(day) as m, max(src_parsed_at) as built_max
-            from marts.stats_daily
+            from {{ db_prefix() }}marts.stats_daily
             group by m
         ) as built on built.m = src.m
         {# An UNBUILT partition has no row on the right, and ClickHouse pads the miss with the

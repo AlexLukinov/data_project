@@ -33,11 +33,11 @@ make worker
 | Command | Does |
 |---|---|
 | `make up` / `down` / `nuke` | stack lifecycle (`nuke` needs typed confirmation) |
-| `make migrate` | Alembic (Postgres) + versioned SQL (ClickHouse) |
-| `make seed` | migrate → load corpus via object storage/Kafka/worker → dbt build |
+| `make migrate` | Alembic (Postgres) + versioned SQL (ClickHouse), real databases |
+| `make seed` | provision the **test** databases → load the corpus via object storage/Kafka/worker → dbt build there |
 | `make test` | unit tests, no stack needed |
-| `make test-all` | everything, including integration |
-| `make check` | lint + typecheck + unit tests (what CI runs) |
+| `make test-all` | everything, including integration — in the test environment (`TEST_ENV` in the Makefile), never against the real data |
+| `make check` | lint + typecheck + import-linter + unit tests (what CI runs) |
 | `make dbt-build` / `dbt-test` / `dbt-docs` | the stat layer |
 
 **Ports** are shifted off the defaults so this stack and the minikube lab can run side by

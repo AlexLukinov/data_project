@@ -5,6 +5,7 @@ from __future__ import annotations
 from clickhouse_connect.driver.client import Client
 
 from core.models import CanonicalHand
+from core.settings import get_settings
 from ingestion.clickhouse import clickhouse
 from ingestion.loader import insert_hands
 from ingestion.sinks.protocols import PARSE_FAILURE_COLUMNS
@@ -39,4 +40,5 @@ class ClickHouseHandSink:
         """
         if not rows:
             return
-        self.client.insert("core.parse_failures", rows, column_names=list(PARSE_FAILURE_COLUMNS))
+        table = f"{get_settings().db('core')}.parse_failures"
+        self.client.insert(table, rows, column_names=list(PARSE_FAILURE_COLUMNS))
