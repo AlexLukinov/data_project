@@ -61,33 +61,37 @@ select
 
     -- Preflop shape of the pot. The most important postflop dimension after position: a c-bet
     -- in a 4-bet pot and a c-bet in a limped pot are not the same action.
+    -- Every bucket column below is cast to LowCardinality(String) explicitly: coalesce() over a
+    -- LowCardinality input and a String literal yields plain String, and these fifteen columns
+    -- hold 4-6 distinct values each. As Strings they cost 222 MiB of a 2.09 GiB table; as
+    -- dictionaries they are nearly free.
     hx.pot_type                                                      as pot_type,
     hx.players_to_flop                                               as players_to_flop,
     hx.is_multiway                                                   as is_multiway,
-    coalesce(pf.first_raiser_position, '')                           as vs_position,
+    coalesce(pf.first_raiser_position, '')::LowCardinality(String)   as vs_position,
 
     -- Holding and depth.
-    coalesce(pc.hand_class, '')                                      as hand_class,
-    coalesce(pc.hand_shape, '')                                      as hand_shape,
-    coalesce(pc.spr_bucket, 'na')                                    as spr_bucket,
-    coalesce(pc.stack_bucket, '')                                    as stack_bucket,
+    coalesce(pc.hand_class, '')::LowCardinality(String)              as hand_class,
+    coalesce(pc.hand_shape, '')::LowCardinality(String)              as hand_shape,
+    coalesce(pc.spr_bucket, 'na')::LowCardinality(String)            as spr_bucket,
+    coalesce(pc.stack_bucket, '')::LowCardinality(String)            as stack_bucket,
     coalesce(pc.is_ip, toUInt8(0))                                   as is_ip,
 
     -- Board texture. '' on hands that never saw a flop, which groups cleanly.
-    coalesce(bt.flop_suitedness, '')                                 as flop_suitedness,
-    coalesce(bt.flop_pairing, '')                                    as flop_pairing,
-    coalesce(bt.flop_high_card, '')                                  as flop_high_card,
-    coalesce(bt.flop_connectedness, '')                              as flop_connectedness,
+    coalesce(bt.flop_suitedness, '')::LowCardinality(String)         as flop_suitedness,
+    coalesce(bt.flop_pairing, '')::LowCardinality(String)            as flop_pairing,
+    coalesce(bt.flop_high_card, '')::LowCardinality(String)          as flop_high_card,
+    coalesce(bt.flop_connectedness, '')::LowCardinality(String)      as flop_connectedness,
     coalesce(bt.board_paired_final, toUInt8(0))                      as board_paired_final,
     coalesce(bt.board_flush_possible, toUInt8(0))                    as board_flush_possible,
 
     -- Bet sizing, per street: the dimension that separates "I c-bet 62%" from a real read.
-    coalesce(fl.bet_size_bucket, 'none')                             as bet_size_bucket_f,
-    coalesce(tn.bet_size_bucket, 'none')                             as bet_size_bucket_t,
-    coalesce(rv.bet_size_bucket, 'none')                             as bet_size_bucket_r,
-    coalesce(fl.faced_size_bucket, 'none')                           as faced_size_bucket_f,
-    coalesce(tn.faced_size_bucket, 'none')                           as faced_size_bucket_t,
-    coalesce(rv.faced_size_bucket, 'none')                           as faced_size_bucket_r,
+    coalesce(fl.bet_size_bucket, 'none')::LowCardinality(String)     as bet_size_bucket_f,
+    coalesce(tn.bet_size_bucket, 'none')::LowCardinality(String)     as bet_size_bucket_t,
+    coalesce(rv.bet_size_bucket, 'none')::LowCardinality(String)     as bet_size_bucket_r,
+    coalesce(fl.faced_size_bucket, 'none')::LowCardinality(String)   as faced_size_bucket_f,
+    coalesce(tn.faced_size_bucket, 'none')::LowCardinality(String)   as faced_size_bucket_t,
+    coalesce(rv.faced_size_bucket, 'none')::LowCardinality(String)   as faced_size_bucket_r,
 
     -- ---- the universal denominator ----------------------------------------------------
     toUInt8(1)                                                       as hands,

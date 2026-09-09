@@ -95,19 +95,19 @@ select
         s1 = s2 and s2 = s3, 'monotone',
         s1 = s2 or s2 = s3 or s1 = s3, 'two_tone',
         'rainbow'
-    )                                                                as flop_suitedness,
+    )::LowCardinality(String)                                        as flop_suitedness,
 
     -- ---- pairing --------------------------------------------------------------------
     multiIf(
         r1 = r2 and r2 = r3, 'trips',
         r1 = r2 or r2 = r3 or r1 = r3, 'paired',
         'unpaired'
-    )                                                                as flop_pairing,
+    )::LowCardinality(String)                                        as flop_pairing,
 
     -- ---- height ---------------------------------------------------------------------
     -- The highest flop card drives range advantage more than any other single feature, so it
     -- gets its own dimension rather than being buried in a composite texture string.
-    substring('{{ ranks }}', desc_ranks[1], 1)                       as flop_high_card,
+    substring('{{ ranks }}', desc_ranks[1], 1)::LowCardinality(String) as flop_high_card,
     cast(desc_ranks[1] >= 12 as UInt8)                               as flop_has_ace_or_king,
     cast(desc_ranks[3] >= 8 as UInt8)                                as flop_all_broadway,
 
@@ -118,7 +118,7 @@ select
         desc_ranks[1] - desc_ranks[3] <= 2, 'connected',
         desc_ranks[1] - desc_ranks[3] <= 4, 'semi_connected',
         'disconnected'
-    )                                                                as flop_connectedness,
+    )::LowCardinality(String)                                        as flop_connectedness,
 
     -- ---- full-board features --------------------------------------------------------
     cast(length(arrayDistinct(all_ranks)) < length(all_ranks) as UInt8) as board_paired_final,

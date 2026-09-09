@@ -59,10 +59,12 @@ seen as (
         p.hand_uid                                                  as hand_uid,
         max(p.played_at_utc)                                        as played_at_utc,
         max(p.src_parsed_at)                                        as src_parsed_at,
-        countIf(p.saw_flop = 1)                                     as players_to_flop,
-        countIf(p.saw_turn = 1)                                     as players_to_turn,
-        countIf(p.saw_river = 1)                                    as players_to_river,
-        countIf(p.went_to_showdown = 1)                             as players_to_showdown
+        -- UInt8, not the UInt64 countIf() would infer: a table seats at most 10, and the
+        -- 8-byte default cost 50 MiB on the 35M-row flag table for values that never exceed 6.
+        toUInt8(countIf(p.saw_flop = 1))                            as players_to_flop,
+        toUInt8(countIf(p.saw_turn = 1))                            as players_to_turn,
+        toUInt8(countIf(p.saw_river = 1))                           as players_to_river,
+        toUInt8(countIf(p.went_to_showdown = 1))                    as players_to_showdown
     from {{ ref('stg_hand_players') }} as p
     where {{ dirty_partitions('p.played_at_utc') }}
     group by p.user_id, p.hand_uid
@@ -78,13 +80,15 @@ select
     coalesce(r.n_calls, 0)                                          as n_preflop_calls,
     -- Poker's off-by-one: the big blind counts as the first bet, so the FIRST raise opens the
     -- pot ("single raised") and the SECOND raise is the 3-bet.
+    -- LowCardinality: five distinct values ever. As a plain String this and the other bucket
+    -- columns cost 222 MiB on the flag table; as a dictionary they cost almost nothing.
     multiIf(
         coalesce(r.n_raises, 0) = 0, 'limped',
         r.n_raises = 1, 'srp',
         r.n_raises = 2, '3bet',
         r.n_raises = 3, '4bet',
         '5bet_plus'
-    )                                                               as pot_type,
+    )::LowCardinality(String)                                       as pot_type,
     cast(coalesce(r.n_raises, 0) = 0 and coalesce(r.n_calls, 0) > 0 as UInt8)
                                                                     as is_limped_pot,
     s.players_to_flop                                               as players_to_flop,

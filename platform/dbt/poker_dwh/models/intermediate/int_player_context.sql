@@ -96,7 +96,7 @@ select
                 's', 'o'
             )
         )
-    )                                                                as hand_class,
+    )::LowCardinality(String)                                        as hand_class,
 
     multiIf(
         length(splitByChar(' ', p.hole_cards)) != 2, '',
@@ -105,7 +105,7 @@ select
         substring(splitByChar(' ', p.hole_cards)[1], 2, 1)
             = substring(splitByChar(' ', p.hole_cards)[2], 2, 1), 'suited',
         'offsuit'
-    )                                                                as hand_shape,
+    )::LowCardinality(String)                                        as hand_shape,
 
     -- ---- depth -----------------------------------------------------------------------
     coalesce(sa.invested_preflop, toDecimal64(0, 4))                 as invested_preflop,
@@ -136,7 +136,7 @@ select
         (p.starting_stack - coalesce(sa.invested_preflop, toDecimal64(0, 4)))
             / hx.pot_at_flop < 13, '6-13',
         '13+'
-    )                                                                as spr_bucket,
+    )::LowCardinality(String)                                        as spr_bucket,
 
     multiIf(
         p.starting_stack_bb < 40, '0-40',
@@ -144,7 +144,7 @@ select
         p.starting_stack_bb < 125, '75-125',
         p.starting_stack_bb < 200, '125-200',
         '200+'
-    )                                                                as stack_bucket,
+    )::LowCardinality(String)                                        as stack_bucket,
 
     -- ---- position --------------------------------------------------------------------
     cast(

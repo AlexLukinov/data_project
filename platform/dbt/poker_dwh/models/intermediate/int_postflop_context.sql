@@ -101,7 +101,7 @@ select
         s.bet_size_pct <= 0.85, 'large',
         s.bet_size_pct <= 1.10, 'pot',
         'overbet'
-    )                                                                   as bet_size_bucket,
+    )::LowCardinality(String)                                           as bet_size_bucket,
     multiIf(
         isNull(s.faced_size_pct), 'none',
         s.faced_size_pct <= 0.37, 'small',
@@ -109,7 +109,7 @@ select
         s.faced_size_pct <= 0.85, 'large',
         s.faced_size_pct <= 1.10, 'pot',
         'overbet'
-    )                                                                   as faced_size_bucket,
+    )::LowCardinality(String)                                           as faced_size_bucket,
     l.first_bet_idx                                                     as first_bet_idx,
     l.first_bettor_seat                                                 as first_bettor_seat,
     l.n_aggressive                                                      as n_aggressive,

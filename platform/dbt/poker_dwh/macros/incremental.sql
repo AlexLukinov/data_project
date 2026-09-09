@@ -74,8 +74,12 @@
 
   ## Every model reads the SAME anchor, not its own table
 
-  The built-side subquery is pinned to `marts.player_hand_flags` -- the last model in the chain
-  -- for every model, rather than to `{{ this }}`. Two failures forced this, both silent:
+  The built-side subquery is pinned to `marts.stats_daily` -- **the LAST model in the chain**
+  -- for every model, rather than to `{{ this }}`. It must be the last one: an earlier version
+  anchored on `marts.player_hand_flags`, and `stats_daily`, which builds *after* it in the same
+  pass, then saw every partition as already built and stayed empty for good -- the API's
+  rollup route silently answered "0 hands". Two more failures forced the shared anchor, both
+  silent:
 
   1. **Divergence after a failed pass.** With per-model state, upstream models that succeeded
      advanced while the failed downstream one did not. The next pass then had each model pick a
@@ -99,8 +103,9 @@
   anchor -- if the two disagree the loop stops while work remains.
 
   A half-failed run is still self-healing: the anchor only advances for a partition once
-  `marts.player_hand_flags` itself has been written for it, which happens last, so a failure
+  `marts.stats_daily` itself has been written for it, which happens last, so a failure
   anywhere in the chain leaves that partition dirty and the next pass redoes the whole set.
+  If a model is ever added downstream of `stats_daily`, the anchor moves to it.
 
   ## Bootstrapping on a small server: `batch_partitions`
 
@@ -120,10 +125,35 @@
 
   Leave the var unset for normal operation: every dirty partition in one pass, which is what
   you want when there is one of them.
+
+  ## Changing the chain's DDL (a column type, a new column, a partition key)
+
+  `insert_overwrite` swaps partitions between the temp table and the target, so the two must
+  have identical structure -- a model whose SELECT now yields a different column type fails at
+  REPLACE PARTITION, and a new column is silently dropped (`on_schema_change` is unset). The
+  procedure, in this order:
+
+      CLICKHOUSE_PORT=8124 .venv-dbt/bin/dbt run --full-refresh --vars 'empty_chain: true' \
+          --project-dir dbt/poker_dwh --profiles-dir dbt/poker_dwh
+      uv run python scripts/backfill.py
+
+  With `empty_chain: true` this macro returns the constant `0`, so every model's gate is
+  false and the full refresh creates each table from its own SELECT with the right DDL and
+  no rows, in seconds; the backfill then fills it a few partitions at a time. (dbt's own
+  `--empty` flag was tried for this and does not work here: it appends its own alias to every
+  limited ref, which collides with the `{{ ref() }} as p` aliases the models need.)
+
+  NEVER `--full-refresh` a populated corpus without that var: that is the one-shot CTAS this
+  whole design exists to avoid, and it needs 7+ GiB.
 #}
 
 {% macro dirty_partitions(column='played_at_utc') %}
-  {%- if is_incremental() -%}
+  {%- if var('empty_chain', false) -%}
+    {#- Always false, but written against the column rather than as a bare `0`: a constant
+        in a JOIN ON clause is rejected under the grace_hash/partial_merge join algorithms
+        set in infra/clickhouse/limits.xml ("JOIN ON constant supported only with 'hash'"). -#}
+    toYYYYMMDD({{ column }}) = 0
+  {%- elif is_incremental() -%}
     {%- set batch = var('batch_partitions', 0) | int -%}
     toYYYYMMDD({{ column }}) in (
         select src.m
@@ -133,8 +163,8 @@
             group by m
         ) as src
         left join (
-            select toYYYYMMDD(played_at_utc) as m, max(src_parsed_at) as built_max
-            from marts.player_hand_flags
+            select toYYYYMMDD(day) as m, max(src_parsed_at) as built_max
+            from marts.stats_daily
             group by m
         ) as built on built.m = src.m
         {# An UNBUILT partition has no row on the right, and ClickHouse pads the miss with the
