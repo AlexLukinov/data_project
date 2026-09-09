@@ -179,6 +179,56 @@ class Upload(Base, TimestampMixin):
     user: Mapped[User] = relationship(back_populates="uploads", lazy="raise")
 
 
+class SavedFilter(Base, TimestampMixin):
+    """A named filter tree (stats/ast.py `Node`), reusable across every report and screen."""
+
+    __tablename__ = "saved_filters"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_saved_filters_user_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    ast: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class SavedReport(Base, TimestampMixin):
+    """A named `ReportRequest` document, per analysis module (`hero` or `pool`)."""
+
+    __tablename__ = "saved_reports"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_saved_reports_user_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    module: Mapped[str] = mapped_column(String(16), default="hero", nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
+class SavedStat(Base, TimestampMixin):
+    """A user-defined stat (`CustomStatSpec`): zero files, one row, usable in any report."""
+
+    __tablename__ = "saved_stats"
+    __table_args__ = (UniqueConstraint("user_id", "code", name="uq_saved_stats_user_code"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
 class BaselineSet(Base, TimestampMixin):
     """Metadata for one set of baseline strategies. **Seam — created empty in Phase 1.**
 

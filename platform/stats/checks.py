@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from stats.ast import All, AnyOf, Count, CountIf, Expr, Leaf, Node, Scalar, Sum, operands
+from stats.ast import All, AnyOf, Count, CountIf, Expr, Leaf, Node, Scalar, Sum, leaves, operands
 from stats.definitions import Dimension, Table
 from stats.errors import RegistryError
 
@@ -31,13 +31,22 @@ def check_node(node: Node, dims: Mapping[str, Dimension], table: Table, path: st
         check_node(node.not_, dims, table, f"{path}.not")
 
 
+def check_node_anywhere(node: Node, dims: Mapping[str, Dimension], path: str) -> None:
+    """A filter with no table yet (a saved filter): every leaf valid on some table it names."""
+    for i, leaf in enumerate(leaves(node)):
+        dim = dims.get(leaf.dim)
+        if dim is None:
+            raise RegistryError(f"{path}[{i}]: unknown dimension {leaf.dim!r}")
+        check_leaf(leaf, dims, dim.tables[0], f"{path}[{i}]")
+
+
 def check_leaf(leaf: Leaf, dims: Mapping[str, Dimension], table: Table, path: str) -> None:
     """One comparison: dimension known and on the table, op allowed, every value typed."""
     dim = _dimension(leaf.dim, dims, table, path)
     if leaf.op not in dim.allowed_ops:
         raise RegistryError(
             f"{path}: op {leaf.op!r} is not allowed on {dim.type} dimension {dim.code!r} "
-            f"(allowed: {sorted(dim.allowed_ops)})"
+            f"(allowed: {dim.allowed_ops})"
         )
     values = leaf.value if isinstance(leaf.value, list) else [leaf.value]
     for value in values:

@@ -43,16 +43,29 @@ def clickhouse_runner(sql: str, params: Mapping[str, Any]) -> Rows:
     return list(result.column_names), result.result_rows
 
 
+def validate_request(request: ReportRequest, reg: Registry | None = None) -> None:
+    """Everything short of running it: stats resolve, the plan holds, every query builds.
+
+    What a saved report is checked against before it is stored, so a report that cannot run
+    is never saved. Raises `ReportError` with the caller's mistake named.
+    """
+    reg = reg or registry()
+    stats = resolve_stats(request, reg)
+    for one in plan(stats, dimensions_used(request), reg):
+        build_query(request, 0, one, reg)
+
+
 def run_report(
     request: ReportRequest,
     tenant_id: int,
     *,
-    run: Runner = clickhouse_runner,
+    run: Runner | None = None,
     cache: Cache | None = None,
     reg: Registry | None = None,
 ) -> ReportResult:
     """Answer a report for one tenant. `tenant_id` comes from the token, never the request."""
     reg = reg or registry()
+    runner = run or clickhouse_runner
     key = request.cache_key(tenant_id)
     if cache is not None:
         hit = cache.get_json(key)
@@ -63,7 +76,7 @@ def run_report(
     plans = plan(stats, dimensions_used(request), reg)
     merged: dict[GroupKey, ReportRow] = {}
     for one in plans:
-        columns, rows = run(*build_query(request, tenant_id, one, reg))
+        columns, rows = runner(*build_query(request, tenant_id, one, reg))
         _merge(merged, request.group_by, one.stats, columns, rows)
 
     result = ReportResult(
@@ -73,7 +86,7 @@ def run_report(
         rows=list(merged.values()),
     )
     if request.compare_to == "population":
-        result = _with_baseline(result, request, tenant_id, run=run, reg=reg)
+        result = _with_baseline(result, request, tenant_id, run=runner, reg=reg)
     if cache is not None:
         cache.set_json(key, result.model_dump(mode="json"))
     return result

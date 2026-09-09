@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, computed_field, model_validator
 
 from stats.ast import CODE, All, CountIf, Expr, Node, Op, _Strict, is_additive
 
@@ -50,10 +50,15 @@ class Dimension(_Strict):
     group_by: bool = True
     buckets: dict[str, Range] = Field(default_factory=dict)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def allowed_ops(self) -> frozenset[str]:
-        """The ops this dimension accepts: the entry's own list, else the defaults for its type."""
-        return frozenset(self.ops) if self.ops is not None else OPS_BY_TYPE[self.type]
+    def allowed_ops(self) -> list[str]:
+        """The ops this dimension accepts: the entry's own list, else the defaults for its type.
+
+        Serialized with the dimension (a computed field), so `/v1/definitions` tells the UI
+        what it may offer without the UI knowing the per-type defaults.
+        """
+        return sorted(self.ops) if self.ops is not None else sorted(OPS_BY_TYPE[self.type])
 
     @model_validator(mode="after")
     def _consistent(self) -> Dimension:
@@ -66,7 +71,7 @@ class Dimension(_Strict):
             raise ValueError("duplicate enum value")
         if self.buckets and self.type != "number":
             raise ValueError("buckets belong to number dimensions only")
-        unexpected = self.allowed_ops - OPS_BY_TYPE[self.type]
+        unexpected = set(self.allowed_ops) - OPS_BY_TYPE[self.type]
         if unexpected:
             raise ValueError(f"ops {sorted(unexpected)} are not valid on a {self.type} dimension")
         for name, (low, high) in self.buckets.items():
