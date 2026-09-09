@@ -82,6 +82,34 @@ def _failure_row(
     return row
 
 
+def _outcome(
+    parser: SiteParser, chunk: str, hero_names: frozenset[str], src: Source, offset: int
+) -> CanonicalHand | list[object]:
+    """Parse and validate one hand's text: the hand on success, a dead-letter row otherwise."""
+    try:
+        hand = parser.parse_hand(chunk, hero_names)
+    except (HandParseError, ParserError) as exc:
+        return _failure_row(src, offset, chunk, type(exc).__name__, str(exc), 1)
+    check = validate(hand)
+    if not check.ok:
+        return _failure_row(
+            src, offset, chunk, "validation_failed", check.summary(), hand.parser_version
+        )
+    hand.raw_object_key = src.object_key
+    hand.raw_byte_offset = offset
+    return hand
+
+
+def _flush(sink: HandSink, batch: list[CanonicalHand], tenant_id: int, dataset: str) -> int:
+    """Insert the pending hands and empty the batch. Returns how many were stored."""
+    if not batch:
+        return 0
+    sink.insert_hands(list(batch), tenant_id, dataset)
+    stored = len(batch)
+    batch.clear()
+    return stored
+
+
 def ingest_text(
     sink: HandSink,
     parser: SiteParser,
@@ -106,48 +134,18 @@ def ingest_text(
     result = IngestResult()
     batch: list[CanonicalHand] = []
     offset = 0
-
-    def flush() -> None:
-        nonlocal batch
-        if batch:
-            sink.insert_hands(batch, tenant_id, dataset)
-            result.stored += len(batch)
-            batch = []
-
     for chunk in parser.split(raw_text):
         result.found += 1
-        chunk_offset = offset
+        outcome = _outcome(parser, chunk, hero_names, src, offset)
         offset += len(chunk)
-
-        try:
-            hand = parser.parse_hand(chunk, hero_names)
-        except (HandParseError, ParserError) as exc:
-            result.failures.append(
-                _failure_row(src, chunk_offset, chunk, type(exc).__name__, str(exc), 1)
-            )
-            continue
-
-        check = validate(hand)
-        if not check.ok:
-            result.failures.append(
-                _failure_row(
-                    src,
-                    chunk_offset,
-                    chunk,
-                    "validation_failed",
-                    check.summary(),
-                    hand.parser_version,
-                )
-            )
-            continue
-
-        hand.raw_object_key = object_key
-        hand.raw_byte_offset = chunk_offset
-        batch.append(hand)
+        if isinstance(outcome, CanonicalHand):
+            batch.append(outcome)
+        else:
+            result.failures.append(outcome)
         if len(batch) >= batch_size:
-            flush()
+            result.stored += _flush(sink, batch, tenant_id, dataset)
 
-    flush()
+    result.stored += _flush(sink, batch, tenant_id, dataset)
     result.failed = len(result.failures)
     sink.record_failures(result.failures)
     return result

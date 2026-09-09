@@ -37,6 +37,8 @@ jobs:
         run: uv run lint-imports
       - name: Generated files are current (core/schema -> dbt staging)
         run: uv run python -m scripts.gen_schema --check
+      - name: Size limits (40-line functions, 300-line files; baseline burns down only)
+        run: uv run python -m scripts.check_sizes
       - name: Unit tests
         run: uv run pytest -q -m "not integration"
 

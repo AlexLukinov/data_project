@@ -144,5 +144,13 @@ gen: ## Regenerate files derived from core/schema (dbt staging models)
 gen-check: ## Fail if a generated file is stale (run `make gen`)
 	$(UV) python -m scripts.gen_schema --check
 
+.PHONY: size-check
+size-check: ## Functions <= 40 lines, files <= 300 (baseline in scripts/size_baseline.txt)
+	$(UV) python -m scripts.check_sizes
+
+.PHONY: size-baseline
+size-baseline: ## Rewrite the size baseline after fixing or deliberately baselining violations
+	$(UV) python -m scripts.check_sizes --update-baseline
+
 .PHONY: check
-check: lint typecheck lint-arch gen-check test ## Everything CI runs
+check: lint typecheck lint-arch gen-check size-check test ## Everything CI runs

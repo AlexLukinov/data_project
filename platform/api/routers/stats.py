@@ -7,6 +7,7 @@ orchestrator. See docs/POKER_ARCHITECTURE.md, "three latency classes".
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Any
 
@@ -115,21 +116,39 @@ async def custom_stats(body: CustomStatsRequest, user: CurrentUserDep) -> StatsR
     return _run_stats(query)
 
 
+def _cache_fields(query: StatsQuery) -> dict[str, Any]:
+    """Everything that changes the answer, so two different questions never share a key."""
+    return {
+        "dataset": query.dataset,
+        "from": query.date_from,
+        "to": query.date_to,
+        "group": query.group_by,
+        "stats": query.stats,
+        "filters": query.filters,
+        "custom": [(c.code, c.numerator, c.denominator) for c in query.custom_stats],
+    }
+
+
+def _stat_values(row: dict[str, Any], query: StatsQuery) -> list[StatValue]:
+    """Each requested stat and its sample size, read off the single ungrouped row."""
+    values: list[StatValue] = []
+    for definition in query.definitions():
+        value = row.get(definition.code)
+        values.append(
+            StatValue(
+                code=definition.code,
+                label=definition.label,
+                value=float(value) if value is not None else None,
+                # Sample size travels with every stat, always.
+                sample=int(row.get(f"{definition.code}__n") or 0),
+            )
+        )
+    return values
+
+
 def _run_stats(query: StatsQuery, *, use_cache: bool = True) -> StatsResponse:
     """Execute a stats query, with caching. Shared by the GET and POST endpoints."""
-    key = cache.stats_key(
-        query.tenant_id,
-        "stats",
-        {
-            "dataset": query.dataset,
-            "from": query.date_from,
-            "to": query.date_to,
-            "group": query.group_by,
-            "stats": query.stats,
-            "filters": query.filters,
-            "custom": [(c.code, c.numerator, c.denominator) for c in query.custom_stats],
-        },
-    )
+    key = cache.stats_key(query.tenant_id, "stats", _cache_fields(query))
     if use_cache:
         cached = cache.get_json(key)
         if cached is not None:
@@ -137,24 +156,9 @@ def _run_stats(query: StatsQuery, *, use_cache: bool = True) -> StatsResponse:
 
     sql, params = query.build()
     result = clickhouse().query(sql, parameters=params)
-    columns = result.column_names
-    rows = [dict(zip(columns, row, strict=True)) for row in result.result_rows]
+    rows = [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
     total_hands = int(sum(int(r.get("hands_total") or 0) for r in rows))
-
-    stat_values: list[StatValue] = []
-    if rows and not query.group_by:
-        row = rows[0]
-        for definition in query.definitions():
-            value = row.get(definition.code)
-            stat_values.append(
-                StatValue(
-                    code=definition.code,
-                    label=definition.label,
-                    value=float(value) if value is not None else None,
-                    # Sample size travels with every stat, always.
-                    sample=int(row.get(f"{definition.code}__n") or 0),
-                )
-            )
+    stat_values = _stat_values(rows[0], query) if rows and not query.group_by else []
 
     payload = StatsResponse(hands=total_hands, groups=rows, stats=stat_values)
     cache.set_json(key, payload.model_dump(exclude={"cached"}))
@@ -198,6 +202,40 @@ async def get_stats(
     return _run_stats(query)
 
 
+def _per_100(total_bb: float, hands: int) -> float | None:
+    """Win rate in big blinds per 100 hands; None rather than a division by zero."""
+    return round(100 * total_bb / hands, 2) if hands else None
+
+
+def _timeline_payload(rows: Sequence[Sequence[Any]]) -> TimelineResponse:
+    """Turn the per-day rows (in date order) into cumulative points and the headline rates."""
+    points: list[TimelinePoint] = []
+    cum = cum_ev = cum_sd = cum_nsd = 0.0
+    total_hands = 0
+    for day, hands, won_bb, ev_bb, sd_bb, nsd_bb in rows:
+        cum += float(won_bb or 0)
+        cum_ev += float(ev_bb or 0)
+        cum_sd += float(sd_bb or 0)
+        cum_nsd += float(nsd_bb or 0)
+        total_hands += int(hands or 0)
+        points.append(
+            TimelinePoint(
+                day=day,
+                hands=int(hands or 0),
+                cumulative_bb=round(cum, 2),
+                cumulative_ev_bb=round(cum_ev, 2),
+                cumulative_showdown_bb=round(cum_sd, 2),
+                cumulative_nonshowdown_bb=round(cum_nsd, 2),
+            )
+        )
+    return TimelineResponse(
+        points=points,
+        total_hands=total_hands,
+        bb_per_100=_per_100(cum, total_hands),
+        ev_bb_per_100=_per_100(cum_ev, total_hands),
+    )
+
+
 @router.get("/timeline", response_model=TimelineResponse)
 async def timeline(
     user: CurrentUserDep,
@@ -214,13 +252,14 @@ async def timeline(
     The EV line is what turns a losing month into a diagnosable event rather than a mood: the
     gap between the two lines is run-good/run-bad, and everything else is how you played.
     """
+    filters = _filters(site, stake_level, position, game_type)
     try:
         query = TimelineQuery(
             tenant_id=user.tenant_id,
             date_from=date_from,
             date_to=date_to,
             dataset=dataset,
-            filters=_filters(site, stake_level, position, game_type),
+            filters=filters,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -234,33 +273,6 @@ async def timeline(
         return TimelineResponse(**cached)
 
     sql, params = query.build()
-    result = clickhouse().query(sql, parameters=params)
-
-    points: list[TimelinePoint] = []
-    cum = cum_ev = cum_sd = cum_nsd = 0.0
-    total_hands = 0
-    for day, hands, won_bb, ev_bb, sd_bb, nsd_bb in result.result_rows:
-        cum += float(won_bb or 0)
-        cum_ev += float(ev_bb or 0)
-        cum_sd += float(sd_bb or 0)
-        cum_nsd += float(nsd_bb or 0)
-        total_hands += int(hands or 0)
-        points.append(
-            TimelinePoint(
-                day=day,
-                hands=int(hands or 0),
-                cumulative_bb=round(cum, 2),
-                cumulative_ev_bb=round(cum_ev, 2),
-                cumulative_showdown_bb=round(cum_sd, 2),
-                cumulative_nonshowdown_bb=round(cum_nsd, 2),
-            )
-        )
-
-    payload = TimelineResponse(
-        points=points,
-        total_hands=total_hands,
-        bb_per_100=round(100 * cum / total_hands, 2) if total_hands else None,
-        ev_bb_per_100=round(100 * cum_ev / total_hands, 2) if total_hands else None,
-    )
+    payload = _timeline_payload(clickhouse().query(sql, parameters=params).result_rows)
     cache.set_json(key, payload.model_dump())
     return payload

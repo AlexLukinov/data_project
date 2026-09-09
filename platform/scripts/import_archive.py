@@ -25,23 +25,21 @@ which is what PokerCraft's bulk export actually hands you.
 from __future__ import annotations
 
 import argparse
-import io
 import logging
 import multiprocessing as mp
 import os
 import sys
 import time
 import uuid
-import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-import psycopg
-
 from core.enums import Site
 from core.settings import get_settings
 from ingestion import sinks
+from ingestion.archive import walk_sources
+from ingestion.ledger import already_done, record_upload, resolve_user
 from ingestion.loader import DATASET_HERO, DATASET_POPULATION
 from ingestion.pipeline import ingest_text
 from ingestion.sinks.protocols import HandSink, RawStore
@@ -51,105 +49,12 @@ from parser.registry import get_parser
 
 log = logging.getLogger("import")
 
-TEXT_SUFFIXES = (".txt",)
 PROGRESS_EVERY = 1
+LABEL_TAIL = 58
+"""Characters of the source label shown on a progress line."""
 
-
-@dataclass(slots=True, frozen=True)
-class SourceFile:
-    """One unit of work: a named blob of hand text, wherever it came from."""
-
-    label: str
-    """Human-readable provenance, e.g. `outer.zip!2025-01-06.zip!hhd_RushCash.txt`."""
-
-    data: bytes
-
-
-def walk_sources(path: Path) -> Iterator[SourceFile]:
-    """Yield every hand-text blob under `path`, descending into nested zips.
-
-    Nested zips are the normal case, not an edge case: PokerCraft exports a zip per day and
-    then a zip of those zips for a date range. Reading them in memory avoids writing 11GB of
-    intermediate text to disk just to read it back once.
-    """
-    if path.is_dir():
-        for child in sorted(path.rglob("*")):
-            if child.is_file() and child.suffix.lower() in TEXT_SUFFIXES:
-                yield SourceFile(str(child), child.read_bytes())
-        return
-
-    if path.suffix.lower() == ".zip":
-        yield from _walk_zip(zipfile.ZipFile(path), str(path))
-        return
-
-    yield SourceFile(str(path), path.read_bytes())
-
-
-def _walk_zip(archive: zipfile.ZipFile, prefix: str) -> Iterator[SourceFile]:
-    """Recurse through one zip, yielding text members and descending into inner zips."""
-    for info in sorted(archive.infolist(), key=lambda i: i.filename):
-        if info.is_dir():
-            continue
-        name = info.filename
-        lowered = name.lower()
-        if lowered.endswith(".zip"):
-            inner = zipfile.ZipFile(io.BytesIO(archive.read(info)))
-            yield from _walk_zip(inner, f"{prefix}!{name}")
-        elif lowered.endswith(TEXT_SUFFIXES):
-            yield SourceFile(f"{prefix}!{name}", archive.read(info))
-
-
-def already_done(dsn: str, user_uuid: str, digest: str) -> bool:
-    """True when this exact content has already been imported for this user.
-
-    Scoped by user, matching the `uq_uploads_user_sha256` constraint: two accounts importing
-    the same public archive are two separate imports, not a duplicate.
-    """
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        row = conn.execute(
-            "SELECT 1 FROM uploads WHERE user_id = %s AND sha256 = %s "
-            "AND status = 'completed' LIMIT 1",
-            (user_uuid, digest),
-        ).fetchone()
-    return row is not None
-
-
-def record_upload(
-    dsn: str,
-    *,
-    upload_id: str,
-    user_uuid: str,
-    site: str,
-    label: str,
-    key: str,
-    digest: str,
-    size: int,
-    counts: dict[str, int],
-) -> None:
-    """Write the ledger row that makes a re-run skip this file."""
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        conn.execute(
-            "INSERT INTO uploads (id, user_id, site, filename, object_key, sha256, "
-            "byte_size, status, hands_found, hands_parsed, hands_failed, error_text, "
-            "completed_at, created_at, updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'completed', %s, %s, %s, '', "
-            "now(), now(), now()) ON CONFLICT (user_id, sha256) DO UPDATE SET "
-            "status = 'completed', hands_found = EXCLUDED.hands_found, "
-            "hands_parsed = EXCLUDED.hands_parsed, hands_failed = EXCLUDED.hands_failed, "
-            "completed_at = now(), updated_at = now()",
-            (
-                upload_id,
-                user_uuid,
-                site,
-                label[-250:],
-                key,
-                digest,
-                size,
-                counts["found"],
-                counts["parsed"],
-                counts["failed"],
-            ),
-        )
+Job = tuple[str, bytes, str]
+"""(label, raw bytes, user uuid) — what a pool worker receives."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -213,80 +118,62 @@ def _ctx() -> _WorkerContext:
     return _WORKER
 
 
-def _process_one(job: tuple[str, bytes, str]) -> FileResult:
-    """Store raw text, parse it, insert the hands. Runs in a worker process."""
+def _process_one(job: Job) -> FileResult:
+    """Store raw text, parse it, insert the hands, record the ledger row. Runs in a worker."""
     label, data, user_uuid = job
     settings = get_settings()
     ctx = _ctx()
-    tenant_id, dataset, site = ctx.tenant_id, ctx.dataset, ctx.site
-
     digest = sha256_of(data)
     if not ctx.force and already_done(settings.postgres_libpq_dsn, user_uuid, digest):
         return FileResult(label, skipped=True, found=0, parsed=0, failed=0)
 
     upload_id = str(uuid.uuid4())
     key = object_key(
-        tenant_id=tenant_id,
-        site=site,
+        tenant_id=ctx.tenant_id,
+        site=ctx.site,
         digest=digest,
         filename=Path(label.split("!")[-1]).name,
     )
-    # Raw text lands in object storage BEFORE parsing. If the parser crashes on this file, the
-    # bytes are still durably stored and the import can be re-run after a fix (ADR-010).
-    ctx.store.put(key, data)
-
-    text = decode_upload(data)
-    result = ingest_text(
-        ctx.sink,
-        ctx.parser,
-        text,
-        tenant_id=tenant_id,
-        site=site,
-        object_key=key,
-        upload_id=upload_id,
-        hero_names=ctx.hero,
-        dataset=dataset,
-        batch_size=settings.insert_batch_size,
-    )
-    counts = result.as_counts()
+    counts = _store_and_ingest(ctx, data, key=key, upload_id=upload_id)
     record_upload(
         settings.postgres_libpq_dsn,
         upload_id=upload_id,
         user_uuid=user_uuid,
-        site=site,
+        site=ctx.site,
         label=label,
         key=key,
         digest=digest,
         size=len(data),
         counts=counts,
     )
-    return FileResult(
-        label,
-        skipped=False,
-        found=counts["found"],
-        parsed=counts["parsed"],
-        failed=counts["failed"],
+    return FileResult(label, False, counts["found"], counts["parsed"], counts["failed"])
+
+
+def _store_and_ingest(
+    ctx: _WorkerContext, data: bytes, *, key: str, upload_id: str
+) -> dict[str, int]:
+    """Raw text to object storage FIRST, then the shared parse -> validate -> store loop.
+
+    If the parser crashes on this file, the bytes are still durably stored and the import can
+    be re-run after a fix (ADR-010).
+    """
+    ctx.store.put(key, data)
+    result = ingest_text(
+        ctx.sink,
+        ctx.parser,
+        decode_upload(data),
+        tenant_id=ctx.tenant_id,
+        site=ctx.site,
+        object_key=key,
+        upload_id=upload_id,
+        hero_names=ctx.hero,
+        dataset=ctx.dataset,
+        batch_size=get_settings().insert_batch_size,
     )
+    return result.as_counts()
 
 
-def resolve_user(dsn: str, email: str) -> tuple[str, int, list[str]]:
-    """Look up the account to import into: (user uuid, tenant_id, registered screen names)."""
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        row = conn.execute("SELECT id, tenant_id FROM users WHERE email = %s", (email,)).fetchone()
-        if row is None:
-            raise SystemExit(f"no user with email {email!r} — run `make seed` or register first")
-        user_uuid, tenant_id = str(row[0]), int(row[1])
-        names = [
-            r[0]
-            for r in conn.execute(
-                "SELECT screen_name FROM poker_accounts WHERE user_id = %s", (user_uuid,)
-            ).fetchall()
-        ]
-    return user_uuid, tenant_id, names
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Import every archive named on the command line."""
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("paths", nargs="+", type=Path)
     ap.add_argument("--email", required=True, help="account to import into")
@@ -305,12 +192,55 @@ def main(argv: list[str] | None = None) -> int:
         help="re-import files the ledger already has — use after a parser fix, since "
         "ReplacingMergeTree supersedes the old rows rather than duplicating them",
     )
-    args = ap.parse_args(argv)
+    return ap.parse_args(argv)
 
+
+def _jobs(paths: list[Path], user_uuid: str, limit: int) -> Iterator[Job]:
+    seen = 0
+    for path in paths:
+        for source in walk_sources(path):
+            if limit and seen >= limit:
+                return
+            seen += 1
+            yield (source.label, source.data, user_uuid)
+
+
+def _run_pool(
+    args: argparse.Namespace, jobs: Iterator[Job], initargs: tuple[object, ...]
+) -> dict[str, int]:
+    """Drive the process pool and keep the running totals, logging progress as files finish."""
+    started = time.monotonic()
+    totals = {"files": 0, "skipped": 0, "found": 0, "parsed": 0, "failed": 0}
+    with mp.get_context("spawn").Pool(
+        processes=args.jobs, initializer=_init_worker, initargs=initargs
+    ) as pool:
+        for out in pool.imap_unordered(_process_one, jobs, chunksize=1):
+            totals["files"] += 1
+            totals["skipped"] += int(out.skipped)
+            totals["found"] += out.found
+            totals["parsed"] += out.parsed
+            totals["failed"] += out.failed
+            if totals["files"] % PROGRESS_EVERY == 0:
+                elapsed = time.monotonic() - started
+                log.info(
+                    "[%4d files] parsed %9d  failed %6d  skipped %4d  %7.0f hands/s  %s",
+                    totals["files"],
+                    totals["parsed"],
+                    totals["failed"],
+                    totals["skipped"],
+                    totals["parsed"] / elapsed if elapsed else 0,
+                    out.label[-LABEL_TAIL:],
+                )
+    totals["seconds"] = int(time.monotonic() - started)
+    return totals
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Import every archive named on the command line."""
+    args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     settings = get_settings()
     user_uuid, tenant_id, hero_names = resolve_user(settings.postgres_libpq_dsn, args.email)
-
     if args.dataset == DATASET_HERO and not hero_names:
         raise SystemExit(
             "no screen names registered for this account — hero hands would be unattributed.\n"
@@ -325,49 +255,14 @@ def main(argv: list[str] | None = None) -> int:
         hero_names or "(none — population import)",
         args.jobs,
     )
-
-    started = time.monotonic()
-    totals = {"files": 0, "skipped": 0, "found": 0, "parsed": 0, "failed": 0}
-
-    def jobs() -> Iterator[tuple[str, bytes, str]]:
-        seen = 0
-        for path in args.paths:
-            for source in walk_sources(path):
-                if args.limit and seen >= args.limit:
-                    return
-                seen += 1
-                yield (source.label, source.data, user_uuid)
-
-    ctx = mp.get_context("spawn")
-    with ctx.Pool(
-        processes=args.jobs,
-        initializer=_init_worker,
-        initargs=(args.site, hero_names, tenant_id, args.dataset, args.force),
-    ) as pool:
-        for out in pool.imap_unordered(_process_one, jobs(), chunksize=1):
-            totals["files"] += 1
-            if out.skipped:
-                totals["skipped"] += 1
-            totals["found"] += out.found
-            totals["parsed"] += out.parsed
-            totals["failed"] += out.failed
-            if totals["files"] % PROGRESS_EVERY == 0:
-                elapsed = time.monotonic() - started
-                rate = totals["parsed"] / elapsed if elapsed else 0
-                log.info(
-                    "[%4d files] parsed %9d  failed %6d  skipped %4d  %7.0f hands/s  %s",
-                    totals["files"],
-                    totals["parsed"],
-                    totals["failed"],
-                    totals["skipped"],
-                    rate,
-                    out.label[-58:],
-                )
-
-    elapsed = time.monotonic() - started
+    totals = _run_pool(
+        args,
+        _jobs(args.paths, user_uuid, args.limit),
+        (args.site, hero_names, tenant_id, args.dataset, args.force),
+    )
     log.info(
-        "\ndone in %.1fs — %d files, %d stored, %d failed, %d skipped (already imported)",
-        elapsed,
+        "\ndone in %ds — %d files, %d stored, %d failed, %d skipped (already imported)",
+        totals["seconds"],
         totals["files"],
         totals["parsed"],
         totals["failed"],

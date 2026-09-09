@@ -36,6 +36,7 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger("backfill")
@@ -68,6 +69,18 @@ where there were 164 and would have stopped believing it was finished. Changing 
 granularity means changing it in three places -- the model configs, the macro, and here."""
 
 
+def _clickhouse(sql: str, *, check: bool = True) -> str:
+    """Run one statement through the compose service's client; returns its stdout."""
+    out = subprocess.run(
+        ["docker", "compose", "exec", "-T", "clickhouse", "clickhouse-client", "-q", sql],
+        cwd=PLATFORM,
+        capture_output=True,
+        text=True,
+        check=check,
+    )
+    return out.stdout
+
+
 def _dirty_partitions() -> list[tuple[int, int]]:
     """Dirty partitions still pending, oldest first, each with its player-row count.
 
@@ -91,15 +104,8 @@ def _dirty_partitions() -> list[tuple[int, int]]:
         ") AS pr ON pr.m = src.m "
         "WHERE src.src_max > built.built_max ORDER BY m FORMAT TSV"
     )
-    out = subprocess.run(
-        ["docker", "compose", "exec", "-T", "clickhouse", "clickhouse-client", "-q", sql],
-        cwd=PLATFORM,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
     rows: list[tuple[int, int]] = []
-    for line in out.stdout.splitlines():
+    for line in _clickhouse(sql).splitlines():
         m, n = line.split("\t")
         rows.append((int(m), int(n)))
     return rows
@@ -128,42 +134,51 @@ def _drop_scratch_tables() -> None:
     one bad afternoon). Called only after a failed pass, when no dbt process is running.
     """
     prefix = os.environ.get("CLICKHOUSE_DB_PREFIX", "")
-    listing = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "clickhouse",
-            "clickhouse-client",
-            "-q",
-            "SELECT concat(database, '.', name) FROM system.tables "
-            f"WHERE database IN ('{prefix}intermediate', '{prefix}marts') "
-            "AND name LIKE '%__dbt_new_data%' FORMAT TSVRaw",
-        ],
-        cwd=PLATFORM,
-        capture_output=True,
-        text=True,
+    tables = _clickhouse(
+        "SELECT concat(database, '.', name) FROM system.tables "
+        f"WHERE database IN ('{prefix}intermediate', '{prefix}marts') "
+        "AND name LIKE '%__dbt_new_data%' FORMAT TSVRaw",
         check=False,
-    )
-    for table in listing.stdout.split():
-        subprocess.run(
-            [
-                "docker",
-                "compose",
-                "exec",
-                "-T",
-                "clickhouse",
-                "clickhouse-client",
-                "-q",
-                f"DROP TABLE IF EXISTS {table}",
-            ],
-            cwd=PLATFORM,
-            capture_output=True,
-            check=False,
-        )
-    if listing.stdout.strip():
-        log.info("dropped %d scratch table(s) from the failed pass", len(listing.stdout.split()))
+    ).split()
+    for table in tables:
+        _clickhouse(f"DROP TABLE IF EXISTS {table}", check=False)
+    if tables:
+        log.info("dropped %d scratch table(s) from the failed pass", len(tables))
+
+
+@dataclass(slots=True)
+class _Budget:
+    """The adaptive row budget: halves on a failed pass, doubles back after clean ones."""
+
+    ceiling: int
+    rows: int
+    streak: int = 0
+
+    def shrink(self) -> None:
+        """A pass ran out of memory: take half as many rows next time."""
+        self.rows = max(1, self.rows // 2)
+        self.streak = 0
+
+    def reward(self) -> bool:
+        """Note a clean pass. True when that just grew the budget."""
+        self.streak += 1
+        if self.streak < GROW_AFTER or self.rows >= self.ceiling:
+            return False
+        self.rows = min(self.ceiling, self.rows * 2)
+        self.streak = 0
+        return True
+
+
+def _recover(budget: _Budget, batch: int, attempt: int) -> bool:
+    """After a failed pass: clean up, shrink the budget, and say whether to retry."""
+    _drop_scratch_tables()
+    if batch > 1:
+        budget.shrink()
+        log.warning("pass failed; retrying with row budget %s", f"{budget.rows:,}")
+        return True
+    # Already at one partition per pass: this is a real failure, not a sizing problem.
+    log.error("pass %d failed at a single partition — stopping", attempt)
+    return False
 
 
 def _run_pass(batch: int) -> bool:
@@ -207,10 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     """Loop dbt until no partition is dirty, shrinking the row budget when memory says so."""
     args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-    ceiling = max(1, args.row_budget)
-    budget = ceiling
-    streak = 0
+    budget = _Budget(ceiling=max(1, args.row_budget), rows=max(1, args.row_budget))
     start = time.monotonic()
 
     for attempt in range(1, args.max_passes + 1):
@@ -219,31 +231,21 @@ def main(argv: list[str] | None = None) -> int:
             log.info("caught up after %d pass(es), %.0fs", attempt - 1, time.monotonic() - start)
             return 0
 
-        batch, rows = _batch_for(pending, budget)
+        batch, rows = _batch_for(pending, budget.rows)
         log.info(
             "pass %d — %d partition(s) dirty, taking %d (%s rows, budget %s)",
             attempt,
             len(pending),
             batch,
             f"{rows:,}",
-            f"{budget:,}",
+            f"{budget.rows:,}",
         )
         if not _run_pass(batch):
-            _drop_scratch_tables()
-            if batch > 1:
-                budget = max(1, budget // 2)
-                streak = 0
-                log.warning("pass failed; retrying with row budget %s", f"{budget:,}")
+            if _recover(budget, batch, attempt):
                 continue
-            # Already at one partition per pass: this is a real failure, not a sizing problem.
-            log.error("pass %d failed at a single partition — stopping", attempt)
             return 1
-
-        streak += 1
-        if streak >= GROW_AFTER and budget < ceiling:
-            budget = min(ceiling, budget * 2)
-            streak = 0
-            log.info("steady; growing row budget to %s", f"{budget:,}")
+        if budget.reward():
+            log.info("steady; growing row budget to %s", f"{budget.rows:,}")
 
         if len(_dirty_partitions()) >= len(pending):
             # No forward progress: another pass would loop forever. Fail loudly rather than

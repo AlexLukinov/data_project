@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import CurrentUserDep, SessionDep, hero_names_for
+from api.deps import CurrentUser, CurrentUserDep, SessionDep, hero_names_for
 from api.models_pg import Upload
 from api.queries import DATASETS
 from api.schemas import UploadAccepted, UploadResponse
@@ -48,6 +50,86 @@ async def sites() -> dict[str, list[str]]:
     return {"sites": [s.value for s in supported_sites()]}
 
 
+@dataclass(slots=True, frozen=True)
+class _Incoming:
+    """One accepted file: decoded, fingerprinted and attributed to a site, before storage."""
+
+    data: bytes
+    text: str
+    digest: str
+    site: Site
+    filename: str
+
+    @property
+    def is_bulk(self) -> bool:
+        return len(self.data) > BULK_THRESHOLD_BYTES
+
+
+def _resolve_site(site: str, text: str) -> Site:
+    """The declared site when given, otherwise sniffed from the text.
+
+    Users mislabel uploads constantly, and a wrong `site` yields ZERO parsed hands rather
+    than an error -- so sniffing is a robustness feature, not a convenience.
+    """
+    if site:
+        try:
+            return Site(site)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown site {site!r}") from exc
+    try:
+        return sniff(text)
+    except FormatDetectionError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Could not detect the hand-history format; pass `site` explicitly",
+        ) from exc
+
+
+async def _incoming(file: UploadFile, site: str) -> _Incoming:
+    """Read and size-check the file, decode it, resolve its site. Raises the 4xx that apply."""
+    data = await file.read()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
+    if len(data) > get_settings().max_upload_bytes:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File too large")
+    text = decode_upload(data)
+    return _Incoming(
+        data=data,
+        text=text,
+        digest=sha256_of(data),
+        site=_resolve_site(site, text),
+        filename=file.filename or "",
+    )
+
+
+async def _store(
+    session: AsyncSession, user: CurrentUser, incoming: _Incoming
+) -> tuple[uuid.UUID, str]:
+    """Raw text to object storage first, then the ledger row. Returns (upload id, object key)."""
+    upload_id = uuid.uuid4()
+    key = object_key(
+        tenant_id=user.tenant_id,
+        site=incoming.site.value,
+        digest=incoming.digest,
+        filename=incoming.filename or "upload.txt",
+    )
+    sinks.raw_store().put(key, incoming.text.encode("utf-8"))
+    session.add(
+        Upload(
+            id=upload_id,
+            user_id=user.id,
+            site=incoming.site.value,
+            filename=incoming.filename,
+            object_key=key,
+            sha256=incoming.digest,
+            byte_size=len(incoming.data),
+            status="queued",
+        )
+    )
+    await session.commit()
+    return upload_id, key
+
+
 @router.post(
     "/uploads",
     response_model=UploadAccepted,
@@ -66,77 +148,31 @@ async def create_upload(
     or `population` (an observed pool export with no hero seat). It travels on the queue
     message so the worker never has to guess.
     """
-    settings = get_settings()
     if dataset not in DATASETS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown dataset {dataset!r}")
-    data = await file.read()
-    if not data:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
-    if len(data) > settings.max_upload_bytes:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File too large")
-
-    text = decode_upload(data)
-
-    # Users mislabel uploads constantly, and a wrong `site` yields ZERO parsed hands rather
-    # than an error -- so sniffing is a robustness feature, not a convenience.
-    if site:
-        try:
-            resolved = Site(site)
-        except ValueError as exc:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown site {site!r}") from exc
-    else:
-        try:
-            resolved = sniff(text)
-        except FormatDetectionError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Could not detect the hand-history format; pass `site` explicitly",
-            ) from exc
-
-    digest = sha256_of(data)
+    incoming = await _incoming(file, site)
 
     # Idempotency: the same bytes from the same user are the same upload.
     existing = await session.execute(
-        select(Upload).where(Upload.user_id == user.id, Upload.sha256 == digest)
+        select(Upload).where(Upload.user_id == user.id, Upload.sha256 == incoming.digest)
     )
     previous = existing.scalar_one_or_none()
     if previous is not None:
         return UploadAccepted(upload_id=previous.id, status=previous.status, dedupe="duplicate")
 
-    upload_id = uuid.uuid4()
-    key = object_key(
-        tenant_id=user.tenant_id,
-        site=resolved.value,
-        digest=digest,
-        filename=file.filename or "upload.txt",
-    )
-    sinks.raw_store().put(key, text.encode("utf-8"))
-
-    upload = Upload(
-        id=upload_id,
-        user_id=user.id,
-        site=resolved.value,
-        filename=file.filename or "",
-        object_key=key,
-        sha256=digest,
-        byte_size=len(data),
-        status="queued",
-    )
-    session.add(upload)
-    await session.commit()
-
-    hero_names = await hero_names_for(session, user.id, resolved.value)
+    upload_id, key = await _store(session, user, incoming)
+    hero_names = await hero_names_for(session, user.id, incoming.site.value)
     sinks.event_bus().publish_upload(
         UploadMessage(
             upload_id=str(upload_id),
             tenant_id=user.tenant_id,
-            site=resolved.value,
+            site=incoming.site.value,
             object_key=key,
-            sha256=digest,
+            sha256=incoming.digest,
             hero_names=hero_names,
             dataset=dataset,
         ),
-        bulk=len(data) > BULK_THRESHOLD_BYTES,
+        bulk=incoming.is_bulk,
     )
     return UploadAccepted(upload_id=upload_id, status="queued", dedupe="new")
 

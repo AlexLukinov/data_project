@@ -11,8 +11,8 @@ from decimal import Decimal
 import pytest
 
 from core.enums import GameStructure, GameType, Position, TournamentKind, TournamentSpeed
-from core.models import Tournament
 from core.positions import assign_positions, preflop_order
+from core.tournament import Tournament
 from parser.registry import parse
 from parser.sites.pokerstars import PokerStarsParser
 

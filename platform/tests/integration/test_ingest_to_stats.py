@@ -10,14 +10,17 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Any
 
+import psycopg
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.main import app
 from core.settings import get_settings
-from ingestion import worker
+from ingestion import sinks, worker
 from ingestion.clickhouse import clickhouse
+from ingestion.messages import UploadMessage
 
 pytestmark = pytest.mark.integration
 
@@ -43,6 +46,50 @@ async def _new_user(client: AsyncClient) -> tuple[str, str]:
     return email, res.json()["access_token"]
 
 
+async def _upload(client: AsyncClient, token: str, site: str, name: str) -> dict[str, Any]:
+    """POST one corpus file as `name` and return the 202 body."""
+    raw = (CORPUS / site / name).read_bytes()
+    res = await client.post(
+        "/v1/uploads",
+        files={"file": (name, raw, "text/plain")},
+        data={"site": site},
+        headers=_auth(token),
+    )
+    assert res.status_code == 202, res.text
+    body: dict[str, Any] = res.json()
+    return body
+
+
+async def _hands(client: AsyncClient, token: str) -> list[dict[str, Any]]:
+    listing: list[dict[str, Any]] = (
+        await client.get("/v1/hands?limit=500", headers=_auth(token))
+    ).json()
+    return listing
+
+
+def _tenant_of(user_uuid: str) -> int:
+    """Look up the numeric tenant id for a user UUID (test helper)."""
+    with psycopg.connect(get_settings().postgres_libpq_dsn) as conn:
+        row = conn.execute("SELECT tenant_id FROM users WHERE id = %s", (user_uuid,)).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+def _raw_key_of(hand_uid: str) -> str:
+    """The object-storage key a stored hand points back to."""
+    rows = (
+        clickhouse()
+        .query(
+            f"SELECT raw_object_key FROM {get_settings().db('core')}.hands FINAL "
+            "WHERE hand_uid = {uid:String} LIMIT 1",
+            parameters={"uid": hand_uid},
+        )
+        .result_rows
+    )
+    assert rows, "hand must carry a pointer back to its raw text"
+    return str(rows[0][0])
+
+
 async def test_upload_to_stats_end_to_end() -> None:
     """Upload a real hand-history file and get correct statistics back from the API."""
     async with await _client() as c:
@@ -56,15 +103,7 @@ async def test_upload_to_stats_end_to_end() -> None:
         )
         assert res.status_code == 201, res.text
 
-        raw = (CORPUS / "pokerstars" / "cash_6max_nl50.txt").read_bytes()
-        res = await c.post(
-            "/v1/uploads",
-            files={"file": ("cash_6max_nl50.txt", raw, "text/plain")},
-            data={"site": "pokerstars"},
-            headers=_auth(token),
-        )
-        assert res.status_code == 202, res.text
-        body = res.json()
+        body = await _upload(c, token, "pokerstars", "cash_6max_nl50.txt")
         assert body["dedupe"] == "new"
         upload_id = body["upload_id"]
 
@@ -74,12 +113,10 @@ async def test_upload_to_stats_end_to_end() -> None:
 
         status = (await c.get(f"/v1/uploads/{upload_id}", headers=_auth(token))).json()
         assert status["status"] == "completed", status
-        assert status["hands_found"] == 2
-        assert status["hands_parsed"] == 2
-        assert status["hands_failed"] == 0
+        assert (status["hands_found"], status["hands_parsed"], status["hands_failed"]) == (2, 2, 0)
 
         # Hands are queryable immediately from core.* (stat marts need a dbt run).
-        listing = (await c.get("/v1/hands", headers=_auth(token))).json()
+        listing = await _hands(c, token)
         assert len(listing) == 2
         assert {h["stake_level"] for h in listing} == {"NL50"}
         assert all(h["position"] in ("HJ", "BTN") for h in listing)
@@ -97,27 +134,15 @@ async def test_reupload_is_idempotent() -> None:
     """
     async with await _client() as c:
         _, token = await _new_user(c)
-        raw = (CORPUS / "ggpoker" / "rush_nl50.txt").read_bytes()
+        first = await _upload(c, token, "ggpoker", "rush_nl50.txt")
+        assert first["dedupe"] == "new"
 
-        first = await c.post(
-            "/v1/uploads",
-            files={"file": ("rush.txt", raw, "text/plain")},
-            data={"site": "ggpoker"},
-            headers=_auth(token),
-        )
-        assert first.json()["dedupe"] == "new"
-
-        second = await c.post(
-            "/v1/uploads",
-            files={"file": ("rush-again.txt", raw, "text/plain")},
-            data={"site": "ggpoker"},
-            headers=_auth(token),
-        )
-        assert second.json()["dedupe"] == "duplicate"
-        assert second.json()["upload_id"] == first.json()["upload_id"]
+        second = await _upload(c, token, "ggpoker", "rush_nl50.txt")
+        assert second["dedupe"] == "duplicate"
+        assert second["upload_id"] == first["upload_id"]
 
         worker.drain()
-        assert len((await c.get("/v1/hands", headers=_auth(token))).json()) == 2
+        assert len(await _hands(c, token)) == 2
 
 
 async def test_worker_reprocessing_does_not_duplicate_hands() -> None:
@@ -129,61 +154,25 @@ async def test_worker_reprocessing_does_not_duplicate_hands() -> None:
     """
     async with await _client() as c:
         _, token = await _new_user(c)
-        raw = (CORPUS / "pokerstars" / "edge_cases.txt").read_bytes()
-        res = await c.post(
-            "/v1/uploads",
-            files={"file": ("edge.txt", raw, "text/plain")},
-            data={"site": "pokerstars"},
-            headers=_auth(token),
-        )
-        upload_id = res.json()["upload_id"]
+        upload_id = (await _upload(c, token, "pokerstars", "edge_cases.txt"))["upload_id"]
         worker.drain()
 
-        before = len((await c.get("/v1/hands?limit=500", headers=_auth(token))).json())
-        assert before == 4
+        before = await _hands(c, token)
+        assert len(before) == 4
 
         # Replay the same upload message directly, simulating a redelivery after a crash.
-        from ingestion.bus import publish_upload
-        from ingestion.messages import UploadMessage
-
         detail = (await c.get(f"/v1/uploads/{upload_id}", headers=_auth(token))).json()
         me = (await c.get("/v1/auth/me", headers=_auth(token))).json()
-        rows = (
-            clickhouse()
-            .query(
-                f"SELECT raw_object_key FROM {get_settings().db('core')}.hands FINAL "
-                "WHERE hand_uid = {uid:String} LIMIT 1",
-                parameters={
-                    "uid": (await c.get("/v1/hands", headers=_auth(token))).json()[0]["hand_uid"]
-                },
-            )
-            .result_rows
-        )
-        assert rows, "hand must carry a pointer back to its raw text"
-
-        publish_upload(
+        sinks.event_bus().publish_upload(
             UploadMessage(
                 upload_id=upload_id,
                 tenant_id=_tenant_of(me["id"]),
                 site=detail["site"],
-                object_key=rows[0][0],
+                object_key=_raw_key_of(before[0]["hand_uid"]),
                 sha256="",
                 hero_names=["Hero"],
             )
         )
         worker.drain()
 
-        after = len((await c.get("/v1/hands?limit=500", headers=_auth(token))).json())
-        assert after == before, "redelivery must not duplicate hands"
-
-
-def _tenant_of(user_uuid: str) -> int:
-    """Look up the numeric tenant id for a user UUID (test helper)."""
-    import psycopg
-
-    from core.settings import get_settings
-
-    with psycopg.connect(get_settings().postgres_libpq_dsn) as conn:
-        row = conn.execute("SELECT tenant_id FROM users WHERE id = %s", (user_uuid,)).fetchone()
-    assert row is not None
-    return int(row[0])
+        assert len(await _hands(c, token)) == len(before), "redelivery must not duplicate hands"

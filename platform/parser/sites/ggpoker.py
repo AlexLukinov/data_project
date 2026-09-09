@@ -38,7 +38,7 @@ from core.enums import Site, TableFormat
 from core.models import CanonicalHand
 from parser.base import SNIFF_WINDOW_CHARS
 from parser.errors import HandParseError
-from parser.sites.pokerstars import PokerStarsParser
+from parser.sites.pokerstars import PokerStarsParser, split_on
 
 GG_HEADER = re.compile(r"^Poker\s+Hand\s+#(?P<hid>[A-Z]{0,3}\d+):")
 HERO_ALIAS = "hero"
@@ -79,21 +79,7 @@ class GGPokerParser(PokerStarsParser):
 
     def split(self, text: str) -> Iterator[str]:
         """Yield one hand at a time, splitting on the GG header."""
-        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        current: list[str] = []
-        for line in lines:
-            if GG_HEADER.match(line):
-                if current:
-                    chunk = "\n".join(current).strip()
-                    if chunk:
-                        yield chunk
-                current = [line]
-            elif current:
-                current.append(line)
-        if current:
-            chunk = "\n".join(current).strip()
-            if chunk:
-                yield chunk
+        return split_on(GG_HEADER, text)
 
     def parse_hand(self, raw_text: str, hero_names: frozenset[str] | None = None) -> CanonicalHand:
         """Parse one GG hand, then apply the anonymization rules."""
