@@ -40,9 +40,9 @@ from pathlib import Path
 import psycopg
 from clickhouse_connect.driver.client import Client
 
-from api.db import clickhouse
-from api.settings import get_settings
 from core.enums import Site
+from core.settings import get_settings
+from ingestion.clickhouse import clickhouse
 from ingestion.loader import DATASET_HERO, DATASET_POPULATION
 from ingestion.pipeline import ingest_text, record_failures
 from ingestion.storage import decode_upload, object_key, put_raw, sha256_of

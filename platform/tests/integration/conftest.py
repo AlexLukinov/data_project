@@ -1,7 +1,7 @@
 """Integration-test fixtures.
 
-**The event-loop problem, and why this fixture exists.** `api.db.engine` is created at import
-time, and asyncpg binds its connection pool to whichever event loop first uses it.
+**The event-loop problem, and why this fixture exists.** The engine is process-wide (lazily built,
+then cached), and asyncpg binds its connection pool to whichever event loop first uses it.
 pytest-asyncio gives each test a fresh loop, so the second test to run inherits a pool bound
 to a dead loop and fails with "attached to a different loop".
 
@@ -25,8 +25,9 @@ from collections.abc import AsyncIterator, Iterator
 import psycopg
 import pytest
 
-from api.db import clickhouse, engine
-from api.settings import get_settings
+from api.db import get_engine
+from core.settings import get_settings
+from ingestion.clickhouse import clickhouse
 
 CORE_TABLES = ("hands", "hand_players", "actions", "pot_winners")
 
@@ -39,7 +40,7 @@ distinguishing a throwaway tenant from a real one."""
 async def _dispose_engine() -> AsyncIterator[None]:
     """Drop the asyncpg pool after each test so the next test gets a fresh one."""
     yield
-    await engine.dispose()
+    await get_engine().dispose()
 
 
 @pytest.fixture(scope="session", autouse=True)

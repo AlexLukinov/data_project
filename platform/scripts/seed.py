@@ -21,7 +21,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from api.db import SessionLocal
+from api.db import session_factory
 from api.models_pg import PokerAccount, Upload, User
 from api.security import hash_password
 from core.enums import Site
@@ -45,7 +45,7 @@ CORPUS: list[tuple[Site, Path]] = [
 
 async def ensure_user() -> tuple[uuid.UUID, int]:
     """Create the demo account and its poker screen names. Returns (user_id, tenant_id)."""
-    async with SessionLocal() as session:
+    async with session_factory()() as session:
         result = await session.execute(select(User).where(User.email == DEMO_EMAIL))
         user = result.scalar_one_or_none()
         if user is None:
@@ -79,7 +79,7 @@ async def ensure_user() -> tuple[uuid.UUID, int]:
 async def publish_corpus(user_id: uuid.UUID, tenant_id: int) -> int:
     """Upload every corpus file and publish its pointer. Returns files published."""
     published = 0
-    async with SessionLocal() as session:
+    async with session_factory()() as session:
         for site, path in CORPUS:
             if not path.exists():
                 log.warning("missing corpus file %s", path)
@@ -160,7 +160,7 @@ async def amain() -> int:
     else:
         log.info("nothing new to publish")
 
-    from api.db import clickhouse
+    from ingestion.clickhouse import clickhouse
 
     counts = (
         clickhouse()

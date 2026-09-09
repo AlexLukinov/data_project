@@ -25,10 +25,10 @@ from types import FrameType
 import psycopg
 from confluent_kafka import Consumer, KafkaError, Message
 
-from api.db import clickhouse
-from api.settings import get_settings
 from core.enums import Site
+from core.settings import get_settings
 from ingestion.bus import UploadMessage, make_consumer
+from ingestion.clickhouse import clickhouse
 from ingestion.pipeline import ingest_text, record_failures
 from ingestion.storage import get_raw
 from parser.registry import get_parser

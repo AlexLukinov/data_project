@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.db import clickhouse
 from api.routers import auth, hands, stats, uploads
-from api.settings import DEFAULT_JWT_SECRET, Settings, get_settings
+from core.settings import DEFAULT_JWT_SECRET, Settings, get_settings
 
 # Structured JSON logs from day one. Retrofitting correlation ids across five services later
 # is painful; adding them now costs nothing. See docs/POKER_OBSERVABILITY.md.

@@ -18,8 +18,8 @@ import uuid
 
 import psycopg
 
-from api.settings import get_settings
 from core.enums import Site
+from core.settings import get_settings
 
 
 def main(argv: list[str] | None = None) -> int:

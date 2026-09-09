@@ -25,8 +25,8 @@ from api.deps import CurrentUserDep, SessionDep, hero_names_for
 from api.models_pg import Upload
 from api.queries import DATASETS
 from api.schemas import UploadAccepted, UploadResponse
-from api.settings import get_settings
 from core.enums import Site
+from core.settings import get_settings
 from ingestion.bus import UploadMessage, publish_upload
 from ingestion.loader import DATASET_HERO
 from ingestion.storage import decode_upload, object_key, put_raw, sha256_of

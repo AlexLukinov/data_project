@@ -13,7 +13,7 @@ import pytest
 
 from api import cache, ratelimit
 from api.main import refuse_unsafe_config
-from api.settings import DEFAULT_JWT_SECRET, Settings
+from core.settings import DEFAULT_JWT_SECRET, Settings
 
 
 def _settings(**overrides: object) -> Settings:

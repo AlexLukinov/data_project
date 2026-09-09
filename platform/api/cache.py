@@ -17,7 +17,7 @@ from typing import Any
 
 import redis
 
-from api.settings import get_settings
+from core.settings import get_settings
 
 log = logging.getLogger(__name__)
 _client: redis.Redis | None = None

@@ -17,7 +17,7 @@ import redis
 from fastapi import HTTPException, Request, status
 
 from api import cache
-from api.settings import get_settings
+from core.settings import get_settings
 
 log = logging.getLogger(__name__)
 

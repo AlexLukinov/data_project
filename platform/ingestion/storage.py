@@ -19,7 +19,7 @@ import boto3
 import zstandard
 from botocore.client import Config
 
-from api.settings import get_settings
+from core.settings import get_settings
 
 ZSTD_LEVEL = 10
 """Level 10: near-maximum ratio at a fraction of level 19's CPU. Uploads are latency

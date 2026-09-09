@@ -26,7 +26,7 @@ from api.security import (
     new_refresh_token,
     verify_password,
 )
-from api.settings import get_settings
+from core.settings import get_settings
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 

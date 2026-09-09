@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from api.db import clickhouse
 from api.main import app
 from ingestion import worker
+from ingestion.clickhouse import clickhouse
 
 pytestmark = pytest.mark.integration
 
@@ -178,7 +178,7 @@ def _tenant_of(user_uuid: str) -> int:
     """Look up the numeric tenant id for a user UUID (test helper)."""
     import psycopg
 
-    from api.settings import get_settings
+    from core.settings import get_settings
 
     with psycopg.connect(get_settings().postgres_libpq_dsn) as conn:
         row = conn.execute("SELECT tenant_id FROM users WHERE id = %s", (user_uuid,)).fetchone()

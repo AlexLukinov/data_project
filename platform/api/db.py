@@ -1,43 +1,48 @@
-"""Database connections: async Postgres session and a ClickHouse client factory."""
+"""Postgres sessions for the API. Built lazily, on first use, never at import.
+
+An engine created at import time meant that importing anything that touched `api.db` --
+the worker, the migration runner, a test module -- constructed a database engine as a side
+effect, and made the engine impossible to reconfigure for tests (docs/POKER_AUDIT.md B10).
+The ClickHouse client lives in `ingestion.clickhouse`; it is re-exported here only so API
+code has one place to import database handles from.
+"""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
-import clickhouse_connect
-from clickhouse_connect.driver.client import Client
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
-from api.settings import get_settings
+from core.settings import get_settings
+from ingestion.clickhouse import clickhouse
 
-_settings = get_settings()
+__all__ = ["clickhouse", "get_engine", "get_session", "session_factory"]
 
-# `expire_on_commit=False` so response models can still read attributes after commit --
-# otherwise every commit triggers a lazy refresh, and `lazy="raise"` on the relationships
-# turns that into an exception.
-engine = create_async_engine(_settings.postgres_dsn, pool_pre_ping=True, future=True)
-SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+@lru_cache(maxsize=1)
+def get_engine() -> AsyncEngine:
+    """The process-wide async engine, created on first call."""
+    return create_async_engine(get_settings().postgres_dsn, pool_pre_ping=True, future=True)
+
+
+@lru_cache(maxsize=1)
+def session_factory() -> async_sessionmaker[AsyncSession]:
+    """Session factory bound to the engine.
+
+    `expire_on_commit=False` so response models can still read attributes after commit --
+    otherwise every commit triggers a lazy refresh, and `lazy="raise"` on the relationships
+    turns that into an exception.
+    """
+    return async_sessionmaker(get_engine(), expire_on_commit=False, class_=AsyncSession)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding a transactional session."""
-    async with SessionLocal() as session:
+    async with session_factory()() as session:
         yield session
-
-
-@lru_cache(maxsize=1)
-def clickhouse() -> Client:
-    """Process-wide ClickHouse client.
-
-    clickhouse-connect keeps an internal HTTP connection pool and is thread-safe, so one
-    client per process is correct -- a client per request would throw away the pool.
-    """
-    settings = get_settings()
-    return clickhouse_connect.get_client(
-        host=settings.clickhouse_host,
-        port=settings.clickhouse_port,
-        username=settings.clickhouse_user,
-        password=settings.clickhouse_password,
-        query_limit=0,
-    )

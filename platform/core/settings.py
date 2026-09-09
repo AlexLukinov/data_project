@@ -1,7 +1,12 @@
-"""Configuration. One settings object, read from the environment.
+"""Configuration. One settings object, read from the environment, owned by `core`.
 
 `pydantic-settings` rather than scattered `os.environ` calls: a missing or malformed setting
 fails at startup with a readable error, instead of at 3am inside a worker with a KeyError.
+
+Lives in `core` -- the bottom of the dependency stack -- because every service reads it: the
+parser worker, the migration runner, the bulk importer and the API. When it lived in `api/`,
+`ingestion` and `ch` imported the web layer to find their own configuration, and the worker
+could not be shipped without FastAPI (docs/POKER_AUDIT.md B10, ADR-023).
 """
 
 from __future__ import annotations

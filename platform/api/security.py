@@ -22,7 +22,7 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from api.settings import get_settings
+from core.settings import get_settings
 
 _hasher = PasswordHasher()
 

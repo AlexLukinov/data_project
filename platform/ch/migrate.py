@@ -23,7 +23,7 @@ from pathlib import Path
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 
-from api.settings import get_settings
+from core.settings import get_settings
 
 log = logging.getLogger(__name__)
 

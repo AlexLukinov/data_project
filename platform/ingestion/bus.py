@@ -21,7 +21,7 @@ from typing import Any
 
 from confluent_kafka import Consumer, Producer
 
-from api.settings import get_settings
+from core.settings import get_settings
 from ingestion.loader import DATASET_HERO
 
 log = logging.getLogger(__name__)

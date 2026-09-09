@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from api.models_pg import Base
-from api.settings import get_settings
+from core.settings import get_settings
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().postgres_dsn)
