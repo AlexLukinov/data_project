@@ -192,15 +192,18 @@ Redis 6380 · MinIO 9010/9011**.
 | `make seed` | provision the **test** databases + load the 8-hand corpus there + build dbt there |
 | `make dbt-build` / `make dbt-test` | run the dbt models / tests against the real marts |
 | `make api` / `make worker` | FastAPI on :8000 (dashboard `/`, docs `/docs`) / Kafka parser worker |
-| `make check` | lint + typecheck + import-linter + unit tests — what CI runs |
+| `make check` | lint + typecheck + import-linter + generated-file check + size check + unit tests — what CI runs |
 | `make test-all` | includes integration tests, in the test environment (needs `make up`) |
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
+| `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` / fail if they are stale |
+| `make size-check` / `make size-baseline` | functions ≤40 lines, files ≤300, against the burn-down list `scripts/size_baseline.txt` (an entry that stops violating fails too) / rewrite that list |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 
 - **dbt lives in `platform/.venv-dbt`**, not the app venv — its pins clash with the app's, same
   lesson as the lab. Invoke it as `.venv-dbt/bin/dbt`, or via `make dbt-build`.
-- Layout: `parser/sites/` (one file per network) · `ingestion/` (upload → MinIO → Kafka → worker
-  → ClickHouse) · `core/` (canonical model + pot-math validation) · `api/` · `ch/migrations/` ·
+- Layout: `parser/sites/` (one file or package per network) · `ingestion/` (upload → MinIO →
+  Kafka → worker → ClickHouse; sinks behind Protocols in `ingestion/sinks/`) · `core/` (canonical
+  model + pot-math validation + the table schema in `core/schema/`) · `api/` · `ch/migrations/` ·
   `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, pool report, account registration)
   · `reports/` · `infra/clickhouse/` (small-node sizing). Planned by `POKER_PLAN.md`: `stats/`
   (registry + filter AST + compiler), `analysis/hero/` and `analysis/pool/` (separate modules,

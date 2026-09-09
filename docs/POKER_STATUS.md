@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase B** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phase A (stabilize) done and verified**
-**Last updated:** 2026-09-09 (audit + phase A session)
+**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A (stabilize) and B (module boundaries) done and verified**
+**Last updated:** 2026-09-09 (phase B session)
 
 ---
 
@@ -15,27 +15,29 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **B**, starting at step **B.1**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, starting at step **C.1**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
-**Where phase A left things (2026-09-09):** all fifteen audit breakages that phase A covers are
-fixed and verified; the marts are fully rebuilt on the purged corpus (160/160 daily partitions,
-rollup equal to the mart on every counter); `make check` 155 tests green; `make dbt-test` green;
-the pool is reachable over HTTP. Work is on branch **`feat/incremental-chain-and-v2-plan`**
-(not merged — the founder decides when).
+**Where phase B left things (2026-09-09):** the module boundaries are enforced mechanically —
+import-linter (5 contracts), the size check (functions ≤40 / files ≤300, 6 baselined violations
+left in the two files phase C replaces), the generated staging models — all in `make check` and
+CI. Sinks are behind Protocols with fakes; the schema is declared once in `core/schema/`; the
+test suite runs only in its own `test_` environment. Six commits on branch
+**`feat/phase-b-module-boundaries`** (not merged — the founder decides when). **B.5b** (`hand_uid`
+as `FixedString(16)`) is deferred to C.2, where the tables are rebuilt anyway.
 
 **Do this:**
 1. `cd platform && make up` (the stack may be stopped), then `make check` to confirm the tree.
-2. Read `docs/POKER_PLAN.md` `## Status` → **B.1**: move `Settings`/`get_settings` to
-   `core/settings.py` and the ClickHouse client factory to `ingestion/clickhouse.py`; make
-   `api/db.py`'s engine lazy. "Done means" is in the step.
-3. Continue down phase B in order. (B.1–B.4 landed 2026-09-09: layering enforced, sinks behind
-   Protocols, and `make test-all` / `make seed` now run in their own test environment — the
-   integration conftest refuses to start against the analysis databases.) Tick a step only
-   when verified; update the plan's Status and §6 and this block at the end.
+2. If the founder has not merged `feat/phase-b-module-boundaries`, ask before doing so.
+3. Read `docs/POKER_PLAN.md` `## Status` → **C.1**: the stat registry as data — port every
+   built-in stat and the 29 orphan counters into `stats/registry/*.yaml`, load them into typed
+   models in `stats/registry.py`, define the filter AST in `stats/ast.py` (§2.4/§2.5, ADR-021/022).
+   "Done means" is in the step. Propose the file layout before writing code.
+4. Continue down phase C in order. Tick a step only when verified; update the plan's Status and
+   §6 and this block at the end.
 
 **Time-independent fingerprint** (`marts.player_hand_flags`, purged corpus, verified 2026-09-09
 after a rebuild from empty; the rollup `marts.stats_daily` reproduces every figure exactly):
@@ -337,6 +339,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-09 (5) | **Phase B (module boundaries) done and verified**, on branch `feat/phase-b-module-boundaries` (6 commits; phase A merged to `main` at `35acf83`). Settings and the ClickHouse client out of `api/`; import-linter with 5 contracts; sinks behind Protocols with fakes and one ingest loop; a `test_`-prefixed test environment the integration conftest insists on (analysis databases byte-identical before/after); the core schema declared once in `core/schema/` with generated staging models and a spec-vs-`system.columns` test; migration 0009 (dataset on actions/pot_winners + pool repair, 0 disagreements); typed hand endpoints; size limits enforced (28 → 6 baselined violations; PokerStars parser split into a package, real-export fingerprint identical). Founder's storage analysis recorded as plan step B.5b (`hand_uid` FixedString(16)), deferred to C.2's rebuild. `make check` 175 unit tests, `make test-all` 186 passed / 2 skipped. | Phase-B gate: merge the branch (founder's call), then **POKER_PLAN.md C.1** (stat registry as data) |
 | 2026-09-09 (4) | **Phase A (stabilize) done and verified**, on branch `feat/incremental-chain-and-v2-plan` (11 commits). Pool dataset reachable over HTTP; one ingest loop (worker = importer) with `dataset` on the message; 29 stranded counters rolled up and exposed as 17 stats; typed integer filters; CORS, placeholder-secret refusal, cookie flag from settings, auth rate limit, escaped dashboard; sniff ambiguity check; dbt port default; law test for all 52 pairs + intermediate schema tests. Found and fixed: the incremental anchor must be the **last** model (`stats_daily` had been silently empty); `empty_chain` recreate procedure; row-budgeted backfill with scratch-table cleanup. Applied the founder's storage analysis (LowCardinality buckets, UInt8 counts) — measured no disk saving; `hand_uid` (52%) is B.5b. Full rebuild from empty: 42 passes / 1,411 s; fingerprint re-established. | **`POKER_PLAN.md` step B.1** |
 | 2026-09-09 (3) | **Audited the platform and wrote the v2 plan.** Three agent audits (stat engine, module boundaries, API/UI) plus first-hand reads → `POKER_AUDIT.md` (keep / 15 breakages / structural limits / benchmark vs PT4 & Hand2Note / 23 doc-drift items). Founder decisions: Hand2Note-class speed and power, **separate hero and pool analysis modules**, both UI audiences, English only, Vue/Nuxt confirmed. Wrote `POKER_PLAN.md` (decision-level fact table, stat registry as data, JSON filter AST, enforced layering, Nuxt SPA, phases A–E with checkbox steps), rewrote ADR-019 (daily + anchored + backfill), added ADR-020…026, made CLAUDE.md plan-driven. | phase A |
 | 2026-09-09 (2) | **Timezone fix landed in data; chain made daily, anchored, bootstrapped on 4 GB.** Re-imported both datasets with aware datetimes; purged 41,677 orphaned pre-fix rows (ReplacingMergeTree dedups only within a partition), 384 test-tenant rows and the 8 seed hands. Converted the chain to daily partitions with a per-partition watermark; found and fixed two silent bugs (global watermark skipped partitions; per-model selection zeroed c-bets after a failed pass) by anchoring every model on `player_hand_flags`; `scripts/backfill.py` with adaptive batching (19 passes / 581 s / 2.0 GiB); ClickHouse default 4 GB with sized caches. Launched the final anchored rebuild — **unverified** (session ended, container later stopped). | verify the rebuild |
