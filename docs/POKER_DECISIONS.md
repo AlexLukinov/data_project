@@ -581,14 +581,16 @@ memory per dbt run is the constraint that decides the design.
    first and silently skipped partitions: ingest order and partition order are unrelated, so one
    late-ingested 2023 hand pushed the watermark past 972,943 December-2024 hands. The per-partition
    comparison is answered from part metadata in ~20 ms.
-3. **One anchor for every model.** The built side of the comparison is always
-   `marts.player_hand_flags` (the last model), never `{{ this }}`. With per-model state, a failed
-   pass let upstream models advance while downstream ones did not, so the next pass built day X in
+3. **One anchor for every model, and it is the LAST model.** The built side of the comparison
+   is always `marts.stats_daily`, never `{{ this }}`. With per-model state, a failed pass let
+   upstream models advance while downstream ones did not, so the next pass built day X in
    `int_hand_player_flags` before `int_postflop_context` had it — every c-bet counter for that day
    came out zero with no error (pool c-bets 1,824,127 → 626,804). Flop-only models also never
    "contain" a flopless day and would stay dirty forever. Anchoring gives every pass one identical
    partition set built in dependency order; a failure anywhere leaves the set dirty and the next
-   pass redoes it.
+   pass redoes it. The anchor was first set to `player_hand_flags`; `stats_daily`, which builds
+   after it, then saw nothing dirty and stayed empty — the rollup route answered "0 hands" with no
+   error. Hence *last* model, and if one is ever added downstream, the anchor moves to it.
 4. **Bootstrap in batches, never in one shot.** `scripts/backfill.py` loops dbt over the oldest N
    dirty partitions (`--vars batch_partitions`), halving N on a memory failure and doubling after
    three clean passes. `max_partitions_per_insert_block` stays at its default of 100 on purpose:
@@ -647,6 +649,18 @@ time, so a backfill of older dates is never picked up.
   rejecting one query, which is exactly what happened when 12 GB was tried inside 15 GB.
 - Changing partition granularity means changing it in three places: the model configs, the macro,
   and `PARTITION_EXPR` in `scripts/backfill.py` (they drifted once).
+- **Changing any column type or adding a column is a chain recreation, not a run.**
+  `insert_overwrite` swaps partitions between the temp table and the target, so their DDL must
+  match. Procedure: `dbt run --full-refresh --vars 'empty_chain: true'` (the macro returns an
+  always-false gate, so every table is recreated from its own SELECT with no rows) and then
+  `scripts/backfill.py`. dbt's `--empty` flag cannot be used: it appends its own alias to every
+  limited ref and collides with the models' `{{ ref() }} as p` aliases.
+- Column types: the 15 bucket columns are `LowCardinality(String)` and `players_to_*` `UInt8`
+  since 2026-09-09 — the right types for GROUP BY and filters. **Measured honestly, they did not
+  shrink the table:** 63.7 bytes/row after versus 64.3 before, because LZ4 already compressed
+  the repetitive `String` buckets to ~0.4 bytes/row and `LowCardinality` lands at the same figure.
+  The table's size is `hand_uid`: 32-char hex, 52% of every byte, incompressible. That is
+  POKER_PLAN step B.5b (`FixedString(16)`), and it sits in every sort key, so it is a rebuild.
 
 **Known edge, accepted:** if a re-parse removed *every* hand from a day, the temp table would
 produce no partition for it and the stale partition would survive. Hands are never deleted, so
