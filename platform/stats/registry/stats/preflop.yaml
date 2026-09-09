@@ -1,0 +1,299 @@
+# Preflop stats. Decision grain unless noted: a row per decision on `marts.decisions`, the
+# value is countIf(situation AND action) / countIf(situation).
+#
+# `notes` records where a definition differs from the v1 flag table it replaces, for the
+# parity check in plan step C.6.
+
+- code: vpip
+  label: VPIP
+  category: preflop
+  grain: hand
+  situation: {all: []}
+  action: {dim: did_vpip, op: eq, value: 1}
+  typical: [18, 28]
+  cached: true
+  description: Voluntarily put money in the pot preflop, per hand dealt in (blind posts excluded).
+
+- code: pfr
+  label: PFR
+  category: preflop
+  grain: hand
+  situation: {all: []}
+  action: {dim: did_pfr, op: eq, value: 1}
+  typical: [14, 24]
+  cached: true
+  description: Raised preflop, per hand dealt in.
+
+- code: rfi
+  label: RFI (open %)
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: raise}
+  typical: [15, 50]
+  cached: true
+  description: Raised when first in, from any position.
+
+- code: steal
+  label: Steal %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: none}
+      - {dim: position, op: in, value: [CO, BTN, SB]}
+  action: {dim: action, op: eq, value: raise}
+  typical: [25, 45]
+  cached: true
+  description: Raised first in from the cutoff, button or small blind.
+
+- code: limp
+  label: Limp %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: none}
+      - {dim: position, op: ne, value: BB}
+  action: {dim: action, op: eq, value: call}
+  typical: [0, 5]
+  cached: true
+  description: Called the big blind when first in rather than raising.
+
+- code: iso_raise
+  label: Isolation raise %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: limp}
+  action: {dim: action, op: eq, value: raise}
+  typical: [30, 60]
+  cached: true
+  description: Raised over one or more limpers with no raise in front.
+
+- code: cold_call
+  label: Cold call %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: in, value: [raise, 3bet, 4bet, 5bet_plus]}
+      - {dim: position, op: not_in, value: [SB, BB]}
+      - {dim: preflop_line, op: eq, value: ''}
+  action: {dim: action, op: eq, value: call}
+  typical: [3, 10]
+  cached: true
+  description: Called a raise at the first decision of the hand, not already invested as a blind.
+
+- code: defend_vs_open
+  label: Call vs open
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: call}
+  typical: [10, 25]
+  cached: true
+  description: Called when facing exactly one raise, from any seat (blinds included).
+  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities).
+
+- code: fold_vs_open
+  label: Fold vs open
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: fold}
+  typical: [60, 85]
+  cached: true
+  description: Folded when facing exactly one raise, from any seat.
+  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities).
+
+- code: threebet
+  label: 3-bet %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: raise}
+  typical: [5, 11]
+  cached: true
+  description: Re-raised when facing exactly one raise (a limp-reraise counts).
+  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities, +0.4% 3-bets on the pool).
+
+- code: squeeze
+  label: Squeeze %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: raise}
+      - {dim: n_cold_callers, op: gte, value: 1}
+  action: {dim: action, op: eq, value: raise}
+  typical: [4, 12]
+  cached: true
+  description: Re-raised facing a raise and at least one cold caller.
+
+- code: fold_to_3bet
+  label: Fold to 3-bet
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 3bet}
+      - {dim: am_preflop_opener, op: eq, value: 1}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 60]
+  cached: true
+  description: Folded after open-raising and facing a 3-bet.
+  notes: v1 counted any fold by the opener once two raises existed, including a fold to a later 5-bet.
+
+- code: call_3bet
+  label: Call 3-bet
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 3bet}
+      - {dim: am_preflop_opener, op: eq, value: 1}
+  action: {dim: action, op: eq, value: call}
+  typical: [30, 50]
+  cached: true
+  description: Called after open-raising and facing a 3-bet.
+
+- code: fourbet
+  label: 4-bet %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 3bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [2, 8]
+  cached: true
+  description: Re-raised when facing two raises (a cold-call then 4-bet counts).
+  notes: Every decision facing two raises counts, a caller's second decision included; v1 counted a seat's first decision only.
+
+- code: fold_to_4bet
+  label: Fold to 4-bet
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 4bet}
+      - {dim: am_preflop_opener, op: eq, value: 0}
+      - {dim: preflop_line, op: eq, value: r}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 65]
+  cached: true
+  description: Folded after 3-betting and facing a 4-bet.
+
+- code: call_4bet
+  label: Call 4-bet
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 4bet}
+      - {dim: am_preflop_opener, op: eq, value: 0}
+      - {dim: preflop_line, op: eq, value: r}
+  action: {dim: action, op: eq, value: call}
+  typical: [20, 45]
+  cached: true
+  description: Called after 3-betting and facing a 4-bet.
+
+- code: fivebet
+  label: 5-bet %
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: facing, op: eq, value: 4bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [1, 6]
+  cached: true
+  description: Re-raised when facing three raises.
+  notes: Every decision facing three raises counts; v1 counted a seat's first decision only.
+
+- code: fold_bb_to_steal
+  label: Fold BB to steal
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: position, op: eq, value: BB}
+      - {dim: facing, op: eq, value: raise}
+      - {dim: opener_position, op: in, value: [CO, BTN, SB]}
+      - {dim: n_limpers, op: eq, value: 0}
+  action: {dim: action, op: eq, value: fold}
+  typical: [45, 70]
+  cached: true
+  description: Folded the big blind facing a first-in raise from the cutoff, button or small blind.
+  notes: v1 did not require the raise to be first in (a late raise over limpers counted as a steal).
+
+- code: limp_fold
+  label: Limp, fold to raise
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: preflop_line, op: eq, value: l}
+      - {dim: facing, op: in, value: [raise, 3bet, 4bet, 5bet_plus]}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 70]
+  cached: true
+  description: Limped, then folded when someone raised behind.
+  notes: v1 counted open limps only; this counts every limp (over-limps included).
+
+- code: limp_call
+  label: Limp, call raise
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: preflop_line, op: eq, value: l}
+      - {dim: facing, op: in, value: [raise, 3bet, 4bet, 5bet_plus]}
+  action: {dim: action, op: eq, value: call}
+  typical: [25, 55]
+  cached: true
+  description: Limped, then called a raise behind.
+  notes: v1 counted open limps only; this counts every limp (over-limps included).
+
+- code: limp_raise
+  label: Limp-raise
+  category: preflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: preflop}
+      - {dim: preflop_line, op: eq, value: l}
+      - {dim: facing, op: in, value: [raise, 3bet, 4bet, 5bet_plus]}
+  action: {dim: action, op: eq, value: raise}
+  typical: [0, 10]
+  cached: true
+  description: Limped, then re-raised a raise behind.
+  notes: v1 counted open limps only; this counts every limp (over-limps included).

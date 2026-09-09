@@ -1,0 +1,33 @@
+# Showdown stats: hand grain, one row per (hand, player) on `marts.player_hands`.
+
+- code: wwsf
+  label: WWSF
+  category: showdown
+  grain: hand
+  situation: {dim: saw_flop, op: eq, value: 1}
+  action: {dim: won_hand, op: eq, value: 1}
+  higher_is_better: true
+  typical: [43, 52]
+  cached: true
+  description: Won the pot, given the flop was seen.
+
+- code: wtsd
+  label: WTSD
+  category: showdown
+  grain: hand
+  situation: {dim: saw_flop, op: eq, value: 1}
+  action: {dim: went_to_showdown, op: eq, value: 1}
+  typical: [24, 30]
+  cached: true
+  description: Reached showdown, given the flop was seen.
+
+- code: wsd
+  label: W$SD
+  category: showdown
+  grain: hand
+  situation: {dim: went_to_showdown, op: eq, value: 1}
+  action: {dim: won_hand, op: eq, value: 1}
+  higher_is_better: true
+  typical: [48, 56]
+  cached: true
+  description: Won at showdown, given showdown was reached.

@@ -27,6 +27,7 @@ dependencies = [
     "zstandard>=0.23",
     "phevaluator>=0.5.3",
     "psycopg[binary]>=3.2",
+    "pyyaml>=6.0",
 ]
 
 [dependency-groups]
@@ -38,6 +39,7 @@ dev = [
     "mypy>=1.13",
     "types-boto3",
     "import-linter>=2.15",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 dbt = [
     # dbt pins click/jinja2 versions that clash with the app deps — same lesson as the lab,
@@ -52,7 +54,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["core", "parser", "ingestion", "api"]
+packages = ["core", "parser", "ingestion", "stats", "api"]
 
 [tool.ruff]
 line-length = 100

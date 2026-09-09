@@ -11,6 +11,7 @@ root_packages =
     core
     parser
     ingestion
+    stats
     api
     ch
     scripts

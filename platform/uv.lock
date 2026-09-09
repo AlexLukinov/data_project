@@ -1650,6 +1650,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "python-multipart" },
+    { name = "pyyaml" },
     { name = "redis" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
@@ -1669,6 +1670,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "types-boto3" },
+    { name = "types-pyyaml" },
 ]
 
 [package.metadata]
@@ -1687,6 +1689,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyjwt", specifier = ">=2.10" },
     { name = "python-multipart", specifier = ">=0.0.17" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "redis", specifier = ">=5.2" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
@@ -1706,6 +1709,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.8" },
     { name = "types-boto3" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
 ]
 
 [[package]]
@@ -2368,6 +2372,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/8a/1d98ce50cd2f1a87b00005b442a3ed649855b7f32b709c1d83711a293901/types_boto3-1.43.89.tar.gz", hash = "sha256:325b0b546f89caa8ec7e0924bde93a7e2553e9e809c35fd56597dc9a2e49d627", size = 104896, upload-time = "2026-09-04T21:00:32.89Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/1b/04a78df1311ed51e1a54a7a88e2da9d1ab4114ff472d1c0fdc0be08140b9/types_boto3-1.43.89-py3-none-any.whl", hash = "sha256:0d04c2c246eb52042347ac8352c8b4753986b6ef10746d952c91051725358d73", size = 71419, upload-time = "2026-09-04T21:00:27.465Z" },
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/6e/abec85b9013db5b934b0280a6dd104904d84f7bcbaab2e2f3def87ac7463/types_pyyaml-6.0.12.20260906.tar.gz", hash = "sha256:f59c1cc05010b833d2d72287bbaa72610106b28d42d89a907313117faba85212", size = 18649, upload-time = "2026-09-06T06:35:35.362Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/c0/fc0644b7ddcfb969e95845837143cb5173ddd6e06ee4ba5fc493cd9329b7/types_pyyaml-6.0.12.20260906-py3-none-any.whl", hash = "sha256:bca893ff0d51df5c9053137d5d0e6ccd36e939a196356f1d5c16372422f5137b", size = 21282, upload-time = "2026-09-06T06:35:34.372Z" },
 ]
 
 [[package]]

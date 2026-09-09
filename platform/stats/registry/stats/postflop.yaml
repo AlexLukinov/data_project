@@ -1,0 +1,536 @@
+# Postflop stats: decision grain, one row per decision on `marts.decisions`.
+#
+# Every opportunity is a decision where the named action was POSSIBLE: a c-bet opportunity is
+# the aggressor facing nothing (`facing: none`), not merely "the aggressor saw the flop". Where
+# that tightens the v1 definition the entry says so under `notes`, for the parity check (C.6).
+#
+# Aggression factor and frequency are the general form (numerator / denominator) because their
+# denominators are not a situation but a set of actions.
+
+# ---- continuation bets and the responses to them -----------------------------------------
+- code: cbet_flop
+  label: C-bet flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [50, 75]
+  cached: true
+  description: Bet the flop as the preflop aggressor when checked to or first to act.
+  notes: v1 counted every flop the aggressor saw, including flops where a donk bet came first.
+
+- code: cbet_turn
+  label: C-bet turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: am_prev_street_aggressor, op: eq, value: 1}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [40, 65]
+  cached: true
+  description: Bet the turn after c-betting the flop (double barrel).
+
+- code: cbet_river
+  label: C-bet river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: am_prev_street_aggressor, op: eq, value: 1}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [30, 55]
+  cached: true
+  description: Bet the river after barrelling the turn (triple barrel).
+
+- code: delayed_cbet
+  label: Delayed c-bet
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [30, 55]
+  cached: true
+  description: Bet the turn as the aggressor after checking the flop.
+  notes: v1 required only "did not bet the flop", which included calling a flop donk bet.
+
+- code: fold_to_cbet_flop
+  label: Fold to c-bet flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 55]
+  cached: true
+  description: Folded facing the preflop aggressor's flop bet.
+  notes: The c-bet must be the only bet in front; v1 still counted it as faced when another player had raised it before this seat acted (-0.5% opportunities).
+
+- code: call_cbet_flop
+  label: Call c-bet flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: call}
+  typical: [35, 50]
+  cached: true
+  description: Called facing the preflop aggressor's flop bet.
+  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+
+- code: raise_cbet_flop
+  label: Raise c-bet flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: raise}
+  typical: [6, 14]
+  cached: true
+  description: Raised the preflop aggressor's flop bet.
+  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+
+- code: fold_to_cbet_turn
+  label: Fold to c-bet turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 60]
+  cached: true
+  description: Folded facing the preflop aggressor's turn bet.
+  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+
+- code: fold_to_cbet_river
+  label: Fold to c-bet river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 65]
+  cached: true
+  description: Folded facing the preflop aggressor's river bet.
+  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+
+- code: fold_to_delayed_cbet
+  label: Fold to delayed c-bet
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: prev_street_faced, op: eq, value: none}
+      - {dim: facing, op: eq, value: bet}
+      - {dim: facing_is_cbet, op: eq, value: 1}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 65]
+  cached: true
+  description: Folded to the aggressor's turn bet after the flop checked through.
+
+# ---- floats, donks and probes ------------------------------------------------------------
+- code: float_flop
+  label: Float flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: is_ip, op: eq, value: 1}
+      - {dim: prev_street_faced, op: eq, value: bet}
+      - {dim: prev_street_my_action, op: eq, value: c}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [20, 45]
+  cached: true
+  description: Bet the turn when checked to, after calling a flop bet in position.
+
+- code: float_fold
+  label: Float, fold turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: is_ip, op: eq, value: 1}
+      - {dim: prev_street_faced, op: eq, value: bet}
+      - {dim: prev_street_my_action, op: eq, value: c}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: fold}
+  typical: [35, 60]
+  cached: true
+  description: Folded to a turn bet after calling a flop bet in position.
+  notes: >-
+    v1's denominator was "called the flop c-bet and reached the turn" from any position, turns
+    checked through included; this counts in-position turns where a bet was actually faced, the
+    decision the name describes (about a third of v1's action count).
+
+- code: donk_flop
+  label: Donk bet flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: is_ip, op: eq, value: 0}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [0, 6]
+  cached: true
+  description: Led into the preflop aggressor on the flop, out of position.
+
+- code: fold_to_donk
+  label: Fold to donk bet
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: fold}
+  typical: [30, 55]
+  cached: true
+  description: Folded as the preflop aggressor when led into on the flop.
+
+- code: probe_turn
+  label: Probe turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: is_ip, op: eq, value: 0}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: prev_street_faced, op: eq, value: none}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [25, 50]
+  cached: true
+  description: Bet the turn out of position after the aggressor checked back the flop.
+  notes: v1 did not require out of position.
+
+- code: fold_to_probe_turn
+  label: Fold to probe turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: prev_street_faced, op: eq, value: none}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: fold}
+  typical: [35, 60]
+  cached: true
+  description: Checked back the flop as the aggressor, then folded to a turn bet.
+
+- code: probe_river
+  label: Probe river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: am_preflop_aggressor, op: eq, value: 0}
+      - {dim: is_ip, op: eq, value: 0}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: prev_street_faced, op: eq, value: none}
+      - {dim: facing, op: eq, value: none}
+  action: {dim: action, op: eq, value: bet}
+  typical: [25, 50]
+  cached: true
+  description: Bet the river out of position after the turn checked through.
+  notes: v1 did not require out of position.
+
+- code: fold_to_probe_river
+  label: Fold to probe river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: am_preflop_aggressor, op: eq, value: 1}
+      - {dim: prev_street_my_action, op: eq, value: x}
+      - {dim: prev_street_faced, op: eq, value: none}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: fold}
+  typical: [35, 65]
+  cached: true
+  description: Folded as the aggressor to a river bet after the turn checked through.
+
+# ---- check-raises ------------------------------------------------------------------------
+- code: check_raise_flop
+  label: Check-raise flop
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: street_line, op: eq, value: x}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [6, 14]
+  cached: true
+  description: Raised the flop after checking and facing a bet.
+  notes: The bet must be the only one in front; v1 counted the chance when a raise had followed the bet before this seat acted (-0.9% opportunities).
+
+- code: check_raise_turn
+  label: Check-raise turn
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: street_line, op: eq, value: x}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [5, 14]
+  cached: true
+  description: Raised the turn after checking and facing a bet.
+  notes: The bet must be the only one in front (see check_raise_flop).
+
+- code: check_raise_river
+  label: Check-raise river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: street_line, op: eq, value: x}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [3, 10]
+  cached: true
+  description: Raised the river after checking and facing a bet.
+  notes: The bet must be the only one in front (see check_raise_flop).
+
+# ---- bet, then raised --------------------------------------------------------------------
+- code: fold_to_flop_raise
+  label: Fold to flop raise
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: flop}
+      - {dim: street_line, op: eq, value: b}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 65]
+  cached: true
+  description: Bet the flop and folded when raised.
+
+- code: fold_to_turn_raise
+  label: Fold to turn raise
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: turn}
+      - {dim: street_line, op: eq, value: b}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 65]
+  cached: true
+  description: Bet the turn and folded when raised.
+
+- code: fold_to_river_raise
+  label: Fold to river raise
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: street_line, op: eq, value: b}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: fold}
+  typical: [40, 70]
+  cached: true
+  description: Bet the river and folded when raised.
+
+- code: bet_call_river
+  label: Bet-call river
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: street_line, op: eq, value: b}
+      - {dim: facing, op: eq, value: raise}
+  action: {dim: action, op: eq, value: call}
+  typical: [25, 50]
+  cached: true
+  description: Bet the river and called a raise.
+
+# ---- river responses ---------------------------------------------------------------------
+- code: river_raise
+  label: River raise
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: raise}
+  typical: [4, 12]
+  cached: true
+  description: Raised when facing a river bet.
+
+- code: river_check_fold
+  label: River check-fold
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: street_line, op: eq, value: x}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: fold}
+  typical: [45, 70]
+  cached: true
+  description: Checked the river, then folded to a bet.
+
+- code: river_check_call
+  label: River check-call
+  category: postflop
+  grain: decision
+  situation:
+    all:
+      - {dim: street, op: eq, value: river}
+      - {dim: street_line, op: eq, value: x}
+      - {dim: facing, op: eq, value: bet}
+  action: {dim: action, op: eq, value: call}
+  typical: [25, 50]
+  cached: true
+  description: Checked the river, then called a bet.
+
+# ---- aggression: bets + raises against calls (AF) and against all actions (AFq) ---------
+- code: af_flop
+  label: Aggression factor (flop)
+  category: postflop
+  grain: decision
+  format: ratio
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: flop}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: flop}, {dim: action, op: eq, value: call}]}
+  typical: [1.5, 4]
+  description: Bets and raises divided by calls on the flop.
+
+- code: af_turn
+  label: Aggression factor (turn)
+  category: postflop
+  grain: decision
+  format: ratio
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: turn}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: turn}, {dim: action, op: eq, value: call}]}
+  typical: [1.5, 4]
+  description: Bets and raises divided by calls on the turn.
+
+- code: af_river
+  label: Aggression factor (river)
+  category: postflop
+  grain: decision
+  format: ratio
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: river}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: river}, {dim: action, op: eq, value: call}]}
+  typical: [1, 3]
+  description: Bets and raises divided by calls on the river.
+
+- code: af_total
+  label: Aggression factor
+  category: postflop
+  grain: decision
+  format: ratio
+  numerator:
+    countIf: {all: [{dim: street, op: in, value: [flop, turn, river]}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: in, value: [flop, turn, river]}, {dim: action, op: eq, value: call}]}
+  typical: [1.5, 3.5]
+  description: Postflop bets and raises divided by postflop calls.
+
+- code: afq_flop
+  label: Aggression frequency (flop)
+  category: postflop
+  grain: decision
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: flop}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: flop}, {dim: action, op: in, value: [bet, raise, call, fold]}]}
+  typical: [35, 55]
+  description: Share of flop actions (checks excluded) that were a bet or a raise.
+
+- code: afq_turn
+  label: Aggression frequency (turn)
+  category: postflop
+  grain: decision
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: turn}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: turn}, {dim: action, op: in, value: [bet, raise, call, fold]}]}
+  typical: [35, 55]
+  description: Share of turn actions (checks excluded) that were a bet or a raise.
+
+- code: afq_river
+  label: Aggression frequency (river)
+  category: postflop
+  grain: decision
+  numerator:
+    countIf: {all: [{dim: street, op: eq, value: river}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: eq, value: river}, {dim: action, op: in, value: [bet, raise, call, fold]}]}
+  typical: [30, 50]
+  description: Share of river actions (checks excluded) that were a bet or a raise.
+
+- code: afq_total
+  label: Aggression frequency
+  category: postflop
+  grain: decision
+  numerator:
+    countIf: {all: [{dim: street, op: in, value: [flop, turn, river]}, {dim: action, op: in, value: [bet, raise]}]}
+  denominator:
+    countIf: {all: [{dim: street, op: in, value: [flop, turn, river]}, {dim: action, op: in, value: [bet, raise, call, fold]}]}
+  typical: [35, 55]
+  description: Share of postflop actions (checks excluded) that were a bet or a raise.

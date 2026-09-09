@@ -1,0 +1,60 @@
+# Money and volume: hand grain, sums over `marts.player_hands`.
+#
+# `per100` is 100 * numerator / denominator; `count` is the numerator alone.
+
+- code: hands
+  label: Hands
+  category: money
+  grain: hand
+  format: count
+  numerator: {count: true}
+  cached: true
+  description: Hands dealt in.
+
+- code: bb_per_100
+  label: bb/100
+  category: money
+  grain: hand
+  format: per100
+  numerator: {sum: net_won_bb}
+  denominator: {count: true}
+  higher_is_better: true
+  typical: [0, 10]
+  cached: true
+  description: Big blinds won per 100 hands.
+
+- code: ev_bb_per_100
+  label: EV bb/100
+  category: money
+  grain: hand
+  format: per100
+  numerator: {sum: ev_won_bb}
+  denominator: {count: true}
+  higher_is_better: true
+  typical: [0, 10]
+  cached: true
+  description: All-in adjusted big blinds won per 100 hands.
+
+- code: sd_bb_per_100
+  label: Showdown bb/100
+  category: money
+  grain: hand
+  format: per100
+  numerator: {sum: showdown_won_bb}
+  denominator: {count: true}
+  higher_is_better: true
+  typical: [0, 30]
+  cached: true
+  description: Big blinds won at showdown per 100 hands.
+
+- code: nsd_bb_per_100
+  label: Non-showdown bb/100
+  category: money
+  grain: hand
+  format: per100
+  numerator: {sum: nonshowdown_won_bb}
+  denominator: {count: true}
+  higher_is_better: true
+  typical: [-30, 0]
+  cached: true
+  description: Big blinds won without showdown per 100 hands.
