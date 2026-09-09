@@ -19,5 +19,9 @@ select
     -- Blind and ante posts move chips but are NOT voluntary. This one flag is why VPIP is
     -- correct rather than "every hand you were dealt in".
     is_voluntary,
-    action_type in ('fold', 'check', 'call', 'bet', 'raise') as is_decision
+    action_type in ('fold', 'check', 'call', 'bet', 'raise') as is_decision,
+    -- Ingestion watermark, not a business timestamp. Every incremental model downstream
+    -- carries max(src_parsed_at) forward and compares it against core.hands.parsed_at to
+    -- decide which month partitions need rebuilding -- see macros/incremental.sql.
+    parsed_at                     as src_parsed_at
 from {{ source('core', 'actions') }} final

@@ -7,6 +7,9 @@
 
 select
     user_id,
+    -- 'hero' = hands the user played; 'population' = observed pool hands. Never mix the two
+    -- in one average -- see ch/migrations/0007_dataset.sql.
+    dataset,
     hand_uid,
     site,
     site_hand_id,
@@ -41,5 +44,10 @@ select
     rake,
     hero_seat,
     tournament_id,
-    parser_version
+    parser_version,
+    ante,
+    -- Ingestion watermark -- see macros/incremental.sql. This is THE authoritative one: the
+    -- dirty-partition subquery reads core.hands.parsed_at, and every other model's watermark
+    -- is compared against it.
+    parsed_at                                            as src_parsed_at
 from {{ source('core', 'hands') }} final

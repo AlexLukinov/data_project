@@ -63,18 +63,27 @@ def test_injection_attempts_become_bound_parameters(payload: str) -> None:
 
 
 def test_no_user_supplied_string_reaches_the_sql() -> None:
+    """Every value a CALLER controls must travel as a bound parameter, never as SQL text.
+
+    Asserted against the caller's own inputs rather than against `params.values()`, because
+    the compiler adds parameters of its own whose values legitimately collide with column
+    names — `dataset='hero'` is a substring of the column `is_hero`. Iterating everything
+    turned that collision into a false failure and would have tempted someone to weaken the
+    check that actually matters.
+    """
+    user_supplied = ["pokerstars:someone'; --", "pokerstars", "NL50"]
     sql, params = StatsQuery(
         tenant_id=7,
         date_from=date(2026, 1, 1),
         date_to=date(2026, 2, 1),
-        player_key="pokerstars:someone'; --",
-        filters={"site": ["pokerstars"], "stake_level": ["NL50"]},
+        player_key=user_supplied[0],
+        filters={"site": [user_supplied[1]], "stake_level": [user_supplied[2]]},
         group_by=["position"],
         stats=["vpip", "pfr", "bb_per_100"],
     ).build()
-    for value in params.values():
-        if isinstance(value, str):
-            assert value not in sql
+    for value in user_supplied:
+        assert value not in sql
+    assert params["player_key"] == user_supplied[0]
 
 
 def test_every_stat_returns_its_sample_size() -> None:
@@ -194,3 +203,54 @@ def test_custom_stats_are_still_tenant_scoped() -> None:
     ).build()
     assert "s.user_id = {tenant_id:UInt32}" in sql
     assert params["tenant_id"] == 5
+
+
+# ---------------------------------------------------------------------------------------
+# Source routing and the dataset guard.
+#
+# Two bodies of hands now share a tenant: the user's own play and millions of observed pool
+# hands. Defaulting to the wrong one does not raise — it silently returns a win rate averaged
+# over hands the user never played, which is worse than an error because it looks plausible.
+# ---------------------------------------------------------------------------------------
+
+
+def test_dataset_defaults_to_hero_only() -> None:
+    """A query nobody configured must measure the user's OWN hands, never the pool."""
+    sql, params = StatsQuery(tenant_id=1).build()
+    assert "s.dataset = {dataset:String}" in sql
+    assert params["dataset"] == "hero"
+
+
+def test_population_dataset_is_opt_in() -> None:
+    """Pool baselines are reachable, but only by asking for them explicitly."""
+    _, params = StatsQuery(tenant_id=1, dataset="population").build()
+    assert params["dataset"] == "population"
+
+
+def test_coarse_dimensions_use_the_rollup() -> None:
+    """Cheap questions stay on the small pre-aggregated table."""
+    sql, _ = StatsQuery(tenant_id=1, group_by=["position"], filters={"site": ["ggpoker"]}).build()
+    assert "FROM marts.stats_daily AS s" in sql
+    assert "s.day >= " not in sql  # no date bounds requested
+
+
+def test_fine_dimensions_fall_through_to_the_fact_table() -> None:
+    """Anything the rollup cannot answer must silently move to the full per-hand grain."""
+    sql, _ = StatsQuery(tenant_id=1, group_by=["spr_bucket"]).build()
+    assert "FROM marts.player_hand_flags AS s" in sql
+
+
+def test_fine_filter_switches_the_date_column_too() -> None:
+    """The two tables name their date column differently; routing must carry that with it."""
+    sql, _ = StatsQuery(
+        tenant_id=1, date_from=date(2025, 1, 1), filters={"hand_class": ["AKs"]}
+    ).build()
+    assert "FROM marts.player_hand_flags AS s" in sql
+    assert "s.played_date >= {date_from:Date}" in sql
+    assert "s.day" not in sql
+
+
+def test_unknown_fine_dimension_is_still_rejected() -> None:
+    """Widening the vocabulary must not widen the allowlist's escape hatches."""
+    with pytest.raises(ValueError, match="unknown filter"):
+        StatsQuery(tenant_id=1, filters={"board_texture; DROP TABLE core.hands": ["x"]})

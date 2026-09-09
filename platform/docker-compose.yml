@@ -1,9 +1,9 @@
 # Local dev stack for the poker platform. Five services, deliberately — NOT the minikube lab.
 # See docs/POKER_DECISIONS.md ADR-015 for why the two environments stay separate.
 #
-# Memory limits are conservative because the minikube lab may be running alongside
-# (it takes ~12 GiB of Docker's ~19.5 GiB). If the stack is sluggish, free the lab first:
-#   cd .. && make down          # scales the lab to zero, keeps its PVCs
+# ClickHouse runs in 4G. That is a deliberate constraint, not a dev shortcut: production is
+# meant to be a cluster of small cheap nodes, so nothing here may assume a big machine. See
+# the sizing notes on the clickhouse service below and infra/clickhouse/small-node.xml.
 #
 # Every service has a healthcheck and every dependent uses `condition: service_healthy`,
 # so `make up` returning means the stack is actually usable, not merely started.
@@ -27,11 +27,40 @@ services:
       - "127.0.0.1:8124:8123"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+      # Query limits + disk-spill thresholds. Server-side so dbt, the API and ad-hoc SQL all
+      # get them; a limit only one client sets is not a limit.
+      - ./infra/clickhouse/limits.xml:/etc/clickhouse-server/users.d/limits.xml:ro
+      # Server sizing (caches, background pools). SEPARATE from limits.xml: that file is the
+      # per-query profile, this one stops ClickHouse's large-server cache defaults from eating
+      # a small node's entire budget before a query runs.
+      - ./infra/clickhouse/small-node.xml:/etc/clickhouse-server/config.d/small-node.xml:ro
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     deploy:
       resources:
-        limits: { memory: 2G }
+        # 4G. The mart chain is incremental (ADR-019) and bootstraps in batches
+        # (scripts/backfill.py), so no single operation ever has to hold the whole dataset.
+        # Measured end-to-end on the real 9.09M-hand corpus:
+        #
+        #   hero session upload   20k rows     4s   591 MiB   <- the actual product path
+        #   pool month 202412    5.9M rows    77s  2.10 GiB
+        #   pool month 202501   20.5M rows   256s  3.17 GiB   <- worst single partition
+        #
+        # Fitting 4G depends on infra/clickhouse/small-node.xml as much as on this number:
+        # ClickHouse defaults mark_cache to 5 GiB and uncompressed_cache to 8 GiB, which on a
+        # small box silently consume the entire budget and then reject a 2 GiB query. Keep the
+        # three files in step -- container cap, small-node.xml caches, limits.xml query ceiling
+        # -- so that caches + one query still fit under max_server_memory_usage (0.9x this).
+        #
+        # A one-shot `--full-refresh` over all 54.5M rows is the exception at ~7.3 GiB. Prefer
+        # `uv run python scripts/backfill.py`, which does the same work a partition at a time
+        # and stays inside 4G. If you really want the single-query path:
+        #   CLICKHOUSE_MEM=15G docker compose up -d clickhouse
+        #   DBT_CH_MAX_MEMORY=12000000000 .venv-dbt/bin/dbt build --full-refresh ...
+        # The lab takes ~12 GiB of Docker's 19.5 GiB, so free it first for that:
+        #   cd .. && bash scripts/pause.sh
+        limits:
+          memory: "${CLICKHOUSE_MEM:-4G}"
     healthcheck:
       test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER:-poker}",
              "--password", "${CLICKHOUSE_PASSWORD:-poker}", "--query", "SELECT 1"]

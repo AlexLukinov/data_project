@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!--
+  Server sizing for a SMALL node. Mounted into config.d/ (server settings), separate from
+  users.d/limits.xml (per-query profile settings).
+
+  **ClickHouse's cache defaults assume a large dedicated server and will happily eat a small
+  one.** Out of the box on this container:
+
+      mark_cache_size            5.00 GiB
+      index_mark_cache_size      5.00 GiB
+      uncompressed_cache_size    8.00 GiB
+      max_server_memory_usage    3.60 GiB   (0.9 x a 4 GiB container)
+
+  The caches are lazily filled, so nothing fails at startup — the server just grows until it is
+  sitting at its ceiling with almost nothing left for queries, and then rejects work that
+  should easily have fit. Observed exactly that: a model needing 2.09 GiB was killed by the
+  OvercommitTracker at "current RSS: 3.60 GiB, maximum: 3.60 GiB".
+
+  Sizing the caches to the box is therefore not tuning, it is the difference between the
+  product running on a cheap node and not. These values suit a ~4 GiB node; scale them roughly
+  with the container if it changes, and keep users.d/limits.xml in step so
+  caches + one query still fits under max_server_memory_usage.
+-->
+<clickhouse>
+    <!-- Marks are the hot index structure and the one cache worth keeping: they are read for
+         every granule of every query. 512 MiB covers this corpus's mark files comfortably. -->
+    <mark_cache_size>536870912</mark_cache_size>
+    <index_mark_cache_size>134217728</index_mark_cache_size>
+
+    <!-- Off. It caches DECOMPRESSED blocks, which only pays for repeated point lookups over a
+         small hot set; an analytics scan evicts it constantly. It is also opt-in per query
+         (`use_uncompressed_cache`), so an 8 GiB reservation buys nothing here. -->
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <index_uncompressed_cache_size>0</index_uncompressed_cache_size>
+
+    <compiled_expression_cache_size>67108864</compiled_expression_cache_size>
+
+    <!-- A single-tenant analytics box does not need 100 concurrent slots, and each one is a
+         potential memory claim. -->
+    <max_concurrent_queries>16</max_concurrent_queries>
+
+    <!-- NOT shrinking `background_pool_size` here, deliberately. It was tried at 8 and the
+         server refused to start: `number_of_free_entries_in_pool_to_execute_mutation` defaults
+         to 20 and must stay below background_pool_size * concurrency_ratio, so 8 x 2 = 16 makes
+         mutations impossible and ClickHouse rejects the config outright (BAD_ARGUMENTS) rather
+         than starting in a state where ALTER ... DELETE would silently never run. If a future
+         change does need a smaller pool, lower that setting in the same edit. The caches above
+         are where the memory actually was; the pool was speculative. -->
+
+</clickhouse>

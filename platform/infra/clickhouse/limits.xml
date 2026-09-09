@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<!--
+  Query limits for the default user profile.
+
+  Set server-side rather than per-query because three different clients issue heavy queries
+  against this database — dbt, the FastAPI query compiler, and whoever is at a SQL prompt —
+  and a limit that only one of them sets is a limit that does not exist. Getting this wrong
+  is not a slow query, it is MEMORY_LIMIT_EXCEEDED and a failed build.
+
+  **Sized against the container's 4G default cap in docker-compose.yml. Keep the two in step.**
+  The ceiling must stay BELOW the container limit: if a query is allowed more memory than the
+  container has, Docker OOM-kills the whole server instead of ClickHouse rejecting one query.
+  That turns a failed model into a failed stack.
+
+  These numbers are for the INCREMENTAL workload, which is now the normal one (ADR-019).
+  Measured peaks: 591 MiB for a hero session upload, 2.10 GiB for a 5.9M-row pool month, and
+  3.17 GiB for the worst single partition (2025-01, 20.5M rows). A stat query over the 54M-row
+  fact table uses 13–29 MiB. A full refresh is a different workload — it peaked at 7.30 GiB —
+  and is a deliberate two-knob operation:
+
+      CLICKHOUSE_MEM=15G docker compose up -d clickhouse
+      DBT_CH_MAX_MEMORY=12000000000 .venv-dbt/bin/dbt build (with the full refresh flag)
+
+  DBT_CH_MAX_MEMORY raises the ceiling for dbt's sessions only (see dbt/poker_dwh/profiles.yml),
+  so ad-hoc queries stay bounded by the values below even during a rebuild.
+
+  NOTE: an XML comment may not contain a double hyphen. Spell command flags out in prose here
+  rather than pasting them literally, or the server refuses to start with a SAXParseException.
+-->
+<clickhouse>
+    <profiles>
+        <default>
+            <!-- Ceiling for one query, ~69% of the 8G container. Must stay well below the
+                 container limit so a runaway query is rejected cleanly instead of Docker
+                 OOM-killing the server. Verified: the worst partition rebuild peaks at
+                 3.17 GiB, so this leaves real headroom rather than sitting on the edge. -->
+            <max_memory_usage>2500000000</max_memory_usage>
+
+            <!-- Spill to disk instead of failing. Held at half the query ceiling so the
+                 switch to the external algorithm happens while there is still room to do it. -->
+            <max_bytes_before_external_group_by>900000000</max_bytes_before_external_group_by>
+            <max_bytes_before_external_sort>900000000</max_bytes_before_external_sort>
+
+            <!-- ClickHouse builds the RIGHT side of a join in memory. The incremental models
+                 scope every join side to the dirty partitions, so the right side is now small
+                 — but keep the memory-bounded fallback chain for the full-refresh path and for
+                 any single month large enough to matter (202501 alone is 20.5M player rows).
+                 Order matters: the first algorithm that supports the join's shape wins. -->
+            <join_algorithm>grace_hash,partial_merge,hash</join_algorithm>
+            <max_bytes_in_join>400000000</max_bytes_in_join>
+
+            <!-- Number of grace-hash buckets. More buckets = smaller working set per pass. -->
+            <grace_hash_join_initial_buckets>16</grace_hash_join_initial_buckets>
+
+            <!-- **The biggest single memory lever on a small node.** ClickHouse defaults to one
+                 pipeline per core (16 on this laptop) and EACH holds its own join and aggregate
+                 state, so peak memory scales with core count, not just with data. The 8-way
+                 join in int_hand_player_flags needed 2.56 GiB at 16 threads, 2.27 GiB at 4, and fits
+                 the budget at 2.
+                 2 is also honest about the target: a cheap production node has 2-4 vCPU, so
+                 pinning this here means the laptop measures what production will actually do
+                 instead of flattering it with 16 cores. Queries get slower per-query and the
+                 box stops falling over, which is the correct trade for a batch rebuild. -->
+            <max_threads>2</max_threads>
+        </default>
+    </profiles>
+</clickhouse>

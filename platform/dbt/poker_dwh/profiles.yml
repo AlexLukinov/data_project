@@ -13,4 +13,24 @@ poker_dwh:
       schema: marts
       secure: False
       connect_timeout: 30
-      send_receive_timeout: 300
+      send_receive_timeout: 3600
+      custom_settings:
+        # Per-query ceiling for dbt's sessions only. Defaults to the same 5.5 GB the
+        # server-wide profile uses (infra/clickhouse/limits.xml), sized for the 8 GB container.
+        # Ample for every incremental case: measured peaks are 591 MiB for a hero session
+        # upload and 3.17 GiB for the worst single partition (2025-01, 20.5M rows).
+        #
+        # A --full-refresh is the exception: it peaked at 7.30 GiB rebuilding all 54.5M rows.
+        # Raise BOTH knobs for that, and only that:
+        #   CLICKHOUSE_MEM=15G docker compose up -d clickhouse
+        #   DBT_CH_MAX_MEMORY=12000000000 .venv-dbt/bin/dbt build --full-refresh ...
+        # Scoping the override to dbt keeps ad-hoc queries bounded even during a rebuild.
+        max_memory_usage: "{{ env_var('DBT_CH_MAX_MEMORY', '5500000000') | int }}"
+        # Spill to disk instead of dying, at half the ceiling so the switch to the external
+        # algorithm happens while there is still room to perform it.
+        max_bytes_before_external_group_by: 2500000000
+        max_bytes_before_external_sort: 2500000000
+        # grace_hash keeps the right-hand side of a join bounded by buckets on disk. The
+        # default hash join holds it entirely in RAM, which is what a 54M-row join cannot
+        # afford on the full-refresh path.
+        join_algorithm: "grace_hash"

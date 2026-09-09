@@ -6,105 +6,97 @@
 --   steal%          = raised WHEN FIRST IN from CO/BTN/SB
 -- So this model computes, once, the facts those questions need. Computing them here rather
 -- than in each stat is the difference between one join and twelve.
+--
+-- **"What happened before this player acted" is answered with per-hand ARRAYS.** Two earlier
+-- shapes both died at 9M hands:
+--
+--   1. Joining each seat's first decision to every raise in the hand and counting the earlier
+--      ones — quadratic in players x raises, 7GiB building the right-hand side.
+--   2. A running `countIf(...) over (partition by hand order by action_index)` — correct and
+--      linear, but ClickHouse must globally sort ~50M preflop actions to evaluate it, which
+--      exceeded the query memory ceiling.
+--
+-- Collapsing each hand to a handful of small arrays of action indices does the same work in
+-- one grouped pass: the aggregate output is one row per hand (9M), the arrays hold ~8 elements
+-- each, and `arrayCount` answers "how many of these happened before index N" directly. The
+-- expensive relation becomes the SMALL side of every join.
+
+{{
+  config(
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    engine='MergeTree()',
+    order_by='(user_id, hand_uid, seat)',
+    partition_by='toYYYYMMDD(played_at_utc)',
+  )
+}}
 
 with actions as (
 
-    select * from {{ ref('stg_actions') }} where street = 'preflop'
+    select * from {{ ref('stg_actions') }}
+    where street = 'preflop' and {{ dirty_partitions('played_at_utc') }}
 
 ),
 
--- Every preflop raise, numbered. raise_no = 1 is the opener, 2 is the 3-bettor, 3 the
--- 4-bettor. (Poker counts the big blind as the first "bet", hence the off-by-one in the
--- names — a 3-bet is the second raise.)
-raises as (
+-- One row per hand carrying the action indices that matter, as arrays.
+hand_arrays as (
 
     select
         user_id,
         hand_uid,
-        seat,
-        action_index,
-        row_number() over (partition by user_id, hand_uid order by action_index) as raise_no
+        max(played_at_utc)                                      as played_at_utc,
+        max(src_parsed_at)                                      as src_parsed_at,
+        groupArrayIf(action_index, action_type = 'raise')       as raise_idxs,
+        groupArrayIf(action_index, is_voluntary)                as voluntary_idxs,
+        groupArrayIf(action_index, action_type = 'call')        as call_idxs,
+        countIf(action_type = 'raise')                          as n_raises,
+        argMaxIf(seat, action_index, action_type = 'raise')     as aggressor_seat,
+        argMinIf(seat, action_index, action_type = 'raise')     as opener_seat,
+        -- The open size, needed to separate a 2.0x open from a 4x limp-raise. `amount_to` is
+        -- the total the raiser made it, which is how open sizes are always quoted.
+        argMinIf(amount_to, action_index, action_type = 'raise') as open_to,
+        -- Sentinel, not 0: with no raise every call must count as a LIMP, so the comparison
+        -- "did this call happen before the first raise" has to be true for all of them.
+        toUInt32(if(countIf(action_type = 'raise') = 0, 4294967295,
+                    minIf(action_index, action_type = 'raise'))) as first_raise_idx
     from actions
-    where action_type = 'raise'
+    group by user_id, hand_uid
 
 ),
 
--- Each seat's FIRST real decision preflop (posts don't count as decisions).
+-- Each seat's FIRST real decision preflop. Posts are not decisions.
 first_decision as (
 
     select
         user_id,
         hand_uid,
         seat,
-        min(action_index)                        as first_idx,
-        argMin(action_type, action_index)        as first_action,
-        max(action_type = 'raise')               as did_raise,
-        max(is_voluntary)                        as did_vpip,
-        argMax(action_type, action_index)        as last_action
+        max(played_at_utc)                             as played_at_utc,
+        max(src_parsed_at)                             as src_parsed_at,
+        min(action_index)                              as first_idx,
+        argMin(action_type, action_index)              as first_action,
+        max(action_type = 'raise')                     as did_raise,
+        max(is_voluntary)                              as did_vpip,
+        argMax(action_type, action_index)              as last_action
     from actions
     where is_decision
     group by user_id, hand_uid, seat
 
 ),
 
--- Hand-level preflop summary.
-hand_level as (
+-- The opener's POSITION, resolved to one row per hand. Written with the per-hand summary on
+-- the RIGHT of the join on purpose: ClickHouse builds the right side in memory, and
+-- `hand_arrays` is 9M rows where `stg_hand_players` is 54M.
+opener_position as (
 
     select
-        user_id,
-        hand_uid,
-        count()                                            as n_raises,
-        argMax(seat, raise_no)                             as aggressor_seat,
-        argMinIf(seat, raise_no, raise_no = 1)             as opener_seat
-    from raises
-    group by user_id, hand_uid
-
-),
-
--- How many raises, and how much voluntary money, went in BEFORE each seat first acted.
-facing as (
-
-    select
-        d.user_id,
-        d.hand_uid,
-        d.seat,
-        d.first_idx,
-        d.first_action,
-        d.last_action,
-        d.did_raise,
-        d.did_vpip,
-        countIf(r.action_index < d.first_idx)              as raises_before,
-        -- Which seat made the raise this player is facing (needed for steal detection).
-        argMinIf(r.seat, r.raise_no, r.raise_no = 1)       as first_raiser_seat
-    from first_decision as d
-    left join raises as r
-        on r.user_id = d.user_id and r.hand_uid = d.hand_uid
-    group by d.user_id, d.hand_uid, d.seat, d.first_idx, d.first_action,
-             d.last_action, d.did_raise, d.did_vpip
-
-),
-
--- Was anyone in voluntarily before this seat acted? "First in" is the steal precondition.
-prior_voluntary as (
-
-    select
-        d.user_id,
-        d.hand_uid,
-        d.seat,
-        countIf(a.is_voluntary and a.action_index < d.first_idx) as n_voluntary_before
-    from first_decision as d
-    left join actions as a
-        on a.user_id = d.user_id and a.hand_uid = d.hand_uid
-    group by d.user_id, d.hand_uid, d.seat
-
-),
-
--- Seat -> position, so the first raiser's POSITION can be resolved here rather than through a
--- chained join downstream (ClickHouse cannot key one JOIN off a table joined earlier in the
--- same statement).
-seat_positions as (
-
-    select user_id, hand_uid, seat, position from {{ ref('stg_hand_players') }}
+        p.user_id                                                   as user_id,
+        p.hand_uid                                                  as hand_uid,
+        p.position                                                  as opener_position
+    from {{ ref('stg_hand_players') }} as p
+    inner join hand_arrays as ha
+        on ha.user_id = p.user_id and ha.hand_uid = p.hand_uid and ha.opener_seat = p.seat
+    where {{ dirty_partitions('p.played_at_utc') }}
 
 )
 
@@ -115,26 +107,42 @@ seat_positions as (
 select
     f.user_id                                               as user_id,
     f.hand_uid                                              as hand_uid,
+    f.played_at_utc                                         as played_at_utc,
+    f.src_parsed_at                                         as src_parsed_at,
     f.seat                                                  as seat,
+    -- A player who was dealt in but never got to act (a walked big blind) has no row here at
+    -- all, and the LEFT JOIN in int_hand_player_flags would pad `n_voluntary_before` to 0 --
+    -- indistinguishable from "acted first in". Consumers gate first-in opportunities on this.
+    1                                                       as has_decision,
     f.first_idx                                             as first_idx,
     f.first_action                                          as first_action,
     f.last_action                                           as last_action,
     f.did_raise                                             as did_raise,
     f.did_vpip                                              as did_vpip,
-    f.raises_before                                         as raises_before,
-    f.first_raiser_seat                                     as first_raiser_seat,
-    coalesce(sp.position, '')                               as first_raiser_position,
-    coalesce(pv.n_voluntary_before, 0)                      as n_voluntary_before,
-    coalesce(hl.n_raises, 0)                                as n_preflop_raises,
-    hl.aggressor_seat                                       as aggressor_seat,
-    hl.opener_seat                                          as opener_seat,
+
+    -- ---- "before this seat acted", straight off the arrays --------------------------
+    toUInt8(arrayCount(x -> x < f.first_idx, ha.raise_idxs))        as raises_before,
+    toUInt8(arrayCount(x -> x < f.first_idx, ha.voluntary_idxs))    as n_voluntary_before,
+    -- A limp is a call made before ANY raise. A call after a raise is a cold call. Splitting
+    -- on the first raise index is exact, and avoids guessing from bet sizes.
+    toUInt8(arrayCount(
+        x -> x < f.first_idx and x < ha.first_raise_idx, ha.call_idxs
+    ))                                                              as n_limpers_before,
+    toUInt8(arrayCount(
+        x -> x < f.first_idx and x > ha.first_raise_idx, ha.call_idxs
+    ))                                                              as n_cold_callers_before,
+
+    coalesce(ha.opener_seat, 0)                             as first_raiser_seat,
+    coalesce(op.opener_position, '')                        as first_raiser_position,
+    coalesce(ha.n_raises, 0)                                as n_preflop_raises,
+    ha.aggressor_seat                                       as aggressor_seat,
+    ha.opener_seat                                          as opener_seat,
+    coalesce(ha.open_to, toDecimal64(0, 4))                 as open_to,
     -- The preflop aggressor is the LAST raiser: the player expected to continuation-bet.
-    cast(f.seat = hl.aggressor_seat as UInt8)               as is_preflop_aggressor,
-    cast(f.seat = hl.opener_seat as UInt8)                  as is_preflop_opener
-from facing as f
-left join prior_voluntary as pv
-    on pv.user_id = f.user_id and pv.hand_uid = f.hand_uid and pv.seat = f.seat
-left join hand_level as hl
-    on hl.user_id = f.user_id and hl.hand_uid = f.hand_uid
-left join seat_positions as sp
-    on sp.user_id = f.user_id and sp.hand_uid = f.hand_uid and sp.seat = f.first_raiser_seat
+    cast(f.seat = ha.aggressor_seat as UInt8)               as is_preflop_aggressor,
+    cast(f.seat = ha.opener_seat as UInt8)                  as is_preflop_opener
+from first_decision as f
+left join hand_arrays as ha
+    on ha.user_id = f.user_id and ha.hand_uid = f.hand_uid
+left join opener_position as op
+    on op.user_id = f.user_id and op.hand_uid = f.hand_uid

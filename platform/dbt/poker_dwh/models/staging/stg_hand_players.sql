@@ -2,6 +2,7 @@
 
 select
     user_id,
+    dataset,
     hand_uid,
     played_at_utc,
     toDate(played_at_utc)   as played_date,
@@ -27,5 +28,7 @@ select
     saw_turn,
     saw_river,
     went_to_showdown,
-    won_hand
+    won_hand,
+    -- Ingestion watermark -- see macros/incremental.sql.
+    parsed_at               as src_parsed_at
 from {{ source('core', 'hand_players') }} final

@@ -1,0 +1,437 @@
+section,stat,segment,pool_freq_pct,n_opportunities,k_actions,low_n_flag,note
+A. Preflop,VPIP,UTG,19.188,9073994,1741108,,
+A. Preflop,VPIP,HJ,19.862,9073994,1802303,,
+A. Preflop,VPIP,CO,22.011,9073994,1997275,,
+A. Preflop,VPIP,BU,26.929,9073996,2443511,,
+A. Preflop,VPIP,SB,23.591,9073996,2140615,,
+A. Preflop,VPIP,BB,25.363,9073996,2301422,,
+A. Preflop,PFR,UTG,18.382,9073994,1668007,,
+A. Preflop,PFR,HJ,18.179,9073994,1649564,,
+A. Preflop,PFR,CO,19.25,9073994,1746734,,
+A. Preflop,PFR,BU,22.168,9073996,2011514,,
+A. Preflop,PFR,SB,16.875,9073996,1531219,,
+A. Preflop,PFR,BB,5.706,9073996,517772,,
+A. Preflop,RFI (raise first in),UTG,18.351,9073994,1665149,,
+A. Preflop,RFI (raise first in),HJ,20.765,7332886,1522659,,
+A. Preflop,RFI (raise first in),CO,25.696,5755373,1478910,,
+A. Preflop,RFI (raise first in),BU,37.488,4236356,1588118,,
+A. Preflop,RFI (raise first in),SB,39.136,2617778,1024488,,
+A. Preflop,Open-limp%,UTG,0.837,9073994,75959,,
+A. Preflop,Open-limp%,HJ,0.748,7332886,54854,,
+A. Preflop,Open-limp%,CO,0.697,5755373,40109,,
+A. Preflop,Open-limp%,BU,0.719,4236356,30460,,
+A. Preflop,Open-limp%,SB,3.537,2617778,92587,,
+A. Preflop,Cold-call%,HJ,5.709,1665149,95059,,
+A. Preflop,Cold-call%,CO,6.375,3199092,203951,,
+A. Preflop,Cold-call%,BU,8.32,4698367,390883,,
+A. Preflop,3bet%,HJ,6.811,1665149,113412,,
+A. Preflop,3bet%,CO,7.879,3085680,243123,,
+A. Preflop,3bet%,BU,8.886,4341832,385806,,
+A. Preflop,3bet%,SB,8.326,5571036,463832,,
+A. Preflop,3bet%,BB,7.225,6152615,444534,,
+A. Preflop,Fold to 3bet (as opener),UTG,46.204,456579,210960,,
+A. Preflop,Fold to 3bet (as opener),HJ,49.342,397633,196199,,
+A. Preflop,Fold to 3bet (as opener),CO,54.526,354423,193253,,
+A. Preflop,Fold to 3bet (as opener),BU,62.884,314842,197984,,
+A. Preflop,Fold to 3bet (as opener),SB,58.219,131479,76546,,
+A. Preflop,Fold to 3bet (as opener),BB,42.732,1940,829,,
+A. Preflop,Call 3bet (as opener),UTG,42.436,456579,193752,,
+A. Preflop,Call 3bet (as opener),HJ,39.655,397633,157681,,
+A. Preflop,Call 3bet (as opener),CO,35.158,354423,124608,,
+A. Preflop,Call 3bet (as opener),BU,29.903,314842,94146,,
+A. Preflop,Call 3bet (as opener),SB,31.235,131479,41067,,
+A. Preflop,Call 3bet (as opener),BB,45.722,1940,887,,
+A. Preflop,Squeeze%,CO,6.453,95059,6134,,
+A. Preflop,Squeeze%,BU,7.08,282498,20000,,
+A. Preflop,Squeeze%,SB,6.557,613097,40202,,
+A. Preflop,Squeeze%,BB,6.262,983778,61600,,
+A. Preflop,4bet%,CO,2.335,113412,2648,,
+A. Preflop,4bet%,BU,2.648,353887,9372,,
+A. Preflop,4bet%,SB,2.746,730321,20058,,
+A. Preflop,4bet%,BB,2.797,1174095,32845,,
+A. Preflop,Fold to 4bet (as 3bettor),HJ,48.683,24442,11899,,
+A. Preflop,Fold to 4bet (as 3bettor),CO,51.118,51070,26106,,
+A. Preflop,Fold to 4bet (as 3bettor),BU,52.598,77075,40540,,
+A. Preflop,Fold to 4bet (as 3bettor),SB,51.183,60032,30726,,
+A. Preflop,Fold to 4bet (as 3bettor),BB,43.129,46396,20010,,
+A. Preflop,Call 4bet (as 3bettor),HJ,38.246,24442,9348,,
+A. Preflop,Call 4bet (as 3bettor),CO,36.763,51070,18775,,
+A. Preflop,Call 4bet (as 3bettor),BU,36.135,77075,27851,,
+A. Preflop,Call 4bet (as 3bettor),SB,32.604,60032,19573,,
+A. Preflop,Call 4bet (as 3bettor),BB,38.447,46396,17838,,
+A. Preflop,Limp-fold%,UTG,29.983,42671,12794,,denom = limped AND faced a raise behind
+A. Preflop,Limp-fold%,HJ,29.923,27083,8104,,denom = limped AND faced a raise behind
+A. Preflop,Limp-fold%,CO,29.931,16735,5009,,denom = limped AND faced a raise behind
+A. Preflop,Limp-fold%,BU,31.503,8977,2828,,denom = limped AND faced a raise behind
+A. Preflop,Limp-fold%,SB,51.395,23843,12254,,denom = limped AND faced a raise behind
+A. Preflop,Limp-call%,UTG,63.877,42671,27257,,denom = limped AND faced a raise behind
+A. Preflop,Limp-call%,HJ,65.262,27083,17675,,denom = limped AND faced a raise behind
+A. Preflop,Limp-call%,CO,66.226,16735,11083,,denom = limped AND faced a raise behind
+A. Preflop,Limp-call%,BU,65.2,8977,5853,,denom = limped AND faced a raise behind
+A. Preflop,Limp-call%,SB,44.734,23843,10666,,denom = limped AND faced a raise behind
+A. Preflop,Limp-raise%,UTG,6.14,42671,2620,,denom = limped AND faced a raise behind
+A. Preflop,Limp-raise%,HJ,4.815,27083,1304,,denom = limped AND faced a raise behind
+A. Preflop,Limp-raise%,CO,3.842,16735,643,,denom = limped AND faced a raise behind
+A. Preflop,Limp-raise%,BU,3.297,8977,296,,denom = limped AND faced a raise behind
+A. Preflop,Limp-raise%,SB,3.871,23843,923,,denom = limped AND faced a raise behind
+A. Preflop,Fold to steal,SB vs BTN,80.936,1615010,1307130,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Fold to steal,BB vs BTN,62.721,1428468,895946,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Fold to steal,SB vs CO,83.167,1336028,1111133,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Fold to steal,BB vs CO,65.584,1220547,800481,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Fold to steal,BB vs SB,58.091,1045411,607291,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Call vs steal,SB vs BTN,7.513,1615010,121338,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Call vs steal,BB vs BTN,28.4,1428468,405692,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Call vs steal,SB vs CO,8.189,1336028,109414,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Call vs steal,BB vs CO,28.306,1220547,345484,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,Call vs steal,BB vs SB,29.433,1045411,307697,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet vs steal,SB vs BTN,11.551,1615010,186542,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet vs steal,BB vs BTN,8.879,1428468,126830,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet vs steal,SB vs CO,8.644,1336028,115481,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet vs steal,BB vs CO,6.111,1220547,74582,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet vs steal,BB vs SB,12.476,1045411,130423,,"denom = in blind, faced a CO/BU/SB open"
+A. Preflop,3bet% by relative position,OOP vs opener,7.285,10678240,777943,,IP/OOP from postflop acting order vs the opener
+A. Preflop,3bet% by relative position,IP vs opener,8.609,10138072,872764,,IP/OOP from postflop acting order vs the opener
+A. Preflop,3bet% blinds vs late,blinds vs BTN,10.297,3043478,313372,,
+A. Preflop,3bet% blinds vs late,blinds vs CO,7.434,2556575,190063,,
+A. Preflop,3bet% blinds vs late,non-blind vs CO,10.888,1499275,163247,,
+A. Preflop,3bet% blinds vs late,blinds vs SB,12.476,1045411,130423,,
+B. Flop,C-bet flop (as PFR),srp · HU,56.475,2118130,1196223,,
+B. Flop,C-bet flop (as PFR),3bet · HU,70.776,592155,419106,,
+B. Flop,C-bet flop (as PFR),srp · multiway,36.146,340397,123041,,
+B. Flop,C-bet flop (as PFR),4bet · HU,61.754,89121,55036,,
+B. Flop,C-bet flop (as PFR),3bet · multiway,49.362,50071,24716,,
+B. Flop,C-bet flop (as PFR),5bet_plus · HU,4.836,20121,973,,
+B. Flop,C-bet flop (as PFR),4bet · multiway,38.165,2780,1061,,
+B. Flop,C-bet flop (as PFR),5bet_plus · multiway,1.957,1022,20,,
+B. Flop,C-bet flop — size mix,small,100.0,949944,949944,,share of c-bets in each size bucket (freq column = 100% by construction; read N)
+B. Flop,C-bet flop — size mix,mid,100.0,585259,585259,,share of c-bets in each size bucket (freq column = 100% by construction; read N)
+B. Flop,C-bet flop — size mix,large,100.0,234683,234683,,share of c-bets in each size bucket (freq column = 100% by construction; read N)
+B. Flop,C-bet flop — size mix,pot,100.0,30791,30791,,share of c-bets in each size bucket (freq column = 100% by construction; read N)
+B. Flop,C-bet flop — size mix,overbet,100.0,19499,19499,,share of c-bets in each size bucket (freq column = 100% by construction; read N)
+B. Flop,Fold to flop c-bet,srp · HU · OOP,43.609,885354,386090,,
+B. Flop,Fold to flop c-bet,srp · HU · IP,36.576,310869,113703,,
+B. Flop,Fold to flop c-bet,3bet · HU · OOP,38.447,223654,85988,,
+B. Flop,Fold to flop c-bet,3bet · HU · IP,35.517,195452,69418,,
+B. Flop,Fold to flop c-bet,srp · MW · OOP,60.443,177815,107477,,
+B. Flop,Fold to flop c-bet,srp · MW · IP,52.736,77594,40920,,
+B. Flop,Fold to flop c-bet,3bet · MW · OOP,58.255,37269,21711,,
+B. Flop,Fold to flop c-bet,4bet · HU · IP,28.832,36147,10422,,
+B. Flop,Fold to flop c-bet,4bet · HU · OOP,31.892,18889,6024,,
+B. Flop,Fold to flop c-bet,3bet · MW · IP,56.18,12928,7263,,
+B. Flop,Fold to flop c-bet,4bet · MW · OOP,54.574,1257,686,,
+B. Flop,Fold to flop c-bet,4bet · MW · IP,48.183,853,411,,
+B. Flop,Fold to flop c-bet,5bet_plus · HU · OOP,31.629,528,167,,
+B. Flop,Fold to flop c-bet,5bet_plus · HU · IP,28.09,445,125,LOW-N — don't trust,
+B. Flop,Fold to flop c-bet,5bet_plus · MW · OOP,45.0,20,9,LOW-N — don't trust,
+B. Flop,Fold to flop c-bet,5bet_plus · MW · IP,17.647,17,3,LOW-N — don't trust,
+B. Flop,Fold to flop c-bet — by texture,two-tone/wet · OOP,42.896,390579,167542,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,dry-high · OOP,45.047,162291,73108,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,paired · OOP,47.326,151036,71479,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,two-tone/wet · IP,36.365,136902,49784,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,other · OOP,39.513,96111,37976,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,dry-high · IP,38.053,57891,22029,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,paired · IP,39.247,52987,20796,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,low-connected · OOP,37.561,43756,16435,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,monotone · OOP,47.017,41581,19550,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,other · IP,31.765,33055,10500,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,low-connected · IP,30.078,16241,4885,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by texture,monotone · IP,41.391,13793,5709,,"SRP heads-up only, to keep the texture split clean"
+B. Flop,Fold to flop c-bet — by size faced,small,39.239,997979,391600,,
+B. Flop,Fold to flop c-bet — by size faced,mid,54.317,195392,106132,,
+B. Flop,Fold to flop c-bet — by size faced,large,68.923,2172,1497,,
+B. Flop,Fold to flop c-bet — by size faced,pot,82.941,680,564,,
+B. Flop,Raise flop c-bet,srp · HU,9.868,1196223,118046,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,3bet · HU,9.418,419106,39471,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,srp · multiway,5.858,255409,14963,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,4bet · HU,12.806,55036,7048,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,3bet · multiway,7.52,50197,3775,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,4bet · multiway,10.616,2110,224,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,5bet_plus · HU,14.183,973,138,,same denom as fold-to-c-bet
+B. Flop,Raise flop c-bet,5bet_plus · multiway,8.108,37,3,LOW-N — don't trust,same denom as fold-to-c-bet
+B. Flop,"Float-fold (call flop c-bet, fold turn)",srp · HU,21.741,584924,127168,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",3bet · HU,22.242,227909,50691,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",srp · multiway,24.982,93387,23330,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",4bet · HU,20.392,31969,6519,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",3bet · multiway,22.2,17851,3963,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",4bet · multiway,18.459,753,139,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",5bet_plus · HU,12.062,514,62,,
+B. Flop,"Float-fold (call flop c-bet, fold turn)",5bet_plus · multiway,23.077,13,3,LOW-N — don't trust,
+B. Flop,Donk-bet flop,srp · HU,5.277,1471075,77634,,
+B. Flop,Donk-bet flop,srp · multiway,7.675,492974,37838,,
+B. Flop,Donk-bet flop,3bet · HU,3.993,317871,12693,,
+B. Flop,Donk-bet flop,limped · HU,28.386,144734,41084,,
+B. Flop,Donk-bet flop,3bet · multiway,8.175,76964,6292,,
+B. Flop,Donk-bet flop,limped · multiway,13.32,67341,8970,,
+B. Flop,Donk-bet flop,4bet · HU,4.141,41999,1739,,
+B. Flop,Donk-bet flop,5bet_plus · HU,0.445,19530,87,,
+B. Flop,Donk-bet flop,4bet · multiway,10.169,3894,396,,
+B. Flop,Donk-bet flop,5bet_plus · multiway,2.555,1996,51,,
+B. Flop,Fold to donk (as PFR),srp · HU,42.234,221543,93567,,
+B. Flop,Fold to donk (as PFR),srp · multiway,61.623,84652,52165,,
+B. Flop,Fold to donk (as PFR),3bet · HU,33.54,44788,15022,,
+B. Flop,Fold to donk (as PFR),3bet · multiway,56.813,9885,5616,,
+B. Flop,Fold to donk (as PFR),4bet · HU,29.843,6427,1918,,
+B. Flop,Fold to donk (as PFR),4bet · multiway,44.737,608,272,,
+B. Flop,Fold to donk (as PFR),5bet_plus · HU,11.111,144,16,LOW-N — don't trust,
+B. Flop,Fold to donk (as PFR),5bet_plus · multiway,7.407,54,4,LOW-N — don't trust,
+B. Flop,Flop check-raise,srp · HU,9.675,1029263,99578,,
+B. Flop,Flop check-raise,srp · multiway,5.208,286364,14914,,
+B. Flop,Flop check-raise,3bet · HU,10.4,255749,26598,,
+B. Flop,Flop check-raise,limped · HU,3.753,43405,1629,,
+B. Flop,Flop check-raise,3bet · multiway,7.393,40876,3022,,
+B. Flop,Flop check-raise,limped · multiway,3.141,26263,825,,
+B. Flop,Flop check-raise,4bet · HU,15.426,23577,3637,,
+B. Flop,Flop check-raise,4bet · multiway,10.867,1500,163,,
+B. Flop,Flop check-raise,5bet_plus · HU,17.949,585,105,,
+B. Flop,Flop check-raise,5bet_plus · multiway,5.66,53,3,LOW-N — don't trust,
+B. Flop,Fold to flop raise (after betting),srp · HU,44.286,142688,63191,,
+B. Flop,Fold to flop raise (after betting),3bet · HU,41.567,46469,19316,,
+B. Flop,Fold to flop raise (after betting),srp · multiway,45.336,25075,11368,,
+B. Flop,Fold to flop raise (after betting),4bet · HU,32.863,8292,2725,,
+B. Flop,Fold to flop raise (after betting),3bet · multiway,39.392,5364,2113,,
+B. Flop,Fold to flop raise (after betting),limped · HU,41.748,3605,1505,,
+B. Flop,Fold to flop raise (after betting),limped · multiway,40.375,1761,711,,
+B. Flop,Fold to flop raise (after betting),4bet · multiway,19.303,373,72,LOW-N — don't trust,
+B. Flop,Fold to flop raise (after betting),5bet_plus · HU,17.47,166,29,LOW-N — don't trust,
+B. Flop,Fold to flop raise (after betting),5bet_plus · multiway,0.0,7,0,LOW-N — don't trust,
+C. Turn,Second barrel (turn c-bet),srp · HU,45.339,642997,291529,,
+C. Turn,Second barrel (turn c-bet),3bet · HU,47.427,245393,116382,,
+C. Turn,Second barrel (turn c-bet),srp · multiway,45.977,80158,36854,,
+C. Turn,Second barrel (turn c-bet),4bet · HU,47.826,35173,16822,,
+C. Turn,Second barrel (turn c-bet),3bet · multiway,43.25,15748,6811,,
+C. Turn,Second barrel (turn c-bet),4bet · multiway,38.03,731,278,,
+C. Turn,Second barrel (turn c-bet),5bet_plus · HU,34.934,604,211,,
+C. Turn,Second barrel (turn c-bet),5bet_plus · multiway,18.75,16,3,LOW-N — don't trust,
+C. Turn,Second barrel — size mix,large,100.0,195317,195317,,"read N, not the frequency"
+C. Turn,Second barrel — size mix,mid,100.0,129360,129360,,"read N, not the frequency"
+C. Turn,Second barrel — size mix,small,100.0,71116,71116,,"read N, not the frequency"
+C. Turn,Second barrel — size mix,overbet,100.0,42268,42268,,"read N, not the frequency"
+C. Turn,Second barrel — size mix,pot,100.0,30829,30829,,"read N, not the frequency"
+C. Turn,Fold to turn c-bet,srp · HU · OOP,50.219,331159,166305,,
+C. Turn,Fold to turn c-bet,srp · HU · IP,45.233,175472,79372,,
+C. Turn,Fold to turn c-bet,3bet · HU · IP,42.016,83935,35266,,
+C. Turn,Fold to turn c-bet,3bet · HU · OOP,47.502,78053,37077,,
+C. Turn,Fold to turn c-bet,srp · MW · OOP,61.485,65826,40473,,
+C. Turn,Fold to turn c-bet,srp · MW · IP,54.538,34191,18647,,
+C. Turn,Fold to turn c-bet,4bet · HU · IP,37.269,14967,5578,,
+C. Turn,Fold to turn c-bet,3bet · MW · OOP,54.266,10701,5807,,
+C. Turn,Fold to turn c-bet,4bet · HU · OOP,40.096,6639,2662,,
+C. Turn,Fold to turn c-bet,3bet · MW · IP,52.054,4309,2243,,
+C. Turn,Fold to turn c-bet,4bet · MW · OOP,41.88,351,147,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet,4bet · MW · IP,47.186,231,109,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet,5bet_plus · HU · OOP,26.351,148,39,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet,5bet_plus · HU · IP,32.847,137,45,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet,5bet_plus · MW · OOP,44.444,9,4,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet,5bet_plus · MW · IP,80.0,5,4,LOW-N — don't trust,
+C. Turn,Fold to turn c-bet — by size faced,small,42.945,404286,173622,,
+C. Turn,Fold to turn c-bet — by size faced,mid,54.243,385146,208913,,
+C. Turn,Fold to turn c-bet — by size faced,large,67.286,15822,10646,,
+C. Turn,Fold to turn c-bet — by size faced,pot,68.542,871,597,,
+C. Turn,Fold to turn c-bet — by size faced,overbet,0.0,8,0,LOW-N — don't trust,
+C. Turn,Turn probe (non-PFR bets after flop checked through),srp · HU,36.381,700364,254798,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),srp · multiway,23.888,277192,66215,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),3bet · HU,34.363,128261,44074,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),limped · HU,26.659,120490,32121,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),limped · multiway,19.345,39820,7703,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),3bet · multiway,26.42,31541,8333,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),4bet · HU,14.169,27658,3919,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),5bet_plus · HU,0.4,19004,76,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),4bet · multiway,12.376,2214,274,,
+C. Turn,Turn probe (non-PFR bets after flop checked through),5bet_plus · multiway,1.107,1897,21,,
+C. Turn,Fold to turn probe (as PFR who checked),srp · HU,52.342,254798,133366,,
+C. Turn,Fold to turn probe (as PFR who checked),srp · multiway,69.772,66210,46196,,
+C. Turn,Fold to turn probe (as PFR who checked),3bet · HU,45.333,44074,19980,,
+C. Turn,Fold to turn probe (as PFR who checked),3bet · multiway,67.503,8333,5625,,
+C. Turn,Fold to turn probe (as PFR who checked),4bet · HU,40.572,3919,1590,,
+C. Turn,Fold to turn probe (as PFR who checked),4bet · multiway,54.015,274,148,LOW-N — don't trust,
+C. Turn,Fold to turn probe (as PFR who checked),5bet_plus · HU,27.632,76,21,LOW-N — don't trust,
+C. Turn,Fold to turn probe (as PFR who checked),5bet_plus · multiway,13.636,22,3,LOW-N — don't trust,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",srp · HU,26.309,817598,215102,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",srp · multiway,17.51,163173,28572,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",3bet · HU,29.482,154693,45606,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",4bet · HU,15.194,31487,4784,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",3bet · multiway,18.899,19292,3646,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",5bet_plus · HU,0.387,19107,74,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",4bet · multiway,8.968,1405,126,,
+C. Turn,"Delayed c-bet (PFR checks flop, bets turn)",5bet_plus · multiway,0.503,994,5,,
+C. Turn,Fold to delayed c-bet,srp · HU,55.108,199635,110015,,
+C. Turn,Fold to delayed c-bet,srp · multiway,70.558,50869,35892,,
+C. Turn,Fold to delayed c-bet,3bet · HU,48.85,42571,20796,,
+C. Turn,Fold to delayed c-bet,3bet · multiway,66.907,6388,4274,,
+C. Turn,Fold to delayed c-bet,4bet · HU,40.96,4519,1851,,
+C. Turn,Fold to delayed c-bet,4bet · multiway,57.205,229,131,LOW-N — don't trust,
+C. Turn,Fold to delayed c-bet,5bet_plus · HU,33.824,68,23,LOW-N — don't trust,
+C. Turn,Fold to delayed c-bet,5bet_plus · multiway,50.0,10,5,LOW-N — don't trust,
+C. Turn,Turn check-raise,srp · HU,7.574,457448,34649,,
+C. Turn,Turn check-raise,srp · multiway,5.816,133412,7759,,
+C. Turn,Turn check-raise,3bet · HU,10.929,125660,13734,,
+C. Turn,Turn check-raise,limped · HU,3.679,23242,855,,
+C. Turn,Turn check-raise,3bet · multiway,8.475,16731,1418,,
+C. Turn,Turn check-raise,4bet · HU,13.597,14091,1916,,
+C. Turn,Turn check-raise,limped · multiway,3.95,11771,465,,
+C. Turn,Turn check-raise,4bet · multiway,7.387,555,41,,
+C. Turn,Turn check-raise,5bet_plus · HU,13.089,191,25,LOW-N — don't trust,
+C. Turn,Turn check-raise,5bet_plus · multiway,15.0,20,3,LOW-N — don't trust,
+C. Turn,Fold to turn raise (after betting),srp · HU,46.783,71233,33325,,
+C. Turn,Fold to turn raise (after betting),3bet · HU,40.671,26449,10757,,
+C. Turn,Fold to turn raise (after betting),srp · multiway,44.567,17578,7834,,
+C. Turn,Fold to turn raise (after betting),4bet · HU,33.557,3877,1301,,
+C. Turn,Fold to turn raise (after betting),3bet · multiway,35.753,2990,1069,,
+C. Turn,Fold to turn raise (after betting),limped · HU,43.859,2410,1057,,
+C. Turn,Fold to turn raise (after betting),limped · multiway,43.038,1264,544,,
+C. Turn,Fold to turn raise (after betting),4bet · multiway,35.088,114,40,LOW-N — don't trust,
+C. Turn,Fold to turn raise (after betting),5bet_plus · HU,26.087,46,12,LOW-N — don't trust,
+C. Turn,Fold to turn raise (after betting),5bet_plus · multiway,0.0,6,0,LOW-N — don't trust,
+D. River,Triple barrel (river c-bet),srp · HU,40.383,240233,97013,,
+D. River,Triple barrel (river c-bet),3bet · HU,41.612,80951,33685,,
+D. River,Triple barrel (river c-bet),srp · multiway,40.453,34546,13975,,
+D. River,Triple barrel (river c-bet),4bet · HU,36.322,11723,4258,,
+D. River,Triple barrel (river c-bet),3bet · multiway,35.761,5699,2038,,
+D. River,Triple barrel (river c-bet),4bet · multiway,25.63,238,61,LOW-N — don't trust,
+D. River,Triple barrel (river c-bet),5bet_plus · HU,30.0,170,51,LOW-N — don't trust,
+D. River,Triple barrel (river c-bet),5bet_plus · multiway,60.0,5,3,LOW-N — don't trust,
+D. River,Triple barrel — size mix,large,100.0,48840,48840,,"read N, not the frequency"
+D. River,Triple barrel — size mix,mid,100.0,30198,30198,,"read N, not the frequency"
+D. River,Triple barrel — size mix,overbet,100.0,27711,27711,,"read N, not the frequency"
+D. River,Triple barrel — size mix,small,100.0,25566,25566,,"read N, not the frequency"
+D. River,Triple barrel — size mix,pot,100.0,18769,18769,,"read N, not the frequency"
+D. River,Fold to river c-bet,srp · HU · OOP,61.405,153563,94295,,
+D. River,Fold to river c-bet,srp · HU · IP,54.206,94596,51277,,
+D. River,Fold to river c-bet,3bet · HU · IP,49.043,41225,20218,,
+D. River,Fold to river c-bet,3bet · HU · OOP,56.634,32622,18475,,
+D. River,Fold to river c-bet,srp · MW · OOP,68.257,28567,19499,,
+D. River,Fold to river c-bet,srp · MW · IP,58.397,17119,9997,,
+D. River,Fold to river c-bet,4bet · HU · IP,45.749,6798,3110,,
+D. River,Fold to river c-bet,3bet · MW · OOP,60.457,4112,2486,,
+D. River,Fold to river c-bet,4bet · HU · OOP,55.717,2344,1306,,
+D. River,Fold to river c-bet,3bet · MW · IP,54.592,1742,951,,
+D. River,Fold to river c-bet,4bet · MW · OOP,50.0,106,53,LOW-N — don't trust,
+D. River,Fold to river c-bet,4bet · MW · IP,55.172,87,48,LOW-N — don't trust,
+D. River,Fold to river c-bet,5bet_plus · HU · IP,36.508,63,23,LOW-N — don't trust,
+D. River,Fold to river c-bet,5bet_plus · HU · OOP,51.667,60,31,LOW-N — don't trust,
+D. River,Fold to river c-bet,5bet_plus · MW · OOP,20.0,5,1,LOW-N — don't trust,
+D. River,Fold to river c-bet,5bet_plus · MW · IP,50.0,2,1,LOW-N — don't trust,
+D. River,Fold to river bet — by size faced,mid,62.26,194715,121230,,'overbet' = >110% pot
+D. River,Fold to river bet — by size faced,small,50.387,164024,82646,,'overbet' = >110% pot
+D. River,Fold to river bet — by size faced,large,73.16,21852,15987,,'overbet' = >110% pot
+D. River,Fold to river bet — by size faced,pot,79.072,2413,1908,,'overbet' = >110% pot
+D. River,Fold to river bet — by size faced,overbet,0.0,7,0,LOW-N — don't trust,'overbet' = >110% pot
+D. River,River probe (turn checked through),srp · HU,32.976,546281,180139,,
+D. River,River probe (turn checked through),srp · multiway,21.987,156671,34448,,
+D. River,River probe (turn checked through),3bet · HU,30.702,143520,44064,,
+D. River,River probe (turn checked through),limped · HU,22.545,72736,16398,,
+D. River,River probe (turn checked through),4bet · HU,12.057,34046,4105,,
+D. River,River probe (turn checked through),limped · multiway,18.328,22375,4101,,
+D. River,River probe (turn checked through),3bet · multiway,20.938,20527,4298,,
+D. River,River probe (turn checked through),5bet_plus · HU,0.233,19303,45,,
+D. River,River probe (turn checked through),4bet · multiway,5.098,2393,122,,
+D. River,River probe (turn checked through),5bet_plus · multiway,0.31,1938,6,,
+D. River,Fold to river probe (as PFR),srp · HU,63.859,180139,115035,,
+D. River,Fold to river probe (as PFR),3bet · HU,59.711,44064,26311,,
+D. River,Fold to river probe (as PFR),srp · multiway,71.78,29291,21025,,
+D. River,Fold to river probe (as PFR),4bet · HU,57.247,4105,2350,,
+D. River,Fold to river probe (as PFR),3bet · multiway,66.297,3881,2573,,
+D. River,Fold to river probe (as PFR),4bet · multiway,50.877,114,58,LOW-N — don't trust,
+D. River,Fold to river probe (as PFR),5bet_plus · HU,33.333,45,15,LOW-N — don't trust,
+D. River,Fold to river probe (as PFR),5bet_plus · multiway,0.0,7,0,LOW-N — don't trust,
+D. River,River raise (facing a bet),srp · HU,7.647,562648,43023,,
+D. River,River raise (facing a bet),3bet · HU,7.688,152572,11729,,
+D. River,River raise (facing a bet),srp · multiway,7.069,144590,10221,,
+D. River,River raise (facing a bet),limped · HU,6.554,27005,1770,,
+D. River,River raise (facing a bet),3bet · multiway,6.609,17566,1161,,
+D. River,River raise (facing a bet),4bet · HU,6.12,16732,1024,,
+D. River,River raise (facing a bet),limped · multiway,6.474,12527,811,,
+D. River,River raise (facing a bet),4bet · multiway,6.604,530,35,,
+D. River,River raise (facing a bet),5bet_plus · HU,9.005,211,19,LOW-N — don't trust,
+D. River,River raise (facing a bet),5bet_plus · multiway,4.348,23,1,LOW-N — don't trust,
+D. River,Fold to river raise (after betting),srp · HU,54.957,43023,23644,,
+D. River,Fold to river raise (after betting),3bet · HU,49.885,11729,5851,,
+D. River,Fold to river raise (after betting),srp · multiway,51.042,10176,5194,,
+D. River,Fold to river raise (after betting),limped · HU,52.26,1770,925,,
+D. River,Fold to river raise (after betting),3bet · multiway,46.494,1155,537,,
+D. River,Fold to river raise (after betting),4bet · HU,44.336,1024,454,,
+D. River,Fold to river raise (after betting),limped · multiway,46.344,807,374,,
+D. River,Fold to river raise (after betting),4bet · multiway,28.571,35,10,LOW-N — don't trust,
+D. River,Fold to river raise (after betting),5bet_plus · HU,36.842,19,7,LOW-N — don't trust,
+D. River,Fold to river raise (after betting),5bet_plus · multiway,0.0,1,0,LOW-N — don't trust,
+D. River,"Bet-call river (after betting, facing raise)",srp · HU,39.549,43023,17015,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",3bet · HU,46.475,11729,5451,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",srp · multiway,42.699,10176,4345,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",limped · HU,41.977,1770,743,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",3bet · multiway,48.312,1155,558,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",4bet · HU,54.199,1024,555,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",limped · multiway,45.973,807,371,,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",4bet · multiway,57.143,35,20,LOW-N — don't trust,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",5bet_plus · HU,52.632,19,10,LOW-N — don't trust,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,"Bet-call river (after betting, facing raise)",5bet_plus · multiway,100.0,1,1,LOW-N — don't trust,same denom as fold-to-river-raise; the two are the fold/call split
+D. River,Check-fold river,srp · HU,61.092,222729,136070,,denom = checked river then faced a bet
+D. River,Check-fold river,srp · multiway,67.891,60002,40736,,denom = checked river then faced a bet
+D. River,Check-fold river,3bet · HU,56.657,59301,33598,,denom = checked river then faced a bet
+D. River,Check-fold river,limped · HU,73.319,11911,8733,,denom = checked river then faced a bet
+D. River,Check-fold river,3bet · multiway,64.534,6722,4338,,denom = checked river then faced a bet
+D. River,Check-fold river,4bet · HU,56.96,6078,3462,,denom = checked river then faced a bet
+D. River,Check-fold river,limped · multiway,73.343,5672,4160,,denom = checked river then faced a bet
+D. River,Check-fold river,4bet · multiway,67.553,188,127,LOW-N — don't trust,denom = checked river then faced a bet
+D. River,Check-fold river,5bet_plus · HU,50.588,85,43,LOW-N — don't trust,denom = checked river then faced a bet
+D. River,Check-fold river,5bet_plus · multiway,20.0,5,1,LOW-N — don't trust,denom = checked river then faced a bet
+D. River,Check-call river,srp · HU,34.349,222729,76505,,denom = checked river then faced a bet
+D. River,Check-call river,srp · multiway,28.326,60002,16996,,denom = checked river then faced a bet
+D. River,Check-call river,3bet · HU,38.895,59301,23065,,denom = checked river then faced a bet
+D. River,Check-call river,limped · HU,24.188,11911,2881,,denom = checked river then faced a bet
+D. River,Check-call river,3bet · multiway,32.49,6722,2184,,denom = checked river then faced a bet
+D. River,Check-call river,4bet · HU,40.918,6078,2487,,denom = checked river then faced a bet
+D. River,Check-call river,limped · multiway,24.171,5672,1371,,denom = checked river then faced a bet
+D. River,Check-call river,4bet · multiway,30.319,188,57,LOW-N — don't trust,denom = checked river then faced a bet
+D. River,Check-call river,5bet_plus · HU,48.235,85,41,LOW-N — don't trust,denom = checked river then faced a bet
+D. River,Check-call river,5bet_plus · multiway,60.0,5,3,LOW-N — don't trust,denom = checked river then faced a bet
+E. Summary,WWSF,all,47.591,7243924,3447491,,
+E. Summary,WWSF by position,UTG,51.37,881795,452982,,
+E. Summary,WWSF by position,HJ,51.66,898403,464114,,
+E. Summary,WWSF by position,CO,51.768,974472,504463,,
+E. Summary,WWSF by position,BU,51.391,1177055,604901,,
+E. Summary,WWSF by position,SB,48.868,1138769,556493,,
+E. Summary,WWSF by position,BB,39.778,2173430,864538,,
+E. Summary,WTSD,all,30.343,7243924,2198053,,
+E. Summary,WTSD by position,UTG,31.525,881795,277985,,
+E. Summary,WTSD by position,HJ,31.355,898403,281697,,
+E. Summary,WTSD by position,CO,31.012,974472,302205,,
+E. Summary,WTSD by position,BU,30.444,1177055,358348,,
+E. Summary,WTSD by position,SB,30.487,1138769,347182,,
+E. Summary,WTSD by position,BB,29.016,2173430,630636,,
+E. Summary,W$SD,all,52.009,2227805,1158652,,
+E. Summary,W$SD by position,UTG,52.906,281842,149110,,
+E. Summary,W$SD by position,HJ,52.255,285835,149363,,
+E. Summary,W$SD by position,CO,51.349,306915,157597,,
+E. Summary,W$SD by position,BU,50.023,363706,181935,,
+E. Summary,W$SD by position,SB,53.171,353148,187773,,
+E. Summary,W$SD by position,BB,52.309,636359,332874,,
+E. Summary,Aggression frequency — flop,all,49.627,5129448,2545613,,(bet+raise) / (bet+raise+call+fold)
+E. Summary,Aggression frequency — turn,all,49.871,3214322,1603016,,(bet+raise) / (bet+raise+call+fold)
+E. Summary,Aggression frequency — river,all,50.807,1899381,965013,,(bet+raise) / (bet+raise+call+fold)
+E. Summary,Average players to flop,all,2.206,54443970,0,,
+E. Summary,Pot-type share (of hands that saw a flop),srp,100.0,5290612,5290612,,read N — share of flops by pot type
+E. Summary,Pot-type share (of hands that saw a flop),3bet,100.0,1336617,1336617,,read N — share of flops by pot type
+E. Summary,Pot-type share (of hands that saw a flop),limped,100.0,386735,386735,,read N — share of flops by pot type
+E. Summary,Pot-type share (of hands that saw a flop),4bet,100.0,186630,186630,,read N — share of flops by pot type
+E. Summary,Pot-type share (of hands that saw a flop),5bet_plus,100.0,43330,43330,,read N — share of flops by pot type
+E. Summary,Multiway share (of flops),all,18.159,7243924,1315402,,3+ players to the flop
+F. Per-stake split,VPIP,NL10,22.82,17811558,4064553,,
+F. Per-stake split,VPIP,NL25,22.826,36632412,8361681,,
+F. Per-stake split,PFR,NL10,16.759,17811558,2985109,,
+F. Per-stake split,PFR,NL25,16.76,36632412,6139701,,
+F. Per-stake split,3bet%,NL10,7.973,6804731,542537,,
+F. Per-stake split,3bet%,NL25,7.909,14011581,1108170,,
+F. Per-stake split,Fold to 3bet,NL10,52.153,544436,283941,,
+F. Per-stake split,Fold to 3bet,NL25,53.2,1112460,591830,,
+F. Per-stake split,C-bet flop,NL10,56.582,1054501,596659,,
+F. Per-stake split,C-bet flop,NL25,56.663,2159296,1223517,,
+F. Per-stake split,Fold to flop c-bet,NL10,43.023,650095,279692,,
+F. Per-stake split,Fold to flop c-bet,NL25,42.944,1328996,570725,,
+F. Per-stake split,Fold to turn c-bet,NL10,48.289,266181,128535,,
+F. Per-stake split,Fold to turn c-bet,NL25,49.123,539952,265243,,
+F. Per-stake split,Fold to river c-bet,NL10,57.441,125596,72143,,
+F. Per-stake split,Fold to river c-bet,NL25,58.127,257415,149628,,
+F. Per-stake split,WTSD,NL10,30.458,2377738,724208,,
+F. Per-stake split,WTSD,NL25,30.287,4866186,1473845,,
+F. Per-stake split,W$SD,NL10,51.96,733330,381038,,
+F. Per-stake split,W$SD,NL25,52.033,1494475,777614,,
