@@ -23,10 +23,12 @@ from sqlalchemy import select
 
 from api.deps import CurrentUserDep, SessionDep, hero_names_for
 from api.models_pg import Upload
+from api.queries import DATASETS
 from api.schemas import UploadAccepted, UploadResponse
 from api.settings import get_settings
 from core.enums import Site
 from ingestion.bus import UploadMessage, publish_upload
+from ingestion.loader import DATASET_HERO
 from ingestion.storage import decode_upload, object_key, put_raw, sha256_of
 from parser.errors import FormatDetectionError
 from parser.registry import sniff, supported_sites
@@ -55,9 +57,17 @@ async def create_upload(
     session: SessionDep,
     file: UploadFile = File(...),  # noqa: B008 - FastAPI's dependency idiom
     site: str = Form(default=""),
+    dataset: str = Form(default=DATASET_HERO),
 ) -> UploadAccepted:
-    """Accept a hand-history file. Returns immediately; parsing happens downstream."""
+    """Accept a hand-history file. Returns immediately; parsing happens downstream.
+
+    `dataset` says which body of hands this is: `hero` (the uploader's own play, the default)
+    or `population` (an observed pool export with no hero seat). It travels on the queue
+    message so the worker never has to guess.
+    """
     settings = get_settings()
+    if dataset not in DATASETS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown dataset {dataset!r}")
     data = await file.read()
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
@@ -123,6 +133,7 @@ async def create_upload(
             object_key=key,
             sha256=digest,
             hero_names=hero_names,
+            dataset=dataset,
         ),
         bulk=len(data) > BULK_THRESHOLD_BYTES,
     )

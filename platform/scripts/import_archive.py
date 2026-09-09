@@ -44,7 +44,7 @@ from api.db import clickhouse
 from api.settings import get_settings
 from core.enums import Site
 from ingestion.loader import DATASET_HERO, DATASET_POPULATION
-from ingestion.pipeline import ingest_text
+from ingestion.pipeline import ingest_text, record_failures
 from ingestion.storage import decode_upload, object_key, put_raw, sha256_of
 from parser.base import SiteParser
 from parser.registry import get_parser
@@ -246,22 +246,7 @@ def _process_one(job: tuple[str, bytes, str]) -> FileResult:
         dataset=dataset,
         batch_size=settings.insert_batch_size,
     )
-    if result.failures:
-        ctx.client.insert(
-            "core.parse_failures",
-            result.failures,
-            column_names=[
-                "user_id",
-                "upload_id",
-                "site",
-                "raw_object_key",
-                "raw_byte_offset",
-                "hand_excerpt",
-                "error_code",
-                "error_message",
-                "parser_version",
-            ],
-        )
+    record_failures(ctx.client, result.failures)
     counts = result.as_counts()
     record_upload(
         settings.postgres_libpq_dsn,

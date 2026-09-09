@@ -73,6 +73,10 @@
     <span class="muted" id="who"></span>
     <span style="flex:1"></span>
     <div class="row">
+      <select id="dataset" title="which hands">
+        <option value="hero">My hands</option>
+        <option value="population">Pool</option>
+      </select>
       <input id="from" type="date" title="from">
       <input id="to" type="date" title="to">
       <select id="site"><option value="">all sites</option></select>
@@ -163,6 +167,7 @@ function params() {
   const p = new URLSearchParams();
   const f = document.getElementById("from").value, t = document.getElementById("to").value;
   const s = document.getElementById("site").value;
+  p.set("dataset", document.getElementById("dataset").value);
   if (f) p.set("date_from", f);
   if (t) p.set("date_to", t);
   if (s) p.append("site", s);
@@ -170,11 +175,15 @@ function params() {
 }
 
 const fmt = (v, d = 2) => v === null || v === undefined ? "–" : Number(v).toFixed(d);
+// Every server-provided string goes through this before innerHTML. Hand-history text is
+// third-party input: a screen name or a mislabelled board is a stored-XSS vector otherwise.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function renderStats(res) {
   const rows = res.stats.map(s => `
     <tr>
-      <td>${s.label}</td>
+      <td>${esc(s.label)}</td>
       <td class="num">${s.code.endsWith("per_100") ? fmt(s.value) : fmt(s.value, 1) + (s.value === null ? "" : "%")}</td>
       <td class="num n ${s.sample < 100 ? "low-sample" : ""}">${s.sample.toLocaleString()}</td>
     </tr>`).join("");
@@ -187,7 +196,7 @@ function renderPositions(res) {
                 <th class="num">PFR</th><th class="num">bb/100</th></tr>`;
   const rows = res.groups.map(g => `
     <tr>
-      <td>${g.position}</td>
+      <td>${esc(g.position)}</td>
       <td class="num">${(g.hands_total ?? 0).toLocaleString()}</td>
       <td class="num">${fmt(g.vpip, 1)}</td>
       <td class="num">${fmt(g.pfr, 1)}</td>
@@ -230,10 +239,10 @@ async function loadHands() {
   const head = `<tr><th>When</th><th>Site</th><th>Stakes</th><th>Pos</th><th>Cards</th>
                 <th>Board</th><th class="num">bb</th></tr>`;
   document.getElementById("handsTable").innerHTML = head + list.map(h => `
-    <tr style="cursor:pointer" onclick="showHand('${h.hand_uid}')">
-      <td class="n">${h.played_at_utc.replace("T", " ").slice(0, 16)}</td>
-      <td>${h.site}</td><td>${h.stake_level}</td><td>${h.position}</td>
-      <td>${h.hole_cards || "–"}</td><td class="n">${h.board || "–"}</td>
+    <tr style="cursor:pointer" data-uid="${esc(h.hand_uid)}" onclick="showHand(this.dataset.uid)">
+      <td class="n">${esc(h.played_at_utc).replace("T", " ").slice(0, 16)}</td>
+      <td>${esc(h.site)}</td><td>${esc(h.stake_level)}</td><td>${esc(h.position)}</td>
+      <td>${esc(h.hole_cards) || "–"}</td><td class="n">${esc(h.board) || "–"}</td>
       <td class="num ${h.net_won_bb >= 0 ? "pos" : "neg"}">${fmt(h.net_won_bb)}</td>
     </tr>`).join("");
 }
@@ -276,7 +285,7 @@ async function start() {
   document.getElementById("who").textContent = me.email;
   const sites = await api("/v1/sites");
   document.getElementById("site").innerHTML =
-    `<option value="">all sites</option>` + sites.sites.map(s => `<option>${s}</option>`).join("");
+    `<option value="">all sites</option>` + sites.sites.map(s => `<option>${esc(s)}</option>`).join("");
   document.getElementById("login").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   await loadAll();

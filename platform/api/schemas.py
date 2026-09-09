@@ -125,7 +125,12 @@ class CustomStatsRequest(BaseModel):
 
     date_from: date | None = None
     date_to: date | None = None
-    filters: dict[str, list[str]] | None = None
+    dataset: Literal["hero", "population"] = "hero"
+    """Which body of hands: own play (`hero`, own seat only) or the observed pool
+    (`population`, every seat). Not a filter -- a report never spans both."""
+    filters: dict[str, list[str | int]] | None = None
+    """Dimension name -> allowed values. Integer dimensions (`is_ip`, `players_to_flop`, ...)
+    accept numbers or numeric strings; the server casts to the column's type."""
     group_by: list[str] = Field(default_factory=list, max_length=4)
     stats: list[str] = Field(default_factory=list, max_length=40)
     custom: list[CustomStatSpec] = Field(default_factory=list, max_length=25)

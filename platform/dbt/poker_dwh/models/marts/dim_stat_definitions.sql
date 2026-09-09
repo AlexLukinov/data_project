@@ -75,4 +75,48 @@ select * from (
            'Big blinds won per 100 hands', 1, 0.0, 10.0
     union all select 'ev_bb_per_100', 'EV bb/100', 'money',
            'All-in-adjusted big blinds won per 100 hands', 1, 0.0, 10.0
+    -- ---- codes that existed in api/queries.py but not here (drift fixed 2026-09-09) --------
+    union all select 'defend_vs_open', 'Defend vs Open', 'preflop',
+           'Called when facing exactly one raise, from any seat', 0, 10.0, 25.0
+    union all select 'fold_vs_open', 'Fold vs Open', 'preflop',
+           'Folded when facing exactly one raise, from any seat', 0, 60.0, 85.0
+    union all select 'call_4bet', 'Call 4-Bet%', 'preflop',
+           'Called after 3-betting and facing a 4-bet', 0, 20.0, 45.0
+    union all select 'hands', 'Hands', 'money',
+           'Hands dealt in', 1, 0.0, 0.0
+    -- ---- leak stats, exposed through the API since 2026-09-09 ------------------------------
+    union all select 'limp_fold', 'Limp, fold to raise', 'preflop',
+           'Open-limped, then folded when someone raised behind', 0, 40.0, 70.0
+    union all select 'limp_call', 'Limp, call raise', 'preflop',
+           'Open-limped, then called a raise behind', 0, 25.0, 55.0
+    union all select 'limp_raise', 'Limp-raise', 'preflop',
+           'Open-limped, then re-raised a raise behind', 0, 0.0, 10.0
+    union all select 'raise_cbet_flop', 'Raise C-Bet Flop', 'postflop',
+           'Raised the preflop aggressor''s flop bet', 0, 6.0, 14.0
+    union all select 'float_fold', 'Float, fold turn', 'postflop',
+           'Called the flop c-bet, then folded to a turn bet', 0, 35.0, 60.0
+    union all select 'fold_to_donk', 'Fold to Donk Bet', 'postflop',
+           'Folded as the aggressor when led into on the flop', 0, 30.0, 55.0
+    union all select 'fold_to_flop_raise', 'Fold to Flop Raise', 'postflop',
+           'Bet the flop and folded when raised', 0, 40.0, 65.0
+    union all select 'fold_to_turn_raise', 'Fold to Turn Raise', 'postflop',
+           'Bet the turn and folded when raised', 0, 40.0, 65.0
+    union all select 'fold_to_river_raise', 'Fold to River Raise', 'postflop',
+           'Bet the river and folded when raised', 0, 40.0, 70.0
+    union all select 'bet_call_river', 'Bet-Call River', 'postflop',
+           'Bet the river and called a raise', 0, 25.0, 50.0
+    union all select 'fold_to_probe_turn', 'Fold to Probe Turn', 'postflop',
+           'Checked back the flop as aggressor, then folded to a turn bet', 0, 35.0, 60.0
+    union all select 'fold_to_delayed_cbet', 'Fold to Delayed C-Bet', 'postflop',
+           'Folded to the aggressor''s turn bet after a checked flop', 0, 40.0, 65.0
+    union all select 'probe_river', 'Probe River', 'postflop',
+           'Bet the river out of position after the turn checked through', 0, 25.0, 50.0
+    union all select 'fold_to_probe_river', 'Fold to Probe River', 'postflop',
+           'Folded as aggressor to a river bet after the turn checked through', 0, 35.0, 65.0
+    union all select 'river_raise', 'River Raise', 'postflop',
+           'Raised when facing a river bet', 0, 4.0, 12.0
+    union all select 'river_check_fold', 'River Check-Fold', 'postflop',
+           'Checked the river, then folded to a bet', 0, 45.0, 70.0
+    union all select 'river_check_call', 'River Check-Call', 'postflop',
+           'Checked the river, then called a bet', 0, 25.0, 50.0
 )

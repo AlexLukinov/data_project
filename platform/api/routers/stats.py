@@ -15,7 +15,16 @@ from fastapi import APIRouter, HTTPException, Query, status
 from api import cache
 from api.db import clickhouse
 from api.deps import CurrentUserDep
-from api.queries import COUNTERS, FILTERABLE, STATS, CustomStat, StatsQuery, TimelineQuery
+from api.queries import (
+    COUNTERS,
+    FILTERABLE,
+    STATS,
+    CustomStat,
+    Dataset,
+    StatsQuery,
+    TimelineQuery,
+    coerce_filters,
+)
 from api.schemas import (
     CustomStatsRequest,
     StatsResponse,
@@ -23,6 +32,7 @@ from api.schemas import (
     TimelinePoint,
     TimelineResponse,
 )
+from ingestion.loader import DATASET_HERO
 
 router = APIRouter(prefix="/v1/stats", tags=["stats"])
 
@@ -84,7 +94,9 @@ async def custom_stats(body: CustomStatsRequest, user: CurrentUserDep) -> StatsR
             tenant_id=user.tenant_id,
             date_from=body.date_from,
             date_to=body.date_to,
-            filters={k: v for k, v in (body.filters or {}).items() if v},
+            dataset=body.dataset,
+            hero_only=body.dataset == DATASET_HERO,
+            filters=coerce_filters({k: v for k, v in (body.filters or {}).items() if v}),
             group_by=list(body.group_by or []),
             stats=list(body.stats or []),
             custom_stats=[
@@ -109,6 +121,7 @@ def _run_stats(query: StatsQuery, *, use_cache: bool = True) -> StatsResponse:
         query.tenant_id,
         "stats",
         {
+            "dataset": query.dataset,
             "from": query.date_from,
             "to": query.date_to,
             "group": query.group_by,
@@ -153,6 +166,7 @@ async def get_stats(
     user: CurrentUserDep,
     date_from: date | None = None,
     date_to: date | None = None,
+    dataset: Dataset = DATASET_HERO,
     group_by: FilterList = None,
     stats: FilterList = None,
     site: FilterList = None,
@@ -160,7 +174,11 @@ async def get_stats(
     position: FilterList = None,
     game_type: FilterList = None,
 ) -> StatsResponse:
-    """Core stats, filtered and optionally grouped."""
+    """Core stats, filtered and optionally grouped.
+
+    `dataset` chooses the body of hands: `hero` (own play, own seat only) or `population`
+    (observed pool hands, every seat). It is the one switch that must be explicit.
+    """
     try:
         query = StatsQuery(
             # Tenant is a constructor argument and comes from the token. There is no request
@@ -168,6 +186,8 @@ async def get_stats(
             tenant_id=user.tenant_id,
             date_from=date_from,
             date_to=date_to,
+            dataset=dataset,
+            hero_only=dataset == DATASET_HERO,
             filters=_filters(site, stake_level, position, game_type),
             group_by=list(group_by or []),
             stats=list(stats or []),
@@ -183,6 +203,7 @@ async def timeline(
     user: CurrentUserDep,
     date_from: date | None = None,
     date_to: date | None = None,
+    dataset: Dataset = DATASET_HERO,
     site: FilterList = None,
     stake_level: FilterList = None,
     position: FilterList = None,
@@ -193,16 +214,20 @@ async def timeline(
     The EV line is what turns a losing month into a diagnosable event rather than a mood: the
     gap between the two lines is run-good/run-bad, and everything else is how you played.
     """
-    query = TimelineQuery(
-        tenant_id=user.tenant_id,
-        date_from=date_from,
-        date_to=date_to,
-        filters=_filters(site, stake_level, position, game_type),
-    )
+    try:
+        query = TimelineQuery(
+            tenant_id=user.tenant_id,
+            date_from=date_from,
+            date_to=date_to,
+            dataset=dataset,
+            filters=_filters(site, stake_level, position, game_type),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     key = cache.stats_key(
         user.tenant_id,
         "timeline",
-        {"from": date_from, "to": date_to, "filters": query.filters},
+        {"dataset": dataset, "from": date_from, "to": date_to, "filters": query.filters},
     )
     cached = cache.get_json(key)
     if cached is not None:

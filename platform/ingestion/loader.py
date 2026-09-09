@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Final
 
 import polars as pl
 from clickhouse_connect.driver.client import Client
@@ -147,11 +147,12 @@ def _board_slot(board: tuple[str, ...], index: int) -> str:
     return board[index] if len(board) > index else ""
 
 
-DATASET_HERO = "hero"
-DATASET_POPULATION = "population"
+DATASET_HERO: Final = "hero"
+DATASET_POPULATION: Final = "population"
 """`hero` = hands the user played (a Hero seat exists). `population` = observed pool hands.
 Mixing the two makes every win-rate meaningless, so the distinction is carried explicitly
-rather than inferred from a null hero seat -- see ch/migrations/0007_dataset.sql."""
+rather than inferred from a null hero seat -- see ch/migrations/0007_dataset.sql.
+`Final` so mypy types them as literals: `api.queries.Dataset` is the union of exactly these."""
 
 
 def to_rows(

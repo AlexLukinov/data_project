@@ -2,17 +2,25 @@
   config(
     materialized='incremental',
     incremental_strategy='insert_overwrite',
-    engine='AggregatingMergeTree()',
-    order_by='(user_id, dataset, player_key, day, site, stake_level, position)',
+    engine='SummingMergeTree()',
+    order_by='(user_id, dataset, player_key, day, site, stake_level, game_type, table_format, position, is_hero, is_anonymized)',
     partition_by='toYYYYMMDD(day)',
   )
 }}
 
 -- Daily stat rollup — what the API and dashboard actually read.
 --
--- `AggregatingMergeTree` with SimpleAggregateFunction-shaped sums: every counter here is
--- additive, so plain `sum()` states are correct and much cheaper than -State/-Merge blobs.
--- Reserve AggregateFunction for the non-additive ones (uniq, quantiles) when they arrive.
+-- `SummingMergeTree`, and **every GROUP BY key is in the ORDER BY**. Both matter: the engine
+-- merges rows that share a sort key, so a group key missing from the sort key makes two
+-- distinct groups collapse into one on merge (an earlier version left four keys out and
+-- relied on insert_overwrite never producing two rows per key -- docs/POKER_AUDIT.md B5), and
+-- SummingMergeTree adds the counters when it does merge, which is the correct semantics for
+-- the incremental materialized-view path of F-202. Reserve AggregateFunction states for the
+-- non-additive stats (uniq, quantiles) when they arrive.
+--
+-- **Every counter on the flag table is rolled up here.** `api/queries.py` routes a query to
+-- this table whenever its dimensions allow, so a counter present there but absent here fails
+-- at runtime with UNKNOWN_IDENTIFIER (29 leak counters were once stranded that way -- B3).
 --
 -- **Phase 1 builds this in batch, via dbt.** Phase 2 (feature F-202) adds a ClickHouse
 -- MATERIALIZED VIEW with this same SELECT so the rollup updates incrementally on insert and
@@ -113,6 +121,37 @@ select
     sum(checkraise_t_action)            as checkraise_t_action,
     sum(checkraise_r_opp)               as checkraise_r_opp,
     sum(checkraise_r_action)            as checkraise_r_action,
+
+    -- ---- leak counters (limp follow-through, c-bet responses, raises, probes, river) ---
+    sum(limp_faced_raise_opp)           as limp_faced_raise_opp,
+    sum(limp_fold_action)               as limp_fold_action,
+    sum(limp_call_action)               as limp_call_action,
+    sum(limp_raise_action)              as limp_raise_action,
+    sum(raise_cbet_f_action)            as raise_cbet_f_action,
+    sum(float_fold_opp)                 as float_fold_opp,
+    sum(float_fold_action)              as float_fold_action,
+    sum(fold_to_donk_opp)               as fold_to_donk_opp,
+    sum(fold_to_donk_action)            as fold_to_donk_action,
+    sum(fold_to_flop_raise_opp)         as fold_to_flop_raise_opp,
+    sum(fold_to_flop_raise_action)      as fold_to_flop_raise_action,
+    sum(fold_to_turn_raise_opp)         as fold_to_turn_raise_opp,
+    sum(fold_to_turn_raise_action)      as fold_to_turn_raise_action,
+    sum(fold_to_river_raise_opp)        as fold_to_river_raise_opp,
+    sum(fold_to_river_raise_action)     as fold_to_river_raise_action,
+    sum(bet_call_river_action)          as bet_call_river_action,
+    sum(fold_to_probe_t_opp)            as fold_to_probe_t_opp,
+    sum(fold_to_probe_t_action)         as fold_to_probe_t_action,
+    sum(fold_to_delayed_cbet_opp)       as fold_to_delayed_cbet_opp,
+    sum(fold_to_delayed_cbet_action)    as fold_to_delayed_cbet_action,
+    sum(probe_r_opp)                    as probe_r_opp,
+    sum(probe_r_action)                 as probe_r_action,
+    sum(fold_to_probe_r_opp)            as fold_to_probe_r_opp,
+    sum(fold_to_probe_r_action)         as fold_to_probe_r_action,
+    sum(river_face_bet_opp)             as river_face_bet_opp,
+    sum(river_raise_action)             as river_raise_action,
+    sum(river_check_faced_opp)          as river_check_faced_opp,
+    sum(river_check_fold_action)        as river_check_fold_action,
+    sum(river_check_call_action)        as river_check_call_action,
 
     -- ---- raw aggression counts (AF / AFq inputs) --------------------------------------
     sum(aggr_f)                         as aggr_f,

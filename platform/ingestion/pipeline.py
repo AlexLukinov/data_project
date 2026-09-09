@@ -29,6 +29,35 @@ EXCERPT_CHARS = 2000
 """How much of a failed hand to keep in the dead-letter row. Enough to reproduce the bug --
 which is the entire point of the dead-letter table."""
 
+DEFAULT_BATCH_SIZE = 5_000
+"""Rows per ClickHouse insert when the caller does not pass `settings.insert_batch_size`."""
+
+PARSE_FAILURE_COLUMNS: tuple[str, ...] = (
+    "user_id",
+    "upload_id",
+    "site",
+    "raw_object_key",
+    "raw_byte_offset",
+    "hand_excerpt",
+    "error_code",
+    "error_message",
+    "parser_version",
+)
+"""Column order of `core.parse_failures` rows, as built below and written by
+`record_failures`. One definition, so the worker and the bulk importer cannot drift."""
+
+
+def record_failures(client: Client, rows: list[list[object]]) -> None:
+    """Write dead-letter rows.
+
+    This table is a product backlog, not an error log: every row is a parser bug with a
+    reproducible input attached. Review it weekly; it drives the parser roadmap better than
+    guessing which network to support next.
+    """
+    if not rows:
+        return
+    client.insert("core.parse_failures", rows, column_names=list(PARSE_FAILURE_COLUMNS))
+
 
 @dataclass(slots=True)
 class IngestResult:
@@ -55,7 +84,7 @@ def ingest_text(
     upload_id: str,
     hero_names: frozenset[str],
     dataset: str = DATASET_HERO,
-    batch_size: int = 5000,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> IngestResult:
     """Parse every hand in `raw_text`, validate it, and insert the survivors.
 

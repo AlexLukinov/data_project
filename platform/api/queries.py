@@ -21,6 +21,13 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal
 
+from ingestion.loader import DATASET_HERO, DATASET_POPULATION
+
+Dataset = Literal["hero", "population"]
+"""Must list exactly the `ingestion.loader.DATASET_*` values (they are `Final`, so mypy checks
+the defaults below against this union); `DATASETS` is the runtime allowlist."""
+DATASETS: frozenset[str] = frozenset({DATASET_HERO, DATASET_POPULATION})
+
 # Allowlist: filter name -> (column, ClickHouse parameter type). Anything not in here is not
 # filterable, by construction.
 #
@@ -33,8 +40,12 @@ from typing import Any, Literal
 #
 # `_source_for` picks the table automatically, so callers never think about this: ask for
 # anything fine and the query silently moves to the fact table.
+#
+# `dataset` is deliberately NOT here. It is a required scalar on every query
+# (`StatsQuery.dataset`), and letting it also arrive as a filter once produced
+# `dataset = 'hero' AND dataset IN ('population')` -- zero rows and no error, which made the
+# whole population corpus unreachable through the API (docs/POKER_AUDIT.md, B1).
 COARSE_FILTERABLE: dict[str, tuple[str, str]] = {
-    "dataset": ("dataset", "Array(String)"),
     "site": ("site", "Array(String)"),
     "stake_level": ("stake_level", "Array(String)"),
     "game_type": ("game_type", "Array(String)"),
@@ -77,6 +88,26 @@ ROLLUP_TABLE = "marts.stats_daily"
 FACT_TABLE = "marts.player_hand_flags"
 ROLLUP_DATE = "day"
 FACT_DATE = "played_date"
+
+
+def coerce_filters(raw: dict[str, list[str | int]]) -> dict[str, list[Any]]:
+    """Cast filter values to the ClickHouse parameter type of their dimension.
+
+    JSON bodies and query strings carry everything as text, but six dimensions are bound as
+    `Array(UInt8)`; `is_ip IN {f_is_ip:Array(UInt8)}` with `['1']` is a type error at query
+    time, not a match. Unknown names pass through untouched so `StatsQuery` rejects them with
+    its own message; a non-integer literal for an integer dimension raises here.
+    """
+    coerced: dict[str, list[Any]] = {}
+    for name, values in raw.items():
+        if name in FILTERABLE and FILTERABLE[name][1] == "Array(UInt8)":
+            try:
+                coerced[name] = [int(v) for v in values]
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"filter {name!r} expects integer values") from exc
+        else:
+            coerced[name] = list(values)
+    return coerced
 
 
 def _source_for(names: list[str]) -> tuple[str, str, str]:
@@ -220,6 +251,90 @@ STATS: dict[str, StatDef] = {
         StatDef("wwsf", "WWSF", "ratio", "wwsf_action", "wwsf_opp"),
         StatDef("wtsd", "WTSD", "ratio", "wtsd_action", "wtsd_opp"),
         StatDef("wsd", "W$SD", "ratio", "wsd_action", "wsd_opp"),
+        # ---- leak stats: counters that existed on the flag table but were unreachable ------
+        StatDef(
+            "limp_fold", "Limp, fold to raise", "ratio", "limp_fold_action", "limp_faced_raise_opp"
+        ),
+        StatDef(
+            "limp_call", "Limp, call raise", "ratio", "limp_call_action", "limp_faced_raise_opp"
+        ),
+        StatDef("limp_raise", "Limp-raise", "ratio", "limp_raise_action", "limp_faced_raise_opp"),
+        StatDef(
+            "raise_cbet_flop",
+            "Raise C-Bet Flop",
+            "ratio",
+            "raise_cbet_f_action",
+            "fold_to_cbet_f_opp",
+        ),
+        StatDef("float_fold", "Float, fold turn", "ratio", "float_fold_action", "float_fold_opp"),
+        StatDef(
+            "fold_to_donk", "Fold to Donk Bet", "ratio", "fold_to_donk_action", "fold_to_donk_opp"
+        ),
+        StatDef(
+            "fold_to_flop_raise",
+            "Fold to Flop Raise",
+            "ratio",
+            "fold_to_flop_raise_action",
+            "fold_to_flop_raise_opp",
+        ),
+        StatDef(
+            "fold_to_turn_raise",
+            "Fold to Turn Raise",
+            "ratio",
+            "fold_to_turn_raise_action",
+            "fold_to_turn_raise_opp",
+        ),
+        StatDef(
+            "fold_to_river_raise",
+            "Fold to River Raise",
+            "ratio",
+            "fold_to_river_raise_action",
+            "fold_to_river_raise_opp",
+        ),
+        StatDef(
+            "bet_call_river",
+            "Bet-Call River",
+            "ratio",
+            "bet_call_river_action",
+            "fold_to_river_raise_opp",
+        ),
+        StatDef(
+            "fold_to_probe_turn",
+            "Fold to Probe Turn",
+            "ratio",
+            "fold_to_probe_t_action",
+            "fold_to_probe_t_opp",
+        ),
+        StatDef(
+            "fold_to_delayed_cbet",
+            "Fold to Delayed C-Bet",
+            "ratio",
+            "fold_to_delayed_cbet_action",
+            "fold_to_delayed_cbet_opp",
+        ),
+        StatDef("probe_river", "Probe River", "ratio", "probe_r_action", "probe_r_opp"),
+        StatDef(
+            "fold_to_probe_river",
+            "Fold to Probe River",
+            "ratio",
+            "fold_to_probe_r_action",
+            "fold_to_probe_r_opp",
+        ),
+        StatDef("river_raise", "River Raise", "ratio", "river_raise_action", "river_face_bet_opp"),
+        StatDef(
+            "river_check_fold",
+            "River Check-Fold",
+            "ratio",
+            "river_check_fold_action",
+            "river_check_faced_opp",
+        ),
+        StatDef(
+            "river_check_call",
+            "River Check-Call",
+            "ratio",
+            "river_check_call_action",
+            "river_check_faced_opp",
+        ),
         StatDef("bb_per_100", "bb/100", "money", "net_won_bb", "hands", higher_is_better=True),
         StatDef("ev_bb_per_100", "EV bb/100", "money", "ev_won_bb", "hands", higher_is_better=True),
         StatDef("hands", "Hands", "count", "hands", "hands"),
@@ -304,6 +419,36 @@ COUNTERS: dict[str, str] = {
     "checkraise_t_action": "Check-raised the turn",
     "checkraise_r_opp": "Checked the river and faced a bet",
     "checkraise_r_action": "Check-raised the river",
+    # ---- leak counters ----------------------------------------------------------------
+    "limp_faced_raise_opp": "Open-limped and someone raised behind",
+    "limp_fold_action": "Folded the limp to the raise",
+    "limp_call_action": "Called the raise after limping",
+    "limp_raise_action": "Re-raised after limping",
+    "raise_cbet_f_action": "Raised the flop c-bet",
+    "float_fold_opp": "Called the flop c-bet in position and saw the turn",
+    "float_fold_action": "Folded the turn after calling the flop c-bet",
+    "fold_to_donk_opp": "Aggressor led into on the flop",
+    "fold_to_donk_action": "Folded to the donk bet",
+    "fold_to_flop_raise_opp": "Bet the flop and was raised",
+    "fold_to_flop_raise_action": "Folded the flop to the raise",
+    "fold_to_turn_raise_opp": "Bet the turn and was raised",
+    "fold_to_turn_raise_action": "Folded the turn to the raise",
+    "fold_to_river_raise_opp": "Bet the river and was raised",
+    "fold_to_river_raise_action": "Folded the river to the raise",
+    "bet_call_river_action": "Called the river raise after betting",
+    "fold_to_probe_t_opp": "Aggressor checked the flop and faced a turn bet",
+    "fold_to_probe_t_action": "Folded to the turn probe",
+    "fold_to_delayed_cbet_opp": "Faced the aggressor's turn bet after a checked flop",
+    "fold_to_delayed_cbet_action": "Folded to the delayed c-bet",
+    "probe_r_opp": "Non-aggressor saw the river after the turn checked through",
+    "probe_r_action": "Probe-bet the river",
+    "fold_to_probe_r_opp": "Aggressor faced a river bet after the turn checked through",
+    "fold_to_probe_r_action": "Folded to the river probe",
+    "river_face_bet_opp": "Faced a river bet",
+    "river_raise_action": "Raised the river bet",
+    "river_check_faced_opp": "Checked the river and faced a bet",
+    "river_check_fold_action": "Folded the river after checking",
+    "river_check_call_action": "Called the river after checking",
     "aggr_f": "Bets + raises on the flop",
     "aggr_t": "Bets + raises on the turn",
     "aggr_r": "Bets + raises on the river",
@@ -379,10 +524,13 @@ class StatsQuery:
     date_to: date | None = None
     player_key: str | None = None
     hero_only: bool = True
-    dataset: str | None = "hero"
+    """Restrict to the tenant's own seat. Only meaningful on the hero dataset: population
+    exports contain no hero seat, so `hero_only` there would match nothing."""
+    dataset: Dataset = DATASET_HERO
     """Which body of hands to measure. Defaults to `hero` — the user's OWN play — because the
     alternative is silently averaging in millions of observed pool hands they never played.
-    Pass `population` for pool baselines, or None to span both (rarely what anyone wants)."""
+    Pass `population` (with `hero_only=False`) for pool baselines. Always a scalar predicate,
+    never a filter; there is no query that spans both bodies."""
 
     filters: dict[str, list[Any]] = field(default_factory=dict)
     group_by: list[str] = field(default_factory=list)
@@ -392,6 +540,7 @@ class StatsQuery:
 
     def __post_init__(self) -> None:
         """Reject anything not on the allowlist, before it can reach SQL."""
+        _check_dataset(self.dataset, self.hero_only)
         for name in self.filters:
             if name not in FILTERABLE:
                 raise ValueError(f"unknown filter {name!r}")
@@ -431,15 +580,13 @@ class StatsQuery:
                 select_parts.append(f"{stat.sample_expression()} AS {stat.code}__n")
         select_parts.append("sum(s.hands) AS hands_total")
 
-        # tenant_id first, always, and never from the caller's payload.
-        where = ["s.user_id = {tenant_id:UInt32}"]
-        params: dict[str, Any] = {"tenant_id": self.tenant_id}
+        # tenant_id first, always, and never from the caller's payload. The dataset predicate
+        # is unconditional for the same reason: no query may span both bodies of hands.
+        where = ["s.user_id = {tenant_id:UInt32}", "s.dataset = {dataset:String}"]
+        params: dict[str, Any] = {"tenant_id": self.tenant_id, "dataset": self.dataset}
 
         if self.hero_only:
             where.append("s.is_hero = 1")
-        if self.dataset is not None:
-            where.append("s.dataset = {dataset:String}")
-            params["dataset"] = self.dataset
         if self.player_key is not None:
             where.append(f"s.{key_column} = {{player_key:String}}")
             params["player_key"] = self.player_key
@@ -467,6 +614,19 @@ class StatsQuery:
         return sql, params
 
 
+def _check_dataset(dataset: str, hero_only: bool) -> None:
+    """Fail loudly on a dataset the schema does not know, or on a contradiction.
+
+    `hero_only` on the population dataset is a contradiction rather than a harmless no-op:
+    those exports contain no hero seat, so the query would return nothing and look like an
+    empty database.
+    """
+    if dataset not in DATASETS:
+        raise ValueError(f"unknown dataset {dataset!r}")
+    if dataset == DATASET_POPULATION and hero_only:
+        raise ValueError("hero_only cannot be combined with the population dataset")
+
+
 @dataclass(slots=True)
 class TimelineQuery:
     """Daily winnings and EV-adjusted winnings, for the graph."""
@@ -474,23 +634,35 @@ class TimelineQuery:
     tenant_id: int
     date_from: date | None = None
     date_to: date | None = None
+    dataset: Dataset = DATASET_HERO
     filters: dict[str, list[Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Reject unknown filters."""
+        """Reject unknown filters and unknown datasets."""
+        _check_dataset(self.dataset, hero_only=False)
         for name in self.filters:
             if name not in FILTERABLE:
                 raise ValueError(f"unknown filter {name!r}")
 
     def build(self) -> tuple[str, dict[str, Any]]:
-        """Return (sql, parameters) for the cumulative winnings series."""
-        where = ["s.user_id = {tenant_id:UInt32}", "s.is_hero = 1"]
-        params: dict[str, Any] = {"tenant_id": self.tenant_id}
+        """Return (sql, parameters) for the cumulative winnings series.
+
+        Routed through `_source_for` like `StatsQuery`: a fine filter (SPR, hand class, ...)
+        moves the series to the per-hand fact table, whose date column is `played_date`.
+        Hardcoding the rollup here once made every fine filter a runtime UNKNOWN_IDENTIFIER.
+        """
+        table, date_column, _ = _source_for(list(self.filters))
+        where = ["s.user_id = {tenant_id:UInt32}", "s.dataset = {dataset:String}"]
+        params: dict[str, Any] = {"tenant_id": self.tenant_id, "dataset": self.dataset}
+        if self.dataset == DATASET_HERO:
+            # Own results only. The pool has no hero seat, and summing every seat's result
+            # there is minus the rake, not a win rate -- so no seat gate applies to it.
+            where.append("s.is_hero = 1")
         if self.date_from is not None:
-            where.append("s.day >= {date_from:Date}")
+            where.append(f"s.{date_column} >= {{date_from:Date}}")
             params["date_from"] = self.date_from
         if self.date_to is not None:
-            where.append("s.day <= {date_to:Date}")
+            where.append(f"s.{date_column} <= {{date_to:Date}}")
             params["date_to"] = self.date_to
         for name, values in self.filters.items():
             if not values:
@@ -500,10 +672,10 @@ class TimelineQuery:
             params[f"f_{name}"] = values
 
         sql = (
-            "SELECT s.day AS day, sum(s.hands) AS hands, "
+            f"SELECT s.{date_column} AS day, sum(s.hands) AS hands, "
             "sum(s.net_won_bb) AS won_bb, sum(s.ev_won_bb) AS ev_bb, "
             "sum(s.showdown_won_bb) AS sd_bb, sum(s.nonshowdown_won_bb) AS nsd_bb "
-            "FROM marts.stats_daily AS s "
+            f"FROM {table} AS s "
             f"WHERE {' AND '.join(where)} "
             "GROUP BY day ORDER BY day"
         )
