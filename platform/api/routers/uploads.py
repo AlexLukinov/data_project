@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, CurrentUserDep, SessionDep, hero_names_for
 from api.models_pg import Upload
-from api.queries import DATASETS
 from api.schemas import UploadAccepted, UploadResponse
 from core.enums import Site
 from core.settings import get_settings
@@ -35,6 +34,7 @@ from ingestion.messages import UploadMessage
 from ingestion.storage import decode_upload, object_key, sha256_of
 from parser.errors import FormatDetectionError
 from parser.registry import sniff, supported_sites
+from stats.request import DATASETS
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["ingestion"])

@@ -1,6 +1,6 @@
 """One report plan -> one parameterized ClickHouse query. **The security boundary.**
 
-Three rules, unchanged from the v1 compiler this replaces (api/queries.py):
+Three rules, unchanged from the v1 compiler this replaced (plan C.4):
 
   1. `tenant_id` is a constructor argument, never a filter field. Every query starts with
      `s.user_id = {tenant_id:UInt32}`.
@@ -26,11 +26,11 @@ from stats.resolve import ResolvedStat
 from stats.router import ROLLUP, Plan
 
 PHYSICAL: dict[Table, str] = {
-    "stats_daily": "stats_daily_v2",
+    "stats_daily": "stats_daily",
     "player_hands": "player_hands",
     "decisions": "decisions",
 }
-"""Registry table -> mart table. `stats_daily_v2` until plan C.6 drops the suffix."""
+"""Registry table -> mart table."""
 
 DATE_COLUMN: dict[Table, str] = {
     "stats_daily": "day",

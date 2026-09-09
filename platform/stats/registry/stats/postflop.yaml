@@ -21,7 +21,11 @@
   typical: [50, 75]
   cached: true
   description: Bet the flop as the preflop aggressor when checked to or first to act.
-  notes: v1 counted every flop the aggressor saw, including flops where a donk bet came first.
+  notes: >-
+    An opportunity is a flop decision facing nothing. v1 counted every flop the aggressor saw:
+    flops where a donk bet came first, and flops the aggressor reached all-in preflop with no
+    decision to make (17,102 of the pool's 20,121 heads-up 5-bet flops), which showed up as
+    missed c-bets (4.8% there vs 78.9% here). -5.5% opportunities on the pool overall.
 
 - code: cbet_turn
   label: C-bet turn

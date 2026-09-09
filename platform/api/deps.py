@@ -1,9 +1,10 @@
 """FastAPI dependencies: authentication and tenancy.
 
 **`CurrentUser` is the only source of `tenant_id` in the entire application.** No endpoint
-takes it as a path, query or body parameter. That is enforced by construction — the query
-builders in `api.queries` require it in their constructor, so a query without a tenant cannot
-be built at all — and by `tests/test_tenant_isolation.py`, which actively tries to break it.
+takes it as a path, query or body parameter. That is enforced by construction — `ReportRequest`
+has no tenant field and `stats.query.build_query` takes the tenant as its own argument, so a
+query without one cannot be built at all — and by `tests/test_tenant_isolation.py`, which
+actively tries to break it.
 """
 
 from __future__ import annotations

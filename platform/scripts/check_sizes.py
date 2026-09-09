@@ -3,10 +3,10 @@
     uv run python -m scripts.check_sizes                    # fail on violations not in the baseline
     uv run python -m scripts.check_sizes --update-baseline  # rewrite scripts/size_baseline.txt
 
-The baseline lists violations that are known and scheduled: files POKER_PLAN.md phase C
-replaces (`api/queries.py`, `scripts/pool_report.py`) and functions not yet split. It is a
-burn-down list, not an exemption: an entry that no longer violates FAILS the check too, so
-the baseline can only shrink. New violations fail immediately (docs/POKER_AUDIT.md §5).
+The baseline lists violations that are known and scheduled (empty since plan C.6 deleted the
+last two files on it). It is a burn-down list, not an exemption: an entry that no longer
+violates FAILS the check too, so the baseline can only shrink. New violations fail
+immediately (docs/POKER_AUDIT.md §5).
 """
 
 from __future__ import annotations

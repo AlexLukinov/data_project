@@ -165,7 +165,7 @@ async def test_v1_timeline_adapter(client: AsyncClient, runner: FakeRunner) -> N
     assert [p["cumulative_bb"] for p in body["points"]] == [12.5, 10.0]
     assert body["bb_per_100"] == round(100 * 10.0 / 150, 2)
     sql, params = runner.calls[-1]
-    assert "stats_daily_v2" in sql and "GROUP BY day" in sql and params["tenant_id"] == TENANT
+    assert "stats_daily" in sql and "GROUP BY day" in sql and params["tenant_id"] == TENANT
 
 
 async def test_v1_custom_counters_are_gone(client: AsyncClient, runner: FakeRunner) -> None:

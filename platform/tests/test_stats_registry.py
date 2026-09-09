@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from api.queries import STATS as V1_STATS
 from core import enums
+from scripts.v1_stats import V1_STATS
 from stats.ast import All, CountIf, parse_expr, parse_node
 from stats.errors import RegistryError
 from stats.registry import load_registry, registry

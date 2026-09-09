@@ -204,10 +204,11 @@ Redis 6380 · MinIO 9010/9011**.
 - Layout: `parser/sites/` (one file or package per network) · `ingestion/` (upload → MinIO →
   Kafka → worker → ClickHouse; sinks behind Protocols in `ingestion/sinks/`) · `core/` (canonical
   model + pot-math validation + the table schema in `core/schema/`) · `api/` · `ch/migrations/` ·
-  `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, pool report, account registration)
-  · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the stat registry as YAML in
-  `stats/registry/` — dimensions and built-in stats, the column contract for the marts — plus the
-  filter/expression AST; the compiler arrives in plan C.4). Planned by `POKER_PLAN.md`:
+  `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, generators, parity fingerprint,
+  account registration) · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the
+  stat registry as YAML in `stats/registry/` — dimensions and built-in stats, the column contract
+  for the marts — plus the filter/expression AST, compiler, router and report service that
+  `POST /v1/reports/run` calls). Planned by `POKER_PLAN.md`:
   `analysis/hero/` and `analysis/pool/` (separate modules, ADR-026), `web/` (Nuxt 4).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
   `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.

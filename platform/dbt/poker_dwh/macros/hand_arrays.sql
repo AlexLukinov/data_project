@@ -1,35 +1,32 @@
--- One row per hand, carrying the whole hand as ARRAYS: every action in order, and every seat.
---
--- This is the relation the decision model (marts/decisions.sql) explodes with ARRAY JOIN, and
--- the one marts/player_hands.sql explodes by seat. Everything "before this decision" is then an
--- array function over a prefix of these arrays -- no join ever happens at decision grain, and
--- the right side of every join stays at hand grain (9M rows, ~150k per daily partition). The
--- technique is the one int_preflop_context.sql proved on the same corpus; this model is its
--- general form. POKER_PLAN.md §2.3, ADR-020.
---
--- Encoding (kept compact because this table is persisted):
---   a_st    street as UInt8: 0 preflop, 1 flop, 2 turn, 3 river
---   a_tok   one letter per action: p post · f fold · x check · l limp · c call · b bet · r raise
---           ('l' is a preflop call with no raise in front -- the only place the distinction
---           between a limp and a cold call is cheap to make, so it is made here once)
---   a_amt / a_to / a_pot / a_call   chips put in, raised-to, pot before, to call -- in BIG BLINDS
--- Seat arrays (s_*) are sorted by seat and aligned; `indexOf(s_seat, seat)` finds a player.
---
--- `hand_uid` becomes FixedString(16) here and in everything downstream (plan B.5b): the hex
--- string was 51% of the v1 fact table. `lower(hex(hand_uid))` gives the core.* form back.
+{#
+  One row per hand, carrying the whole hand as ARRAYS: every action in order, and every seat.
 
-{{
-  config(
-    materialized='incremental',
-    incremental_strategy='insert_overwrite',
-    engine='MergeTree()',
-    order_by='(user_id, hand_uid)',
-    partition_by='toYYYYMMDD(played_at_utc)',
-  )
-}}
+  This is the relation marts/decisions.sql (through decision_state()) explodes with ARRAY JOIN,
+  and the one marts/player_hands.sql explodes by seat. Everything "before this decision" is
+  then an array function over a prefix of these arrays -- no join ever happens at decision
+  grain, and the right side of every join stays at hand grain (9M rows, ~150k per daily
+  partition). POKER_PLAN.md §2.3, ADR-020.
 
-{% set ranks = '23456789TJQKA' %}
+  A macro, not a model, for the same reason as decision_state(): rendered inside each consumer,
+  the dirty-partition gate is that consumer's own, and nothing is persisted that no query
+  reads after the pass (as a table it held 2.39 GiB the API never touched -- plan C.6).
+  The arrays are computed once per consumer per pass; both consumers rebuild the same
+  partitions, so that is two hand-grain aggregations per day of new data, not a rebuild.
 
+  Encoding:
+    a_st    street as UInt8: 0 preflop, 1 flop, 2 turn, 3 river
+    a_tok   one letter per action: p post · f fold · x check · l limp · c call · b bet · r raise
+            ('l' is a preflop call with no raise in front -- the only place the distinction
+            between a limp and a cold call is cheap to make, so it is made here once)
+    a_amt / a_to / a_pot / a_call   chips put in, raised-to, pot before, to call -- in BIG BLINDS
+  Seat arrays (s_*) are sorted by seat and aligned; `indexOf(s_seat, seat)` finds a player.
+
+  `hand_uid` becomes FixedString(16) here and in everything downstream (plan B.5b): the hex
+  string was 51% of the v1 fact table. `lower(hex(hand_uid))` gives the core.* form back.
+#}
+
+{% macro hand_arrays() %}
+{%- set ranks = '23456789TJQKA' -%}
 with acts as (
 
     select
@@ -212,3 +209,4 @@ inner join hand_actions as a
 inner join seats as s
     on s.user_id = h.user_id and s.hand_uid = h.hand_uid
 where {{ dirty_partitions('h.played_at_utc') }}
+{% endmacro %}

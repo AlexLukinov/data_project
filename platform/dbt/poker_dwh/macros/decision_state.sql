@@ -7,9 +7,9 @@
   partition gate inside it would silently become "every partition" and the pass would rebuild
   the whole corpus. Rendered inside marts/decisions.sql, the gate is that model's.
 
-  Shape: a hand-grain subquery joins the arrays to the per-street board (both ~150k rows per
-  daily partition), then ARRAY JOIN explodes each hand into its actions and keeps the
-  decisions. Every "before this decision" fact is an array function over the prefix
+  Shape: a hand-grain subquery joins the arrays (macros/hand_arrays.sql) to the per-street
+  board (both ~150k rows per daily partition), then ARRAY JOIN explodes each hand into its
+  actions and keeps the decisions. Every "before this decision" fact is an array function over the prefix
   `arraySlice(a_*, 1, k - 1)`; nothing is joined at decision grain. Column names and values
   are the contract in stats/registry/dimensions.yaml.
 #}
@@ -242,7 +242,7 @@ from (
             b.straight_flop          as b_straight_flop,
             b.straight_turn          as b_straight_turn,
             b.straight_river         as b_straight_river
-        from {{ ref('int_hand_arrays') }} as h
+        from ({{ hand_arrays() }}) as h
         left join {{ ref('int_board_by_street') }} as b
             on b.user_id = h.user_id and b.hand_uid = h.hand_uid
            and {{ dirty_partitions('b.played_at_utc') }}

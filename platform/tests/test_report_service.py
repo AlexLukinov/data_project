@@ -44,7 +44,7 @@ class FakeCache:
 def test_ungrouped_report_from_the_rollup() -> None:
     db = FakeDB(
         {
-            "stats_daily_v2": (
+            "stats_daily": (
                 ["vpip", "vpip__n", "hands", "hands__n", "__hands"],
                 [(24.5, 1000, 1000, 1000, 1000)],
             )
@@ -90,8 +90,8 @@ def test_two_plans_merge_on_the_group_key() -> None:
 def test_population_baseline_attaches_deltas() -> None:
     db = FakeDB(
         {
-            "stats_daily_v2:hero": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)]),
-            "stats_daily_v2:population": (
+            "stats_daily:hero": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)]),
+            "stats_daily:population": (
                 ["vpip", "vpip__n", "__hands"],
                 [(22.0, 5_000_000, 5_000_000)],
             ),
@@ -107,7 +107,7 @@ def test_population_baseline_attaches_deltas() -> None:
 
 
 def test_cache_round_trip_is_tenant_scoped() -> None:
-    db = FakeDB({"stats_daily_v2": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)])})
+    db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)])})
     cache = FakeCache()
     request = ReportRequest(stats=["vpip"])
     first = run_report(request, tenant_id=1, run=db, cache=cache)
@@ -121,6 +121,6 @@ def test_cache_round_trip_is_tenant_scoped() -> None:
 
 
 def test_empty_result_is_zero_hands_not_an_error() -> None:
-    db = FakeDB({"stats_daily_v2": (["vpip", "vpip__n", "__hands"], [])})
+    db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [])})
     result = run_report(ReportRequest(stats=["vpip"]), tenant_id=1, run=db)
     assert result == ReportResult(hands=0, group_by=[], stats=result.stats, rows=[])

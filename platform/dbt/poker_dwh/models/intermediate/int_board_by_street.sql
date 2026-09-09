@@ -5,8 +5,8 @@
 -- Hands that never saw a flop have no row; the LEFT JOIN in the consumers zero-pads to '' / 0,
 -- which is what the registry declares for "before the flop" (stats/registry/dimensions.yaml).
 --
--- Ranks are 1..13 for 2..A via position() into one rank string, as in int_board_texture.sql,
--- which this model supersedes once the v1 chain is deleted (plan C.6).
+-- Ranks are 1..13 for 2..A via position() into one rank string, the same encoding as
+-- macros/hand_arrays.sql uses for hole cards.
 
 {{
   config(

@@ -4,14 +4,19 @@
     uv run python -m scripts.fingerprint --out -          # print instead
 
 For every built-in stat that existed in v1 (same code on both sides), the v1 value and
-opportunity count come from the v1 rollup `marts.stats_daily` (its counters), the v2 ones from
-`stats.service.run_report` -- the same path the API uses -- with `hero_only` off so both sides
-measure every seat of a dataset, as the STATUS fingerprint does. Overall and by position, hero
-and population.
+opportunity count come from the v1 rollup `marts.stats_daily` (its counters, the pairs frozen
+in `scripts/v1_stats.py`), the v2 ones from `stats.service.run_report` -- the same path the
+API uses -- with `hero_only` off so both sides measure every seat of a dataset, as the STATUS
+fingerprint does. Overall and by position, hero and population.
 
 Verdicts: a stat whose registry entry carries no `notes` must agree within rounding
 (MISMATCH otherwise); one with `notes` is expected to differ and is shown as `noted`. Stats
 new in v2 (no v1 counterpart) are listed at the end.
+
+The v1 chain was dropped after `reports/parity_2026-09-09.md` (plan C.6). To run this again,
+restore it first: check out the v1 dbt models at commit `cab27e3`, create them empty with
+`dbt run --full-refresh --vars 'empty_chain: true'`, backfill, and rename the v2 rollup aside
+(the v1 rollup takes the `marts.stats_daily` name this script reads).
 """
 
 from __future__ import annotations
@@ -23,8 +28,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from api.queries import STATS as V1_STATS
 from ingestion.clickhouse import clickhouse
+from scripts.v1_stats import V1_STATS
 from stats.registry import registry
 from stats.request import ReportRequest
 from stats.service import run_report

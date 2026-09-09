@@ -21,6 +21,8 @@ from stats.definitions import Format, Grain
 Dataset = Literal["hero", "population"]
 DATASET_HERO: Dataset = "hero"
 DATASET_POPULATION: Dataset = "population"
+DATASETS: frozenset[str] = frozenset({DATASET_HERO, DATASET_POPULATION})
+"""The runtime allowlist for `dataset` where it arrives as a plain string (an upload form)."""
 
 MAX_GROUP_BY = 4
 MAX_STATS = 40

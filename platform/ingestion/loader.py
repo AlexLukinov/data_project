@@ -45,7 +45,7 @@ DATASET_POPULATION: Final = "population"
 """`hero` = hands the user played (a Hero seat exists). `population` = observed pool hands.
 Mixing the two makes every win-rate meaningless, so the distinction is carried explicitly
 rather than inferred from a null hero seat -- see ch/migrations/0007_dataset.sql.
-`Final` so mypy types them as literals: `api.queries.Dataset` is the union of exactly these."""
+`Final` so mypy types them as literals: `stats.request.Dataset` is the union of exactly these."""
 
 Rows = list[list[object]]
 

@@ -57,16 +57,18 @@ worker ─► fetch object ─► split into hands ─► parse() ─► VALIDAT
        ─► batched insert into core.hands / hand_players / actions
        └─► commit Kafka offset ONLY after the insert succeeded
 
-dbt ─► staging (FINAL) ─► intermediate (preflop/postflop context)
-    ─► ★ player_hand_flags  (one row per hand+player, opportunity/action counter pairs)
-    └─► stats_daily (AggregatingMergeTree rollup)
+dbt ─► staging (FINAL) ─► per-hand arrays + board by street
+    ─► ★ decisions     (one row per decision point, the state before it — ADR-020)
+    ─► ★ player_hands  (one row per hand+player, hand-grain outcomes)
+    └─► stats_daily    (GENERATED SummingMergeTree rollup of every cached stat)
 
-GET /v1/stats ─► Redis (hit ≈5 ms) ─► ClickHouse (miss: one aggregate query)
+POST /v1/reports/run ─► Redis (hit ≈5 ms) ─► ClickHouse (miss: one bound-parameter query)
 ```
 
-The single idea worth internalizing: **every poker stat is `sum(action) / sum(opportunity)`**.
-Compute both counters once per hand into a wide flag row, and every stat — sliced by position,
-stake, site, date, table size — becomes a `GROUP BY` rather than a new query.
+The single idea worth internalizing: **every poker stat is
+`countIf(situation AND action) / countIf(situation)`** over the decision rows. A situation is a
+filter, a stat is a registry entry, and every slice — position, stake, site, date, SPR, board,
+line — is a `GROUP BY` rather than a new query.
 
 ---
 
@@ -90,8 +92,9 @@ tests/       unit (no stack) + integration (needs the stack)
 |---|---|
 | Add a poker network | one file in `parser/sites/` + one `register()` call |
 | Add a game variant | a `GameType` member + a name in the parser's lookup |
-| Add a statistic | one counter pair in `int_hand_player_flags.sql` + `api/queries.py` |
-| Add a filter | `FILTERABLE` in `api/queries.py` + a column on the flag table |
+| Add a statistic | one entry in `stats/registry/stats/*.yaml` + `make gen` |
+| Add a situation | nothing: a filter tree over `stats/registry/dimensions.yaml` (`POST /v1/reports/run`) |
+| Add a dimension | a column on `marts.decisions` / `player_hands` + its `dimensions.yaml` entry |
 | Change a schema | a new numbered file in `ch/migrations/` — append-only, never edit |
 
 ---

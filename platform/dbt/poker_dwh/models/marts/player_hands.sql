@@ -1,9 +1,9 @@
 -- One row per (hand, player): the hand-grain fact behind VPIP, PFR, WTSD, WWSF, W$SD and
 -- bb/100 (ADR-020). ~35 columns, not 156: everything "facing X, did Y" lives on decisions.
 --
--- Built by exploding the seat arrays of int_hand_arrays, so the only join is at hand grain
--- (the per-street board). Columns are the `player_hands` entries of
--- stats/registry/dimensions.yaml. Replaces marts.player_hand_flags once plan C.6 passes parity.
+-- Built by exploding the seat arrays of hand_arrays() (macros/hand_arrays.sql), so the only
+-- join is at hand grain (the per-street board). Columns are the `player_hands` entries of
+-- stats/registry/dimensions.yaml.
 
 {{
   config(
@@ -80,7 +80,7 @@ from (
         b.flop_span           as b_flop_span,
         b.paired_final        as b_paired_final,
         b.flush_final         as b_flush_final
-    from {{ ref('int_hand_arrays') }} as h
+    from ({{ hand_arrays() }}) as h
     left join {{ ref('int_board_by_street') }} as b
         on b.user_id = h.user_id and b.hand_uid = h.hand_uid
        and {{ dirty_partitions('b.played_at_utc') }}

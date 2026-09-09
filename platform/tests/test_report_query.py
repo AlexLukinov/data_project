@@ -1,6 +1,6 @@
 """The v2 query builder and router -- the security boundary, and the table choice.
 
-The 25 cases of `test_query_compiler.py` / `test_query_routing.py` carried over to the
+The 25 cases of the v1 compiler's tests (deleted with it in plan C.6) carried over to the
 registry path (plan C.4), plus the AST-shaped injection attempts. These run without the
 stack: they assert on the SQL and the parameters the builder *produces*.
 """
@@ -176,7 +176,7 @@ def test_limit_is_bounded() -> None:
 
 def test_cached_stats_on_coarse_dimensions_read_the_rollup() -> None:
     sql, _ = _one(ReportRequest(stats=["vpip", "threebet"], group_by=["position"]))
-    assert "marts.stats_daily_v2 AS s" in sql
+    assert "marts.stats_daily AS s" in sql
     assert "sum(s.threebet_action)" in sql and "sum(s.threebet_opp)" in sql
     assert "sum(s.hands) AS __hands" in sql
 

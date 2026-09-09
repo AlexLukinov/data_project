@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1–C.5 done (registry, 73.7M decisions, generated rollup, report service, API v2 + saved objects)**
-**Last updated:** 2026-09-09 (phase C session, C.5)
+**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1–C.6 done (registry, 73.7M decisions, generated rollup, report service, API v2 + saved objects, v1 chain deleted)**
+**Last updated:** 2026-09-09 (phase C session, C.6 cut-over)
 
 ---
 
@@ -15,69 +15,57 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.6**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.7**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
-**Where C.5 left things (2026-09-09):** the v2 engine is the API's engine. `POST
-/v1/reports/run` (any stat, any situation, any grouping; `ReportRequest` in, `ReportResult`
-out), `GET /v1/definitions` (the registry), and CRUD under `/v1/saved/{filters,reports,stats}`
-(Postgres, migration `513730dcd5be` applied to the real and test databases; documents validated
-by the engine before storage) are live; the old `/v1/stats*` routes are adapters over the same
-engine, so the demo dashboard still works and nothing reads the v1 chain except
-`api/queries.py`'s own tests. What is left of v1: the dbt chain (`int_*_context`,
-`int_board_texture`, `int_hand_player_flags`, `player_hand_flags`, `stats_daily`,
-`dim_stat_definitions`, the hand-written law test), `api/queries.py` (+ `test_query_*.py`,
-`test_stat_vocabulary.py`), `scripts/pool_report.py`, and the `_v2` suffix on the generated
-rollup.
+**Where C.6 left things (2026-09-09):** v1 is gone. The analysis ClickHouse holds exactly the
+v2 chain — `intermediate.int_board_by_street`, `marts.decisions` (73,679,949 rows),
+`marts.player_hands` (54,562,770), `marts.stats_daily` (the generated rollup, no suffix),
+`marts.stat_definitions` (the generated seed) — plus the migration-owned
+`marts.baseline_strategies`. The per-hand arrays are the macro `hand_arrays()`
+(`dbt/poker_dwh/macros/hand_arrays.sql`), rendered inside `decision_state()` and
+`player_hands.sql`, so nothing is persisted that no query reads. The API's only engine is
+`stats/` (`POST /v1/reports/run`, `GET /v1/definitions`, `/v1/saved/*`, the v1 `/v1/stats*`
+adapters); `api/queries.py`, `scripts/pool_report.py` and the v1 dbt models exist only in git
+history (commit `cab27e3` is the documented restore point for the v1 chain, from `core.*`).
+Every gate is green: `make check` 275 unit tests, `make test-all` 289 + 2 skipped, `make
+dbt-build` 32/32 on the real data with nothing dirty, backfill "caught up after 0 passes".
 
-**C.6 parity is done** (`reports/parity_2026-09-09.md`: 756 cells, 0 mismatches, every delta
-explained by a registry `notes` line). **The cut-over waits for the founder's confirmation**,
-because it drops tables in the analysis ClickHouse (golden rule 2). Backup step, documented:
-every table below is derived from `core.*` by the v1 dbt models at commit `cab27e3`; to restore,
-check those models out, create them empty (`dbt run --full-refresh --vars 'empty_chain: true'`)
-and run `scripts/backfill.py`. Nothing in `core.*` is touched.
+**Do this (C.7, ADR-026):** read plan §2.2/§2.9 and ADR-026, then build the two analysis
+modules as siblings above `stats/` and below `api/` (the import-linter layer `(analysis)` is
+already declared in `platform/.importlinter`):
+1. `analysis/hero/{service,router,presets.yaml}` — **leaks v1**: for each preset stat, hero
+   value vs the population baseline through `stats.service.run_report(compare_to=population)`,
+   score `|delta| · sqrt(n)` with a `min_n` gate, ranked; **sessions** = gap-based split of the
+   hero's `played_at_utc` (from `marts.player_hands`, `is_hero = 1`); `GET /v1/hero/leaks`,
+   `GET /v1/hero/sessions`.
+2. `analysis/pool/{service,router,baselines,cohorts,presets.yaml}` — `BaselineProvider`
+   Protocol (population overall today; cohort baselines next); **cohorts** persisted in Postgres
+   (Alembic migration for §2.10 `cohorts`: name + a `ReportRequest`-shaped filter, e.g. "regs" =
+   `vpip < 25 and hands >= 1000` evaluated per `player_key_norm` on `population`);
+   **per-opponent report** = `run_report(player_key=…)` on `population`; `GET /v1/pool/cohorts`,
+   `POST /v1/pool/cohorts`, `POST /v1/pool/stats` (a `ReportRequest` restricted to a cohort).
+3. Register both routers in `api/main.py`; unit tests with a fake runner; one integration test
+   per module in the test environment.
+4. **Done means** (plan C.7): `/v1/hero/leaks` returns a ranked list on the real hero data;
+   `/v1/pool/cohorts` builds "regs" and `/v1/pool/stats` on it works; `make check` and
+   `make test-all` green. Then tick C.7, update the plan's Status and §6 and this block.
 
-**Do this, after the founder says "drop":**
-1. `cd platform && make ps`, `make check` (317 unit tests).
-2. In the repo: delete the v1 dbt models `int_preflop_context`, `int_postflop_context`,
-   `int_hand_context`, `int_player_context`, `int_board_texture`, `int_hand_player_flags`,
-   `marts/player_hand_flags`, `marts/stats_daily` (hand-written), `marts/dim_stat_definitions`,
-   `tests/assert_action_le_opportunity.sql`, `assert_vpip_gte_pfr.sql`, and the intermediate
-   `schema.yml` entries for them; delete `api/queries.py`, `tests/test_query_compiler.py`,
-   `tests/test_query_routing.py`, `tests/test_stat_vocabulary.py`, `scripts/pool_report.py`
-   (`uploads.py` takes `DATASETS` from `stats.request`; the size baseline loses its 6 entries;
-   `scripts/fingerprint.py` keeps the v1 counter pairs it compared against in a small frozen
-   module so the report stays reproducible while the v1 tables exist).
-3. Drop the `_v2` suffix: `ROLLUP` in `scripts/gen_stats.py`, `PHYSICAL` in `stats/query.py`,
-   the law-test file name, tests that mention `stats_daily_v2`; `make gen`.
-4. In ClickHouse, one statement at a time, counts checked after each:
-   `DROP TABLE marts.player_hand_flags`, `DROP TABLE marts.stats_daily`,
-   `DROP TABLE marts.dim_stat_definitions`, `DROP TABLE intermediate.int_hand_player_flags`,
-   `…int_preflop_context`, `…int_postflop_context`, `…int_hand_context`,
-   `…int_player_context`, `…int_board_texture`; then
-   `RENAME TABLE marts.stats_daily_v2 TO marts.stats_daily`. Same in `test_*` (or just
-   `make seed`, which recreates the test databases).
-5. Turn `int_hand_arrays` into a macro CTE like `decision_state()` (it persists 2.39 GiB no
-   consumer reads after the pass), drop `intermediate.int_hand_arrays`, and rebuild nothing:
-   the facts and the rollup are already full.
-6. Verify: `make check`, `make test-all`, `make dbt-build` on the real data (must report
-   nothing dirty), `uv run python -m scripts.backfill` (must say "caught up after 0 passes"),
-   and pool VPIP/RFI/c-bet by position through `/v1/reports/run` against
-   `reports/pool_leaks.csv`. Then tick C.6, update the plan's Status and §6 and this block.
+**Time-independent fingerprint** (v2 tables, purged corpus, verified 2026-09-09 after the
+cut-over; `marts.stats_daily` sums reproduce every figure exactly):
 
-**Time-independent fingerprint** (`marts.player_hand_flags`, purged corpus, verified 2026-09-09
-after a rebuild from empty; the rollup `marts.stats_daily` reproduces every figure exactly):
+| dataset | hands = `player_hands` rows | decisions | vpip_action | rfi_opp | cbet_flop_action | float_fold_action |
+|---|---|---|---|---|---|---|
+| population | 54,443,958 (9,073,994 hands) | 73,523,498 | 12,426,230 | 29,016,384 | 1,820,175 | 75,831 |
+| hero | 118,812 (19,802 hands) | 156,451 | 26,635 | 63,542 | 3,893 | 134 |
 
-| dataset | rows = hands dealt | vpip_action | rfi_opp | cbet_flop_action | float_fold_action |
-|---|---|---|---|---|---|
-| population | 54,443,958 | 12,426,230 | 29,016,384 | 1,820,175 | 211,875 |
-| hero | 118,812 | 26,635 | 63,542 | 3,893 | 426 |
-
-Any change to the parser or the chain must reproduce these (a re-parse that *fixes* something
-will move them — say which and why).
+The first five columns equal the v1 fingerprint; `float_fold_action` moved from 211,875 / 426
+by definition (the registry `notes` on `float_fold`; `reports/parity_2026-09-09.md`). Any change
+to the parser or the chain must reproduce these (a re-parse that *fixes* something will move
+them — say which and why).
 
 ---
 
@@ -163,9 +151,9 @@ redoing against ~50 REAL hands once exports exist)*.
 - [x] F-111 Kafka topics + producer (uploads / bulkimport split)
 - [x] F-112 Parser worker → ClickHouse, commit-after-insert
 - [x] F-114 Dead-letter table (`core.parse_failures`)
-- [x] F-301 Flag table (dbt intermediate → `marts.player_hand_flags`)
-- [x] F-302…F-310 Core stat library (~20 stats, all sliceable by position/stake/site/date)
-- [x] F-311 Stat definitions registry (`dim_stat_definitions`)
+- [x] F-301 Flag table (dbt intermediate → `marts.player_hand_flags`) *(replaced by `marts.decisions` + `marts.player_hands`, plan C.2/C.6)*
+- [x] F-302…F-310 Core stat library (~20 stats, all sliceable by position/stake/site/date) *(now 65 registry stats)*
+- [x] F-311 Stat definitions registry (`dim_stat_definitions`) *(now `stats/registry/` → generated `marts.stat_definitions`)*
 - [x] F-312 Sample size returned with every stat *(confidence intervals still TODO)*
 - [x] F-401/F-409 Core filters + tenant-scoped query compiler
 - [x] F-313 **Custom stats — caller chooses the opportunity** *(pulled forward from Tier 2)*
@@ -256,10 +244,13 @@ Cross-session state: what is actually in ClickHouse right now.
 
 Totals (logical, after `FINAL` and the duplicate purge): **9,093,796** hands ·
 **54,562,770** player-rows · **100,346,158** actions · ~5 GB on disk for `core.*`;
-`marts.player_hand_flags` is **3.20 GiB** (63 bytes/row, 52% of it the 32-char `hand_uid` —
-plan B.5b). (The earlier "143.75M actions" was a physical count including ReplacingMergeTree
-duplicates.) Chain state: 160/160 daily partitions on every model, rebuilt from empty on
-2026-09-09 in 42 passes / 1,411 s on the 4 GB node.
+the marts are `decisions` **3.84 GiB** (73.7M rows, 55.9 B/row), `player_hands` **2.18 GiB**
+(54.6M rows, 43 B/row) and `stats_daily` 278 MiB — the v1 `player_hand_flags` was 3.20 GiB for
+the same hands, 52% of it the 32-char `hand_uid` that plan B.5b turned into `FixedString(16)`
+on the marts (`core.*` still holds the hex). (The earlier "143.75M actions" was a physical count
+including ReplacingMergeTree duplicates.) Chain state: 160/160 daily partitions on every model;
+the v2 facts were bootstrapped on 2026-09-09 in 35 passes / 641 s and the rollup in 35 passes /
+186 s on the 4 GB node.
 Parse validity: pool **99.74%**, hero **99.94%**. Raw text for every file is in MinIO,
 content-addressed, so any parser fix can be replayed from the archive alone.
 
@@ -369,6 +360,7 @@ Newest first. One line per session: what changed, what's next.
 | Date | Session did | Left off at |
 |---|---|---|
 | 2026-09-09 (7) | **Off-plan (founder request): pool spot-frequency census + board texture.** Five new modules — `scripts/spot_nodes.py` (preflop/flop *node* per hand from `core.actions`, e.g. `BU open, BB call`; seat→position is a fixed lookup because `button_seat` is always 1, and `FINAL` is skippable because `parser_version` is uniform and `hand_uid` unique, both asserted at runtime by `verify_corpus_assumptions()`), `spot_texture.py` (flop classifier, ace counted **high or low** so A-2-3 is connected), `spot_report.py`, `spot_plan.py`, `spot_frequency.py` → `reports/spot_frequency.{md,csv}`. One unified ranking of all 346 nodes over 9,093,794 six-max hands: 5 spots = 43% of decisions, 10 = 62%. **Three findings.** (1) The texture classifier is parity-checked each run against enumeration of all C(52,3)=22,100 flops — connectedness and suitedness match to 0.07pp, confirming the board parser. (2) The high card deliberately does *not* match, and the deviation is card removal: ace-high flops fall monotonically 23.89% (limped) → 21.7% (SRP) → 20.2% (3bet) → 17.9% (4bet) → 15.1% (5bet), vs 21.74% for a random deck. Texture is otherwise independent of the spot, so spot × texture is a clean product. (3) A node ending in a raise can still show flops — an already-all-in player owed a runout, not a parse bug. **Found a real defect in the dbt chain:** `int_board_texture.sql` computes straight span ace-high only, so A-2-3 lands in `disconnected`; it disagrees with this classifier and should be fixed. `make check` 240 green. **Overlaps plan C.2** — this node grammar is C.2's action-line tokens; reconcile with `marts.decisions`, do not duplicate. | Back to plan **C.2** (decision model); fix `int_board_texture.sql` wheel handling |
+| 2026-09-09 (12) | Founder said "drop". **C.6 cut-over done**: nine v1 ClickHouse tables dropped one statement at a time with counts checked, `marts.stats_daily_v2` renamed to `marts.stats_daily`, `int_hand_arrays` turned into the `hand_arrays()` macro (verified hash-identical on 2024-12-31, the densest day, 505 MiB peak) and its 2.39 GiB table dropped; in the repo the nine v1 dbt models, both hand-written law tests, `api/queries.py` + its three test files and `scripts/pool_report.py` deleted, `_v2` suffix gone, the v1 counter pairs frozen in `scripts/v1_stats.py`, size baseline empty, README/CLAUDE.md layout updated. Verified: `make check` 275, `make seed` (chain + 23 dbt tests on the test corpus), `make dbt-build` 32/32 real data nothing dirty, backfill 0 passes, `make test-all` 289 + 2 skipped, pool VPIP/RFI by position = `pool_leaks.csv` within rounding; c-bet flop differs by the (now fuller) registry note — v1 counted all-in preflop aggressors as missed c-bets. | **C.7** analysis modules |
 | 2026-09-09 (11) | C.5 merged (`cab27e3`). **C.6 parity done**: `scripts/fingerprint.py` → `reports/parity_2026-09-09.md`, 756 cells, 0 mismatches, 20 more registry `notes`; two v1 undercounts found (4-bet%, 5-bet%). Cut-over drops await confirmation. | Plan **C.6 cut-over** (after the founder confirms the drops) |
 | 2026-09-09 (10) | C.4 merged (`a2b8741`). **Plan C.5 done**: `/v1/definitions`, `/v1/reports/run`, saved filters/reports/stats CRUD (migration `513730dcd5be`), v1 `/v1/stats*` routes as adapters over the engine. 12 unit + 3 integration tests; `make check` 317, `make test-all` 331 + 2 skipped. | Plan **C.6** (parity report, then the v1 cut-over) |
 | 2026-09-09 (9) | C.3 merged (`af503bb`). **Plan C.4 done**: `stats.service.run_report` — resolve, route (rollup vs facts by stats and dimensions), one bound-parameter query per plan, merge, population baseline, per-tenant cache; 37 new unit tests (305); real reports verified from all three tables. | Plan **C.5** (API v2 + saved filters/reports/stats) |
@@ -395,7 +387,7 @@ Newest first. One line per session: what changed, what's next.
 | **v2 plan — the file "Continue" resumes from** | `docs/POKER_PLAN.md` |
 | Pool statistics report (436 stats, SQL appendix) | `platform/reports/pool_leaks.md` |
 | Same, flat for slicing | `platform/reports/pool_leaks.csv` |
-| Generator (re-runnable, lint-clean) | `platform/scripts/pool_report.py` |
+| Generator | `platform/scripts/pool_report.py` at commit `cab27e3` — deleted with the v1 chain (plan C.6); the same figures come from `POST /v1/reports/run` on `population` |
 | Bulk archive importer | `platform/scripts/import_archive.py` |
 | Screen-name registration | `platform/scripts/register_account.py` |
 | Range heatmaps (10 tabs, published) | https://claude.ai/code/artifact/32a965f9-8c77-456d-99a3-cfd533e74618 |
