@@ -36,6 +36,7 @@ from collections.abc import Iterator
 
 from core.enums import Site, TableFormat
 from core.models import CanonicalHand
+from parser.base import SNIFF_WINDOW_CHARS
 from parser.errors import HandParseError
 from parser.sites.pokerstars import PokerStarsParser
 
@@ -74,7 +75,7 @@ class GGPokerParser(PokerStarsParser):
 
     def matches(self, text: str) -> bool:
         """True when the text opens with a GG `Poker Hand #` header."""
-        return bool(GG_HEADER.search(text[:400]))
+        return bool(GG_HEADER.search(text[:SNIFF_WINDOW_CHARS]))
 
     def split(self, text: str) -> Iterator[str]:
         """Yield one hand at a time, splitting on the GG header."""

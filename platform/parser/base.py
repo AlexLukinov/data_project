@@ -23,6 +23,11 @@ from core.models import CanonicalHand
 
 UTC = ZoneInfo("UTC")
 
+SNIFF_WINDOW_CHARS = 400
+"""How much of a file `SiteParser.matches` looks at. Every site prints its header in the
+first line or two; a longer window only makes sniffing a 200 MB archive slower. A file with a
+preamble longer than this sniffs as nothing and must be uploaded with `site` set."""
+
 # Hand histories print a site-local timezone abbreviation. Mapping them to real zones is the
 # difference between correct session boundaries and a silent multi-hour shift in every
 # date-filtered stat. Unknown abbreviations fall back to UTC and the original string is kept

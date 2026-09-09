@@ -7,7 +7,9 @@ poker_dwh:
       type: clickhouse
       driver: http
       host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
-      port: "{{ env_var('CLICKHOUSE_PORT', '8123') | int }}"
+      # 8124 is the PRODUCT stack's ClickHouse (docker-compose.yml). 8123 is the minikube lab's,
+      # and a default of 8123 once sent a bare `dbt build` at the wrong database.
+      port: "{{ env_var('CLICKHOUSE_PORT', '8124') | int }}"
       user: "{{ env_var('CLICKHOUSE_USER', 'poker') }}"
       password: "{{ env_var('CLICKHOUSE_PASSWORD', 'poker') }}"
       schema: marts

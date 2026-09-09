@@ -87,7 +87,10 @@ class HandPlayer:
     is_hero: bool = False
     is_anonymized: bool = False
     anon_alias: str = ""
-    """The per-hand pseudonym. Meaningful *within* this hand only."""
+    """The site's pseudonym for an anonymized opponent. On GGPoker it is a hex alias that
+    recurs across roughly 2.8 tables within an export (see parser/sites/ggpoker.py), so it is
+    stable *within a session*, never across sessions or exports. Do not build opponent
+    tracking on it; `player_key` is NULL for exactly that reason."""
     position: Position = Position.UNKNOWN
     position_index: int = 0
     """0 = first to act preflop."""
@@ -109,11 +112,6 @@ class HandPlayer:
     was_eliminated: bool = False
     extra: dict[str, str] = field(default_factory=dict)
     """Unmodelled per-seat values preserved verbatim — see `CanonicalHand.extra`."""
-
-    @property
-    def starting_stack_bb(self) -> Decimal:
-        """Placeholder — the real value needs the hand's big blind; see `CanonicalHand`."""
-        return self.starting_stack
 
 
 @dataclass(slots=True)

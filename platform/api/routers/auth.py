@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import PokerAccount, RefreshToken, User
+from api.ratelimit import auth_rate_limit
 from api.schemas import (
     LoginRequest,
     PokerAccountRequest,
@@ -51,7 +52,7 @@ async def _issue(response: Response, session: SessionDep, user: User) -> TokenRe
         max_age=settings.refresh_token_days * 86400,
         httponly=True,  # JavaScript cannot read it; that is the entire point
         samesite="lax",
-        secure=False,  # dev over http; MUST become True behind TLS in production
+        secure=settings.cookie_secure,  # false only for plain-http dev; enforced in api.main
         path="/v1/auth",
     )
     return TokenResponse(
@@ -60,7 +61,12 @@ async def _issue(response: Response, session: SessionDep, user: User) -> TokenRe
     )
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(auth_rate_limit)],
+)
 async def register(body: RegisterRequest, response: Response, session: SessionDep) -> TokenResponse:
     """Create an account and sign in."""
     user = User(
@@ -78,7 +84,7 @@ async def register(body: RegisterRequest, response: Response, session: SessionDe
     return await _issue(response, session, user)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(auth_rate_limit)])
 async def login(body: LoginRequest, response: Response, session: SessionDep) -> TokenResponse:
     """Exchange credentials for tokens."""
     result = await session.execute(select(User).where(User.email == body.email.lower()))

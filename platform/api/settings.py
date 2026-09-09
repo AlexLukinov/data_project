@@ -7,15 +7,28 @@ fails at startup with a readable error, instead of at 3am inside a worker with a
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "dev-only-not-a-real-secret-change-me"
+"""The placeholder shipped in `.env.example`. `api.main` refuses to start with it outside
+`ENVIRONMENT=dev`: a known secret means anyone can mint a valid token for any tenant."""
 
 
 class Settings(BaseSettings):
     """Every knob the platform reads. Defaults match `docker-compose.yml`."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # -- Deployment --------------------------------------------------------------
+    environment: Literal["dev", "test", "prod"] = "dev"
+    """Only `dev` tolerates the placeholder JWT secret and an insecure refresh cookie."""
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    """Browser origins allowed to call the API with credentials. Explicit list, never `*`:
+    the refresh cookie travels with these requests. The same-origin dashboard at `/` needs
+    no entry. The Nuxt dev server (POKER_PLAN.md phase D) is the default."""
 
     # -- ClickHouse ------------------------------------------------------------
     clickhouse_host: str = "localhost"
@@ -49,12 +62,17 @@ class Settings(BaseSettings):
     kafka_consumer_group: str = "parser-workers"
 
     # -- Auth ------------------------------------------------------------------
-    jwt_secret: str = Field(default="dev-only-not-a-real-secret-change-me")
+    jwt_secret: str = Field(default=DEFAULT_JWT_SECRET)
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
     """Short-lived by policy. Refresh lives in an HttpOnly cookie, never in JS-reachable
     storage."""
     refresh_token_days: int = 14
+    cookie_secure: bool = False
+    """`Secure` flag on the refresh cookie. False only for plain-http local development;
+    behind TLS it must be True, and `environment=prod` requires it."""
+    auth_rate_limit_per_minute: int = 20
+    """Login/register attempts allowed per client address per minute (see api/ratelimit.py)."""
 
     # -- Ingestion -------------------------------------------------------------
     insert_batch_size: int = 5_000

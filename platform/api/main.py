@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.db import clickhouse
 from api.routers import auth, hands, stats, uploads
+from api.settings import DEFAULT_JWT_SECRET, Settings, get_settings
 
 # Structured JSON logs from day one. Retrofitting correlation ids across five services later
 # is painful; adding them now costs nothing. See docs/POKER_OBSERVABILITY.md.
@@ -27,6 +29,26 @@ log = logging.getLogger("api")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+
+def refuse_unsafe_config(settings: Settings) -> None:
+    """Refuse to serve outside development with settings that make tenancy meaningless.
+
+    A placeholder JWT secret lets anyone mint a token for any tenant; a refresh cookie
+    without `Secure` travels over plain http. Both are fine on a laptop and fatal in
+    production, so the process must not start rather than start quietly wrong.
+    """
+    if settings.environment == "dev":
+        return
+    if settings.jwt_secret == DEFAULT_JWT_SECRET:
+        raise RuntimeError(
+            f"JWT_SECRET is the development placeholder (ENVIRONMENT={settings.environment})"
+        )
+    if settings.environment == "prod" and not settings.cookie_secure:
+        raise RuntimeError("COOKIE_SECURE must be true in production")
+
+
+refuse_unsafe_config(get_settings())
+
 app = FastAPI(
     title="Poker Analysis Platform",
     version="0.1.0",
@@ -34,6 +56,16 @@ app = FastAPI(
         "Post-session poker hand analysis. Phase 1 (MVP): ingest, parse, stats.\n\n"
         "Analyses the user's own hands post-session. No real-time assistance."
     ),
+)
+
+# Explicit origins only. `allow_credentials` is what lets the HttpOnly refresh cookie ride
+# along, and browsers refuse credentials with a wildcard origin -- which is the right default.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth.router)
@@ -64,8 +96,12 @@ async def health() -> dict[str, Any]:
     try:
         clickhouse().command("SELECT 1")
         checks["clickhouse"] = "ok"
-    except Exception as exc:
-        checks["clickhouse"] = f"error: {type(exc).__name__}"
+    except Exception:
+        # Logged server-side; the unauthenticated caller learns only that it is down. The
+        # exception class name was once returned here, which names the driver and its failure
+        # mode to anyone on the network.
+        log.exception("health check: clickhouse unreachable")
+        checks["clickhouse"] = "error"
     return {"status": "ok" if all(v == "ok" for v in checks.values()) else "degraded", **checks}
 
 

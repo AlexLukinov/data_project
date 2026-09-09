@@ -47,7 +47,7 @@ from core.enums import (
 from core.ids import player_key
 from core.models import Action, CanonicalHand, HandPlayer, Pot, PotWinner, Tournament
 from core.positions import assign_positions, preflop_order
-from parser.base import parse_money, to_utc
+from parser.base import SNIFF_WINDOW_CHARS, parse_money, to_utc
 from parser.errors import HandParseError
 
 HEADER = re.compile(
@@ -218,7 +218,7 @@ class PokerStarsParser:
 
     def matches(self, text: str) -> bool:
         """True when the text opens with a PokerStars hand header."""
-        return bool(HEADER.search(text[:400]))
+        return bool(HEADER.search(text[:SNIFF_WINDOW_CHARS]))
 
     def split(self, text: str) -> Iterator[str]:
         """Yield one hand at a time from a multi-hand file.

@@ -68,12 +68,21 @@ def sniff(raw_text: str) -> Site:
 
     Users mislabel uploads constantly, and a wrong `site` produces zero parsed hands rather
     than an error — so sniffing is a real robustness feature, not a convenience.
+
+    Every registered parser is asked, and more than one match is an error rather than a
+    first-wins pick: registration order is not a specificity order, and a loose matcher added
+    later would otherwise silently claim another network's files.
     """
-    for site, parser in _REGISTRY.items():
-        if parser.matches(raw_text):
-            return site
-    raise FormatDetectionError("text matches no registered hand-history format")
+    matched = [site for site, parser in _REGISTRY.items() if parser.matches(raw_text)]
+    if not matched:
+        raise FormatDetectionError("text matches no registered hand-history format")
+    if len(matched) > 1:
+        names = ", ".join(sorted(s.value for s in matched))
+        raise FormatDetectionError(f"text matches more than one format ({names}); pass `site`")
+    return matched[0]
 
 
+# Registration order carries no meaning (see `sniff`); every parser must match only its own
+# format. Adding a network is one import and one line here.
 register(PokerStarsParser())
 register(GGPokerParser())
