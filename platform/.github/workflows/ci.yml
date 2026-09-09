@@ -33,6 +33,8 @@ jobs:
         run: uv run ruff format --check .
       - name: Type check
         run: uv run mypy core parser ingestion api
+      - name: Module boundaries (import-linter, ADR-023)
+        run: uv run lint-imports
       - name: Unit tests
         run: uv run pytest -q -m "not integration"
 

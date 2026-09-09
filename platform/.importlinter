@@ -1,0 +1,68 @@
+# Module-boundary contracts, enforced by `make lint-arch` (part of `make check` and CI).
+# docs/POKER_DECISIONS.md ADR-023, docs/POKER_PLAN.md §2.2.
+#
+# The layering is the whole point: a lower layer never imports a higher one, so the parser
+# worker can ship without FastAPI, the stat engine can be tested without a web server, and a
+# change in `api/` cannot break ingestion. A backwards import used to be one careless line
+# (docs/POKER_AUDIT.md B10); now it fails the build.
+
+[importlinter]
+root_packages =
+    core
+    parser
+    ingestion
+    api
+    ch
+    scripts
+
+# core <- parser <- ingestion <- stats <- analysis <- api. Layers in parentheses do not exist
+# yet (POKER_PLAN.md phase C) and are allowed to be absent until they do.
+[importlinter:contract:layers]
+name = Layered architecture (lower layers never import higher ones)
+type = layers
+layers =
+    api
+    (analysis)
+    (stats)
+    ingestion
+    parser
+    core
+
+# The migration runner reads settings only. It must not depend on the web layer, the parser
+# or the ingestion pipeline: it runs before any of them exist in a fresh environment.
+[importlinter:contract:ch-is-standalone]
+name = ch/ depends on core only
+type = forbidden
+source_modules =
+    ch
+forbidden_modules =
+    api
+    ingestion
+    parser
+    scripts
+
+# Site parsers are reached through the registry, never directly, so a network can be added
+# or replaced without the API knowing (POKER_PLAN.md §2.2 extension registries). Direct
+# imports only: the registry itself imports every site module to register it, which is the
+# one legitimate indirect path.
+[importlinter:contract:api-uses-the-parser-registry]
+name = api/ never imports parser.sites.* directly
+type = forbidden
+source_modules =
+    api
+forbidden_modules =
+    parser.sites
+allow_indirect_imports = True
+
+# Nothing depends on the CLI scripts.
+[importlinter:contract:scripts-are-leaves]
+name = scripts/ is never imported
+type = forbidden
+source_modules =
+    core
+    parser
+    ingestion
+    api
+    ch
+forbidden_modules =
+    scripts

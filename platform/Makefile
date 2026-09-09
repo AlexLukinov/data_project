@@ -121,5 +121,9 @@ fmt: ## Auto-format
 typecheck: ## Static type check
 	$(UV) mypy core parser ingestion api
 
+.PHONY: lint-arch
+lint-arch: ## Enforce the module-boundary contracts in .importlinter (ADR-023)
+	$(UV) lint-imports
+
 .PHONY: check
-check: lint typecheck test ## Everything CI runs
+check: lint typecheck lint-arch test ## Everything CI runs

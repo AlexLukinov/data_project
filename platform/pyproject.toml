@@ -37,6 +37,7 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "types-boto3",
+    "import-linter>=2.15",
 ]
 dbt = [
     # dbt pins click/jinja2 versions that clash with the app deps — same lesson as the lab,
