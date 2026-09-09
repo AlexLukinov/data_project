@@ -142,7 +142,8 @@ async def test_worker_reprocessing_does_not_duplicate_hands() -> None:
         assert before == 4
 
         # Replay the same upload message directly, simulating a redelivery after a crash.
-        from ingestion.bus import UploadMessage, publish_upload
+        from ingestion.bus import publish_upload
+        from ingestion.messages import UploadMessage
 
         detail = (await c.get(f"/v1/uploads/{upload_id}", headers=_auth(token))).json()
         me = (await c.get("/v1/auth/me", headers=_auth(token))).json()

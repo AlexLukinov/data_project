@@ -27,10 +27,11 @@ from confluent_kafka import Consumer, KafkaError, Message
 
 from core.enums import Site
 from core.settings import get_settings
-from ingestion.bus import UploadMessage, make_consumer
-from ingestion.clickhouse import clickhouse
-from ingestion.pipeline import ingest_text, record_failures
-from ingestion.storage import get_raw
+from ingestion import sinks
+from ingestion.bus import make_consumer
+from ingestion.messages import UploadMessage
+from ingestion.pipeline import ingest_text
+from ingestion.sinks.protocols import HandSink, RawStore
 from parser.registry import get_parser
 
 log = logging.getLogger("ingestion.worker")
@@ -80,20 +81,29 @@ def _stop(signum: int, _frame: FrameType | None) -> None:
     _running = False
 
 
-def process(message: UploadMessage) -> dict[str, int]:
+def process(
+    message: UploadMessage,
+    *,
+    sink: HandSink | None = None,
+    store: RawStore | None = None,
+) -> dict[str, int]:
     """Parse one uploaded file end to end. Returns counts for the upload record.
 
     The parse -> validate -> store loop itself lives in `ingestion.pipeline.ingest_text` and is
     shared with the bulk importer. This function only resolves the message into that call.
     A second copy of the loop used to live here, and it had already drifted: it stored every
     upload as `dataset='hero'` and buffered the whole file in memory (docs/POKER_AUDIT.md, B2).
+
+    `sink` and `store` default to the real ClickHouse and S3 implementations; tests pass the
+    fakes from `ingestion.sinks`.
     """
-    client = clickhouse()
+    sink = sink if sink is not None else sinks.hand_sink()
+    store = store if store is not None else sinks.raw_store()
     parser = get_parser(Site(message.site))
     result = ingest_text(
-        client,
+        sink,
         parser,
-        get_raw(message.object_key),
+        store.get(message.object_key),
         tenant_id=message.tenant_id,
         site=message.site,
         object_key=message.object_key,
@@ -102,7 +112,6 @@ def process(message: UploadMessage) -> dict[str, int]:
         dataset=message.dataset,
         batch_size=get_settings().insert_batch_size,
     )
-    record_failures(client, result.failures)
     counts = result.as_counts()
     log.info("upload %s: %s", message.upload_id, counts)
     return counts

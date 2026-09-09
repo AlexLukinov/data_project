@@ -3,11 +3,14 @@
 Both entry points must treat a hand identically: same validation gate, same dead-letter row,
 same batch size, same idempotency. Two copies of this loop would drift the moment one of them
 got a bug fix, and the symptom would be "stats differ depending on how the file was imported"
-— which is close to undebuggable.
+— which is close to undebuggable. (They did drift once: docs/POKER_AUDIT.md B2.)
 
 The loop is a generator-driven stream, not a list build: a 47MB day-file holds ~35k hands, and
 materializing all of them before inserting would cost hundreds of MB per worker for no gain.
 Memory stays bounded by `batch_size` regardless of file size.
+
+Everything it writes goes through a `HandSink` (ingestion/sinks), so the loop itself runs
+against an in-memory fake in unit tests and against ClickHouse in production.
 """
 
 from __future__ import annotations
@@ -15,11 +18,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from clickhouse_connect.driver.client import Client
-
 from core.models import CanonicalHand
 from core.validation import validate
-from ingestion.loader import DATASET_HERO, insert_hands
+from ingestion.loader import DATASET_HERO
+from ingestion.sinks.protocols import PARSE_FAILURE_COLUMNS, HandSink
 from parser.base import SiteParser
 from parser.errors import HandParseError, ParserError
 
@@ -32,31 +34,8 @@ which is the entire point of the dead-letter table."""
 DEFAULT_BATCH_SIZE = 5_000
 """Rows per ClickHouse insert when the caller does not pass `settings.insert_batch_size`."""
 
-PARSE_FAILURE_COLUMNS: tuple[str, ...] = (
-    "user_id",
-    "upload_id",
-    "site",
-    "raw_object_key",
-    "raw_byte_offset",
-    "hand_excerpt",
-    "error_code",
-    "error_message",
-    "parser_version",
-)
-"""Column order of `core.parse_failures` rows, as built below and written by
-`record_failures`. One definition, so the worker and the bulk importer cannot drift."""
-
-
-def record_failures(client: Client, rows: list[list[object]]) -> None:
-    """Write dead-letter rows.
-
-    This table is a product backlog, not an error log: every row is a parser bug with a
-    reproducible input attached. Review it weekly; it drives the parser roadmap better than
-    guessing which network to support next.
-    """
-    if not rows:
-        return
-    client.insert("core.parse_failures", rows, column_names=list(PARSE_FAILURE_COLUMNS))
+FAILURE_ROW_WIDTH = len(PARSE_FAILURE_COLUMNS)
+"""`_failure_row` builds rows in `PARSE_FAILURE_COLUMNS` order (defined at the sink seam)."""
 
 
 @dataclass(slots=True)
@@ -73,8 +52,38 @@ class IngestResult:
         return {"found": self.found, "parsed": self.stored, "failed": self.failed}
 
 
+@dataclass(slots=True, frozen=True)
+class Source:
+    """Provenance every stored hand and every dead letter carries."""
+
+    tenant_id: int
+    site: str
+    object_key: str
+    upload_id: str
+
+
+def _failure_row(
+    src: Source, offset: int, chunk: str, code: str, message: str, parser_version: int
+) -> list[object]:
+    """One `core.parse_failures` row, in `PARSE_FAILURE_COLUMNS` order."""
+    row: list[object] = [
+        src.tenant_id,
+        src.upload_id,
+        src.site,
+        src.object_key,
+        offset,
+        chunk[:EXCERPT_CHARS],
+        code,
+        message,
+        parser_version,
+    ]
+    if len(row) != FAILURE_ROW_WIDTH:  # pragma: no cover - guards the two definitions
+        raise RuntimeError("dead-letter row does not match PARSE_FAILURE_COLUMNS")
+    return row
+
+
 def ingest_text(
-    client: Client,
+    sink: HandSink,
     parser: SiteParser,
     raw_text: str,
     *,
@@ -86,12 +95,14 @@ def ingest_text(
     dataset: str = DATASET_HERO,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> IngestResult:
-    """Parse every hand in `raw_text`, validate it, and insert the survivors.
+    """Parse every hand in `raw_text`, validate it, and store the survivors through `sink`.
 
     A hand whose money does not reconcile is NOT stored. Silently importing it would corrupt
     every stat it touches with no error anywhere — the worst failure mode an analytics product
-    has. It goes to `core.parse_failures` instead, with enough raw text attached to reproduce.
+    has. It goes to the dead-letter table instead, with enough raw text attached to reproduce.
+    Dead letters are written by this function too, so no caller can forget them.
     """
+    src = Source(tenant_id=tenant_id, site=site, object_key=object_key, upload_id=upload_id)
     result = IngestResult()
     batch: list[CanonicalHand] = []
     offset = 0
@@ -99,7 +110,7 @@ def ingest_text(
     def flush() -> None:
         nonlocal batch
         if batch:
-            insert_hands(client, batch, tenant_id, dataset)
+            sink.insert_hands(batch, tenant_id, dataset)
             result.stored += len(batch)
             batch = []
 
@@ -112,34 +123,21 @@ def ingest_text(
             hand = parser.parse_hand(chunk, hero_names)
         except (HandParseError, ParserError) as exc:
             result.failures.append(
-                [
-                    tenant_id,
-                    upload_id,
-                    site,
-                    object_key,
-                    chunk_offset,
-                    chunk[:EXCERPT_CHARS],
-                    type(exc).__name__,
-                    str(exc),
-                    1,
-                ]
+                _failure_row(src, chunk_offset, chunk, type(exc).__name__, str(exc), 1)
             )
             continue
 
         check = validate(hand)
         if not check.ok:
             result.failures.append(
-                [
-                    tenant_id,
-                    upload_id,
-                    site,
-                    object_key,
+                _failure_row(
+                    src,
                     chunk_offset,
-                    chunk[:EXCERPT_CHARS],
+                    chunk,
                     "validation_failed",
                     check.summary(),
                     hand.parser_version,
-                ]
+                )
             )
             continue
 
@@ -151,4 +149,5 @@ def ingest_text(
 
     flush()
     result.failed = len(result.failures)
+    sink.record_failures(result.failures)
     return result

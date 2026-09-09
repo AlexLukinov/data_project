@@ -27,9 +27,10 @@ from api.queries import DATASETS
 from api.schemas import UploadAccepted, UploadResponse
 from core.enums import Site
 from core.settings import get_settings
-from ingestion.bus import UploadMessage, publish_upload
+from ingestion import sinks
 from ingestion.loader import DATASET_HERO
-from ingestion.storage import decode_upload, object_key, put_raw, sha256_of
+from ingestion.messages import UploadMessage
+from ingestion.storage import decode_upload, object_key, sha256_of
 from parser.errors import FormatDetectionError
 from parser.registry import sniff, supported_sites
 
@@ -109,7 +110,7 @@ async def create_upload(
         digest=digest,
         filename=file.filename or "upload.txt",
     )
-    put_raw(key, text.encode("utf-8"))
+    sinks.raw_store().put(key, text.encode("utf-8"))
 
     upload = Upload(
         id=upload_id,
@@ -125,7 +126,7 @@ async def create_upload(
     await session.commit()
 
     hero_names = await hero_names_for(session, user.id, resolved.value)
-    publish_upload(
+    sinks.event_bus().publish_upload(
         UploadMessage(
             upload_id=str(upload_id),
             tenant_id=user.tenant_id,

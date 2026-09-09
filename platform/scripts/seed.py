@@ -25,9 +25,9 @@ from api.db import session_factory
 from api.models_pg import PokerAccount, Upload, User
 from api.security import hash_password
 from core.enums import Site
-from ingestion import worker
-from ingestion.bus import UploadMessage, publish_upload
-from ingestion.storage import object_key, put_raw, sha256_of
+from ingestion import sinks, worker
+from ingestion.messages import UploadMessage
+from ingestion.storage import object_key, sha256_of
 
 log = logging.getLogger("seed")
 
@@ -100,7 +100,7 @@ async def publish_corpus(user_id: uuid.UUID, tenant_id: int) -> int:
                 # rather than skip -- this is the requeue path, and it is exactly what
                 # production needs when a broker outage swallows a message.
                 log.info("re-publishing stuck upload %s", path.name)
-                publish_upload(
+                sinks.event_bus().publish_upload(
                     UploadMessage(
                         upload_id=str(previous.id),
                         tenant_id=tenant_id,
@@ -120,7 +120,7 @@ async def publish_corpus(user_id: uuid.UUID, tenant_id: int) -> int:
                 digest=digest,
                 filename=path.name,
             )
-            put_raw(key, data)
+            sinks.raw_store().put(key, data)
             session.add(
                 Upload(
                     id=upload_id,
@@ -134,7 +134,7 @@ async def publish_corpus(user_id: uuid.UUID, tenant_id: int) -> int:
                 )
             )
             await session.commit()
-            publish_upload(
+            sinks.event_bus().publish_upload(
                 UploadMessage(
                     upload_id=str(upload_id),
                     tenant_id=tenant_id,

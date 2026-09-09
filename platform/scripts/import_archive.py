@@ -38,14 +38,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
-from clickhouse_connect.driver.client import Client
 
 from core.enums import Site
 from core.settings import get_settings
-from ingestion.clickhouse import clickhouse
+from ingestion import sinks
 from ingestion.loader import DATASET_HERO, DATASET_POPULATION
-from ingestion.pipeline import ingest_text, record_failures
-from ingestion.storage import decode_upload, object_key, put_raw, sha256_of
+from ingestion.pipeline import ingest_text
+from ingestion.sinks.protocols import HandSink, RawStore
+from ingestion.storage import decode_upload, object_key, sha256_of
 from parser.base import SiteParser
 from parser.registry import get_parser
 
@@ -168,11 +168,12 @@ class _WorkerContext:
     """Per-process state, built once in the pool initializer.
 
     A typed object rather than a dict of `object`: every field here is used in a position that
-    needs its real type (a ClickHouse client, a parser, a frozenset of names), and a dict
-    forces a cast at each use site — which is exactly where a wrong value would slip through.
+    needs its real type (a hand sink, a parser, a frozenset of names), and a dict forces a
+    cast at each use site — which is exactly where a wrong value would slip through.
     """
 
-    client: Client
+    sink: HandSink
+    store: RawStore
     parser: SiteParser
     site: str
     hero: frozenset[str]
@@ -187,14 +188,15 @@ _WORKER: _WorkerContext | None = None
 def _init_worker(
     site: str, hero_names: list[str], tenant_id: int, dataset: str, force: bool
 ) -> None:
-    """Per-process setup: one ClickHouse client and one parser, reused for every file.
+    """Per-process setup: one hand sink, one raw store and one parser, reused for every file.
 
     Building these per file would dominate the runtime of the small-file case and open one
     connection per source file in the large one.
     """
     global _WORKER
     _WORKER = _WorkerContext(
-        client=clickhouse(),
+        sink=sinks.hand_sink(),
+        store=sinks.raw_store(),
         parser=get_parser(Site(site)),
         site=site,
         hero=frozenset(n.lower() for n in hero_names),
@@ -231,11 +233,11 @@ def _process_one(job: tuple[str, bytes, str]) -> FileResult:
     )
     # Raw text lands in object storage BEFORE parsing. If the parser crashes on this file, the
     # bytes are still durably stored and the import can be re-run after a fix (ADR-010).
-    put_raw(key, data)
+    ctx.store.put(key, data)
 
     text = decode_upload(data)
     result = ingest_text(
-        ctx.client,
+        ctx.sink,
         ctx.parser,
         text,
         tenant_id=tenant_id,
@@ -246,7 +248,6 @@ def _process_one(job: tuple[str, bytes, str]) -> FileResult:
         dataset=dataset,
         batch_size=settings.insert_batch_size,
     )
-    record_failures(ctx.client, result.failures)
     counts = result.as_counts()
     record_upload(
         settings.postgres_libpq_dsn,

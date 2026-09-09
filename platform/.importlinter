@@ -54,6 +54,20 @@ forbidden_modules =
     parser.sites
 allow_indirect_imports = True
 
+# Storage and transport are reached through the Protocols and factories in `ingestion.sinks`,
+# never through the implementation modules, so a backend swap touches one module.
+[importlinter:contract:api-uses-sink-factories]
+name = api/ never imports a sink implementation module
+type = forbidden
+source_modules =
+    api
+forbidden_modules =
+    ingestion.sinks.clickhouse
+    ingestion.sinks.s3
+    ingestion.sinks.kafka
+    ingestion.bus
+allow_indirect_imports = True
+
 # Nothing depends on the CLI scripts.
 [importlinter:contract:scripts-are-leaves]
 name = scripts/ is never imported
