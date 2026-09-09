@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A (stabilize) and B (module boundaries) done and verified**
-**Last updated:** 2026-09-09 (phase B session)
+**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1 (stat registry) and C.2 (decision model, 73.7M decisions built) done**
+**Last updated:** 2026-09-09 (phase C session, C.2)
 
 ---
 
@@ -15,27 +15,42 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, starting at step **C.1**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.3**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
-**Where phase B left things (2026-09-09):** the module boundaries are enforced mechanically —
-import-linter (5 contracts), the size check (functions ≤40 / files ≤300, 6 baselined violations
-left in the two files phase C replaces), the generated staging models — all in `make check` and
-CI. Sinks are behind Protocols with fakes; the schema is declared once in `core/schema/`; the
-test suite runs only in its own `test_` environment. Six commits on branch
-**`feat/phase-b-module-boundaries`** (not merged — the founder decides when). **B.5b** (`hand_uid`
-as `FixedString(16)`) is deferred to C.2, where the tables are rebuilt anyway.
+**Where C.2 left things (2026-09-09):** the v2 facts exist and are full. `marts.decisions`
+holds 73,679,949 rows — one per fold/check/call/bet/raise in `core.actions FINAL`, exactly — over
+160/160 daily partitions (3.84 GiB), and `marts.player_hands` 54,562,770 rows (2.18 GiB). They
+are built from `intermediate.int_hand_arrays` (per-hand action and seat arrays) and
+`int_board_by_street` by the macro `decision_state()`; the columns are the `decisions` /
+`player_hands` entries of `stats/registry/dimensions.yaml`, and every v2 table carries
+`hand_uid FixedString(16)` (B.5b's mart half). Bootstrapped beside the **untouched v1 chain**
+(`player_hand_flags`, `stats_daily` still serve the API) with
+`uv run python -m scripts.backfill --anchor decisions:played_date --anchor player_hands:played_date --select '+decisions +player_hands'`
+in 35 passes / 641 s, peak 1.21 GiB per insert. Parity preview (hero + population): hands, VPIP,
+PFR, RFI, c-bet flop, WTSD, W$SD, net bb identical to the v1 fingerprint below; the other stats
+differ by documented definition (`notes` in the registry). The stat registry (C.1) is in
+`platform/stats/`. **C.1 and C.2 are staged on `feat/phase-c-stat-engine`, not committed** — the
+founder declined the commit prompt once; ask again.
 
 **Do this:**
-1. `cd platform && make up` (the stack may be stopped), then `make check` to confirm the tree.
-2. If the founder has not merged `feat/phase-b-module-boundaries`, ask before doing so.
-3. Read `docs/POKER_PLAN.md` `## Status` → **C.1**: the stat registry as data — port every
-   built-in stat and the 29 orphan counters into `stats/registry/*.yaml`, load them into typed
-   models in `stats/registry.py`, define the filter AST in `stats/ast.py` (§2.4/§2.5, ADR-021/022).
-   "Done means" is in the step. Propose the file layout before writing code.
+1. `cd platform && make ps` (all five services healthy), then `make check` (248 unit tests).
+2. Ask whether to commit the staged work (two commits: the registry; the decision model).
+3. Read `docs/POKER_PLAN.md` `## Status` → **C.3**: `scripts/gen_stats.py` renders from the
+   registry: `dbt/poker_dwh/models/marts/stats_daily.sql` (SummingMergeTree, every group key in
+   the ORDER BY, one `<code>_opp` / `<code>_action` pair per `cached` stat — decision-grain
+   stats from `decisions`, hand-grain from `player_hands`, unioned on the group key),
+   `seeds/dim_stat_definitions.csv`, `tests/assert_action_le_opportunity.sql`, each with a
+   `-- GENERATED` header; `make gen` / `make gen-check` extended. Mind two things: the
+   generated `stats_daily` **replaces the hand-written one the v1 API reads**, so either the
+   v1 routes switch to `stats.service` in the same step or the v1 counter names
+   (`api/queries.py` `COUNTERS`) are generated as aliases until C.5; and once `stats_daily`
+   reads both v2 facts it is downstream of them again, so the default anchor applies
+   (recreate it empty with `empty_chain: true` and backfill with the default anchor). "Done
+   means" is in the step.
 4. Continue down phase C in order. Tick a step only when verified; update the plan's Status and
    §6 and this block at the end.
 
@@ -339,6 +354,9 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-09 (7) | **Off-plan (founder request): pool spot-frequency census + board texture.** Five new modules — `scripts/spot_nodes.py` (preflop/flop *node* per hand from `core.actions`, e.g. `BU open, BB call`; seat→position is a fixed lookup because `button_seat` is always 1, and `FINAL` is skippable because `parser_version` is uniform and `hand_uid` unique, both asserted at runtime by `verify_corpus_assumptions()`), `spot_texture.py` (flop classifier, ace counted **high or low** so A-2-3 is connected), `spot_report.py`, `spot_plan.py`, `spot_frequency.py` → `reports/spot_frequency.{md,csv}`. One unified ranking of all 346 nodes over 9,093,794 six-max hands: 5 spots = 43% of decisions, 10 = 62%. **Three findings.** (1) The texture classifier is parity-checked each run against enumeration of all C(52,3)=22,100 flops — connectedness and suitedness match to 0.07pp, confirming the board parser. (2) The high card deliberately does *not* match, and the deviation is card removal: ace-high flops fall monotonically 23.89% (limped) → 21.7% (SRP) → 20.2% (3bet) → 17.9% (4bet) → 15.1% (5bet), vs 21.74% for a random deck. Texture is otherwise independent of the spot, so spot × texture is a clean product. (3) A node ending in a raise can still show flops — an already-all-in player owed a runout, not a parse bug. **Found a real defect in the dbt chain:** `int_board_texture.sql` computes straight span ace-high only, so A-2-3 lands in `disconnected`; it disagrees with this classifier and should be fixed. `make check` 240 green. **Overlaps plan C.2** — this node grammar is C.2's action-line tokens; reconcile with `marts.decisions`, do not duplicate. | Back to plan **C.2** (decision model); fix `int_board_texture.sql` wheel handling |
+| 2026-09-09 (7) | **Plan C.2 done**: v2 facts built — `marts.decisions` (73.7M rows, one per decision with the state before it) and `marts.player_hands` (54.6M) from per-hand arrays, `hand_uid FixedString(16)`; multi-anchor incremental gate; bootstrapped beside the v1 chain in 35 passes / 641 s at ≤1.21 GiB; counts exact vs `core.* FINAL`; parity preview 9/16 identical, rest by definition. `make check` 248. Staged, not committed. | Plan **C.3** (generator: `stats_daily` from the registry) |
+| 2026-09-09 (6) | Merged phase B into `main` (fast-forward). **Plan C.1 done**: `stats/` package — filter/expression AST, entry models, semantic checks, and the YAML registry (77 dimensions, 65 stats, definitions tightened to standard tracker meaning with `notes` for the parity check). 65 new unit tests; `make check` 240 green; mypy, import-linter, size check extended to `stats/`. Branch `feat/phase-c-stat-engine`. | Plan **C.2** (decision model, built to `dimensions.yaml`) |
 | 2026-09-09 (5) | **Phase B (module boundaries) done and verified**, on branch `feat/phase-b-module-boundaries` (6 commits; phase A merged to `main` at `35acf83`). Settings and the ClickHouse client out of `api/`; import-linter with 5 contracts; sinks behind Protocols with fakes and one ingest loop; a `test_`-prefixed test environment the integration conftest insists on (analysis databases byte-identical before/after); the core schema declared once in `core/schema/` with generated staging models and a spec-vs-`system.columns` test; migration 0009 (dataset on actions/pot_winners + pool repair, 0 disagreements); typed hand endpoints; size limits enforced (28 → 6 baselined violations; PokerStars parser split into a package, real-export fingerprint identical). Founder's storage analysis recorded as plan step B.5b (`hand_uid` FixedString(16)), deferred to C.2's rebuild. `make check` 175 unit tests, `make test-all` 186 passed / 2 skipped. | Phase-B gate: merge the branch (founder's call), then **POKER_PLAN.md C.1** (stat registry as data) |
 | 2026-09-09 (4) | **Phase A (stabilize) done and verified**, on branch `feat/incremental-chain-and-v2-plan` (11 commits). Pool dataset reachable over HTTP; one ingest loop (worker = importer) with `dataset` on the message; 29 stranded counters rolled up and exposed as 17 stats; typed integer filters; CORS, placeholder-secret refusal, cookie flag from settings, auth rate limit, escaped dashboard; sniff ambiguity check; dbt port default; law test for all 52 pairs + intermediate schema tests. Found and fixed: the incremental anchor must be the **last** model (`stats_daily` had been silently empty); `empty_chain` recreate procedure; row-budgeted backfill with scratch-table cleanup. Applied the founder's storage analysis (LowCardinality buckets, UInt8 counts) — measured no disk saving; `hand_uid` (52%) is B.5b. Full rebuild from empty: 42 passes / 1,411 s; fingerprint re-established. | **`POKER_PLAN.md` step B.1** |
 | 2026-09-09 (3) | **Audited the platform and wrote the v2 plan.** Three agent audits (stat engine, module boundaries, API/UI) plus first-hand reads → `POKER_AUDIT.md` (keep / 15 breakages / structural limits / benchmark vs PT4 & Hand2Note / 23 doc-drift items). Founder decisions: Hand2Note-class speed and power, **separate hero and pool analysis modules**, both UI audiences, English only, Vue/Nuxt confirmed. Wrote `POKER_PLAN.md` (decision-level fact table, stat registry as data, JSON filter AST, enforced layering, Nuxt SPA, phases A–E with checkbox steps), rewrote ADR-019 (daily + anchored + backfill), added ADR-020…026, made CLAUDE.md plan-driven. | phase A |

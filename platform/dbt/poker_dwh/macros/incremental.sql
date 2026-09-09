@@ -102,6 +102,22 @@
   model to a downstream one is a cycle in dbt's DAG. `scripts/backfill.py` must query the same
   anchor -- if the two disagree the loop stops while work remains.
 
+  ## Several anchors: bootstrapping a second chain beside the first (plan C.2)
+
+  `anchors` is a var: a list of `[table, date column]` pairs under `marts`, default
+  `[[stats_daily, day]]`. With more than one, a partition counts as built only when EVERY
+  listed table has it (`having count() = N`), and its watermark is the OLDEST of theirs. That
+  is what lets the v2 facts (`decisions`, `player_hands` -- siblings, neither downstream of
+  the other) fill in over a fully built v1 chain without touching it:
+
+      dbt run --full-refresh --select +decisions +player_hands --vars 'empty_chain: true'
+      uv run python -m scripts.backfill --anchor decisions:played_date \
+          --anchor player_hands:played_date --select '+decisions +player_hands'
+
+  A pass that builds `decisions` and then fails on `player_hands` leaves the partition dirty
+  for both, so the next pass redoes it. Once the generated `stats_daily` reads both (C.3) it is
+  again the single last model and the default anchor applies.
+
   A half-failed run is still self-healing: the anchor only advances for a partition once
   `marts.stats_daily` itself has been written for it, which happens last, so a failure
   anywhere in the chain leaves that partition dirty and the next pass redoes the whole set.
@@ -163,9 +179,7 @@
             group by m
         ) as src
         left join (
-            select toYYYYMMDD(day) as m, max(src_parsed_at) as built_max
-            from {{ db_prefix() }}marts.stats_daily
-            group by m
+            {{ anchor_built() }}
         ) as built on built.m = src.m
         {# An UNBUILT partition has no row on the right, and ClickHouse pads the miss with the
            type's ZERO (the 1970 epoch) rather than NULL -- so `src_max > built_max` is true
@@ -182,3 +196,26 @@
     1
   {%- endif -%}
 {% endmacro %}
+
+
+{#- The built side of the gate: per partition, the watermark of the anchor table(s). -#}
+{% macro anchor_built() -%}
+  {%- set anchors = var('anchors', [['stats_daily', 'day']]) -%}
+  {%- if anchors | length == 1 -%}
+    select toYYYYMMDD({{ anchors[0][1] }}) as m, max(src_parsed_at) as built_max
+    from {{ db_prefix() }}marts.{{ anchors[0][0] }}
+    group by m
+  {%- else -%}
+    select m, min(built_max) as built_max
+    from (
+      {%- for anchor in anchors %}
+        select toYYYYMMDD({{ anchor[1] }}) as m, max(src_parsed_at) as built_max
+        from {{ db_prefix() }}marts.{{ anchor[0] }}
+        group by m
+        {%- if not loop.last %} union all {%- endif %}
+      {%- endfor %}
+    )
+    group by m
+    having count() = {{ anchors | length }}
+  {%- endif -%}
+{%- endmacro %}

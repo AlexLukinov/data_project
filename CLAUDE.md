@@ -205,9 +205,10 @@ Redis 6380 · MinIO 9010/9011**.
   Kafka → worker → ClickHouse; sinks behind Protocols in `ingestion/sinks/`) · `core/` (canonical
   model + pot-math validation + the table schema in `core/schema/`) · `api/` · `ch/migrations/` ·
   `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, pool report, account registration)
-  · `reports/` · `infra/clickhouse/` (small-node sizing). Planned by `POKER_PLAN.md`: `stats/`
-  (registry + filter AST + compiler), `analysis/hero/` and `analysis/pool/` (separate modules,
-  ADR-026), `web/` (Nuxt 4).
+  · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the stat registry as YAML in
+  `stats/registry/` — dimensions and built-in stats, the column contract for the marts — plus the
+  filter/expression AST; the compiler arrives in plan C.4). Planned by `POKER_PLAN.md`:
+  `analysis/hero/` and `analysis/pool/` (separate modules, ADR-026), `web/` (Nuxt 4).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
   `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.
 - **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. Tests and
@@ -217,7 +218,7 @@ Redis 6380 · MinIO 9010/9011**.
   provisions and drops those databases itself. Never set `CLICKHOUSE_DB_PREFIX` in `.env`.
 - **ClickHouse runs at 4 GB by default** (`CLICKHOUSE_MEM`), sized as a production node
   (`infra/clickhouse/small-node.xml` + `limits.xml`). Never bootstrap the mart chain with a
-  one-shot `dbt build --full-refresh`; use `uv run python scripts/backfill.py` (ADR-019).
+  one-shot `dbt build --full-refresh`; use `uv run python -m scripts.backfill` (ADR-019).
 - Bootstrapping the full corpus and the lab together may not fit in Docker's memory.
   `scripts/pause.sh` frees the lab; `scripts/resume.sh` + `scripts/port-forwards.sh` bring it back.
 - **Run dbt via `make dbt-build`** or with `CLICKHOUSE_PORT=8124` exported: `profiles.yml`

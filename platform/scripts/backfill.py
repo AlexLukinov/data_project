@@ -23,9 +23,18 @@ number of partitions is either wasteful on quiet days or fatal on dense ones -- 
 of the oldest dirty partitions as fit under a row budget. The budget still ADAPTS as a safety
 net: it halves when a pass runs out of memory and doubles back after a run of clean passes.
 
-    uv run python scripts/backfill.py                        # 2.0M rows/pass, adapt
-    uv run python scripts/backfill.py --row-budget 1000000   # gentler
-    uv run python scripts/backfill.py --max-passes 5         # stop early
+    uv run python -m scripts.backfill                        # 2.0M rows/pass, adapt
+    uv run python -m scripts.backfill --row-budget 1000000   # gentler
+    uv run python -m scripts.backfill --max-passes 5         # stop early
+
+**Bootstrapping a second chain beside the first** (plan C.2): anchor on the new tables and
+select only them, so the built v1 chain is neither rebuilt nor consulted:
+
+    uv run python -m scripts.backfill --anchor decisions:played_date
+        --anchor player_hands:played_date --select '+decisions +player_hands'
+
+With several anchors a partition is clean only once EVERY anchor holds it -- the same rule as
+`anchor_built()` in macros/incremental.sql, which `scripts/anchors.py` mirrors exactly.
 """
 
 from __future__ import annotations
@@ -38,6 +47,14 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from scripts.anchors import (
+    PARTITION_EXPR,
+    Anchor,
+    anchor_sql,
+    dbt_vars,
+    parse_anchors,
+)
 
 log = logging.getLogger("backfill")
 
@@ -60,14 +77,6 @@ GROW_AFTER = 3
 quickly after a dense stretch, large enough not to thrash back into the failure that shrank
 it."""
 
-PARTITION_EXPR = "toYYYYMMDD"
-"""Must match `partition_by` in the models and `dirty_partitions()` in macros/incremental.sql.
-
-Named rather than inlined because these have already drifted apart once: the macro was moved
-from monthly to daily while this script still counted months, so the loop saw 10 units of work
-where there were 164 and would have stopped believing it was finished. Changing partition
-granularity means changing it in three places -- the model configs, the macro, and here."""
-
 
 def _clickhouse(sql: str, *, check: bool = True) -> str:
     """Run one statement through the compose service's client; returns its stdout."""
@@ -81,23 +90,21 @@ def _clickhouse(sql: str, *, check: bool = True) -> str:
     return out.stdout
 
 
-def _dirty_partitions() -> list[tuple[int, int]]:
+def _dirty_partitions(anchors: tuple[Anchor, ...]) -> list[tuple[int, int]]:
     """Dirty partitions still pending, oldest first, each with its player-row count.
 
     **This must mirror `dirty_partitions()` in macros/incremental.sql exactly**: the same
-    anchor (`marts.stats_daily`, the LAST model of the chain) and the same per-partition
-    comparison. A global `max(src_parsed_at)` answers a different question and undercounts,
-    because ingest order and partition order are unrelated. If the two ever disagree, the loop
-    stops while work remains.
+    anchors (by default `marts.stats_daily`, the LAST model of the chain) and the same
+    per-partition comparison. A global `max(src_parsed_at)` answers a different question and
+    undercounts, because ingest order and partition order are unrelated. If the two ever
+    disagree, the loop stops while work remains.
     """
     prefix = os.environ.get("CLICKHOUSE_DB_PREFIX", "")
     sql = (
         "SELECT src.m AS m, coalesce(pr.rows, 0) AS rows FROM ("
         f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, max(parsed_at) AS src_max"
         f"  FROM {prefix}core.hands GROUP BY m"
-        ") AS src LEFT JOIN ("
-        f"  SELECT {PARTITION_EXPR}(day) AS m, max(src_parsed_at) AS built_max"
-        f"  FROM {prefix}marts.stats_daily GROUP BY m"
+        f") AS src LEFT JOIN ({anchor_sql(prefix, anchors)}"
         ") AS built ON built.m = src.m LEFT JOIN ("
         f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, count() AS rows"
         f"  FROM {prefix}core.hand_players GROUP BY m"
@@ -181,25 +188,22 @@ def _recover(budget: _Budget, batch: int, attempt: int) -> bool:
     return False
 
 
-def _run_pass(batch: int) -> bool:
+def _run_pass(batch: int, anchors: tuple[Anchor, ...], select: str | None) -> bool:
     """One dbt pass over the oldest `batch` dirty partitions. True if it succeeded."""
     env = {**os.environ, "CLICKHOUSE_PORT": os.environ.get("CLICKHOUSE_PORT", "8124")}
-    result = subprocess.run(
-        [
-            str(DBT),
-            "build",
-            "--project-dir",
-            str(PROJECT),
-            "--profiles-dir",
-            str(PROJECT),
-            "--vars",
-            f"batch_partitions: {batch}",
-        ],
-        cwd=PLATFORM,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
+    command = [
+        str(DBT),
+        "build",
+        "--project-dir",
+        str(PROJECT),
+        "--profiles-dir",
+        str(PROJECT),
+        "--vars",
+        dbt_vars(batch, anchors),
+    ]
+    if select:
+        command += ["--select", select]
+    result = subprocess.run(command, cwd=PLATFORM, env=env, capture_output=True, text=True)
     if result.returncode != 0:
         tail = "\n".join(result.stdout.splitlines()[-25:])
         log.error("dbt pass failed:\n%s", tail)
@@ -215,18 +219,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=f"player-rows per pass (default {DEFAULT_ROW_BUDGET:,})",
     )
     ap.add_argument("--max-passes", type=int, default=400, help="safety stop")
+    ap.add_argument(
+        "--anchor",
+        action="append",
+        metavar="TABLE:DATE_COLUMN",
+        help="mart table (and its date column) a partition must be built in to count as "
+        "clean; repeatable; default stats_daily:day",
+    )
+    ap.add_argument("--select", help="dbt selector, e.g. '+decisions +player_hands'")
     return ap.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Loop dbt until no partition is dirty, shrinking the row budget when memory says so."""
     args = _parse_args(argv)
+    anchors = parse_anchors(args.anchor)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     budget = _Budget(ceiling=max(1, args.row_budget), rows=max(1, args.row_budget))
     start = time.monotonic()
 
     for attempt in range(1, args.max_passes + 1):
-        pending = _dirty_partitions()
+        pending = _dirty_partitions(anchors)
         if not pending:
             log.info("caught up after %d pass(es), %.0fs", attempt - 1, time.monotonic() - start)
             return 0
@@ -240,14 +253,14 @@ def main(argv: list[str] | None = None) -> int:
             f"{rows:,}",
             f"{budget.rows:,}",
         )
-        if not _run_pass(batch):
+        if not _run_pass(batch, anchors, args.select):
             if _recover(budget, batch, attempt):
                 continue
             return 1
         if budget.reward():
             log.info("steady; growing row budget to %s", f"{budget.rows:,}")
 
-        if len(_dirty_partitions()) >= len(pending):
+        if len(_dirty_partitions(anchors)) >= len(pending):
             # No forward progress: another pass would loop forever. Fail loudly rather than
             # spinning -- the usual cause is a model erroring on one partition every time.
             log.error("pass %d made no progress (%d still dirty) — stopping", attempt, len(pending))

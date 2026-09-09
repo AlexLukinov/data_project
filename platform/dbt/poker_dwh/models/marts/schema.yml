@@ -1,39 +1,54 @@
 version: 2
 
+# The v2 facts (plan C.2). Keys never null; the enum-shaped columns hold only the values the
+# registry declares (stats/registry/dimensions.yaml), so a derivation bug shows up as a failed
+# test rather than as a situation no filter can name. Cheap: not_null is a column scan and
+# accepted_values a GROUP BY on a LowCardinality column, both partition-pruned by nothing but
+# still linear -- the same trade the intermediate tests make.
+
 models:
-  - name: player_hand_flags
-    description: >
-      One row per (hand, player) with an opportunity/action counter pair per stat.
-      Every statistic in the product is sum(action)/sum(opportunity) over this table.
+  - name: decisions
+    description: One row per decision point, with the state before it (ADR-020).
     columns:
       - name: user_id
-        description: Tenant key. Leads every ORDER BY in the system.
         tests: [not_null]
       - name: hand_uid
         tests: [not_null]
-      - name: hands
+      - name: seat
         tests: [not_null]
+      - name: action_index
+        tests: [not_null]
+      - name: played_at_utc
+        tests: [not_null]
+      - name: src_parsed_at
+        tests: [not_null]
+      - name: facing
+        tests:
+          - accepted_values:
+              values: [none, limp, bet, raise, 3bet, 4bet, 5bet_plus]
+      - name: prev_street_faced
+        tests:
+          - accepted_values:
+              values: [none, limp, bet, raise, 3bet, 4bet, 5bet_plus]
+      - name: pot_type
+        tests:
+          - accepted_values:
+              values: [limped, srp, 3bet, 4bet, 5bet_plus]
 
-  - name: stats_daily
-    description: Daily rollup read by the API and the dashboard.
+  - name: player_hands
+    description: One row per (hand, player); the hand-grain fact (ADR-020).
     columns:
       - name: user_id
         tests: [not_null]
-      - name: day
+      - name: hand_uid
         tests: [not_null]
-      - name: hands
+      - name: seat
         tests: [not_null]
-
-  - name: dim_stat_definitions
-    columns:
-      - name: code
-        tests: [not_null, unique]
-
-# ---------------------------------------------------------------------------------------
-# The two singular tests below are worth more than every not_null test in this file.
-#
-# They encode LAWS OF POKER. A not_null test catches a plumbing failure; these catch a
-# *logic* failure — the kind that produces plausible, wrong numbers and no error anywhere.
-# That is the worst failure mode an analytics product has, and it is the one thing users
-# cannot detect for themselves.
-# ---------------------------------------------------------------------------------------
+      - name: played_at_utc
+        tests: [not_null]
+      - name: src_parsed_at
+        tests: [not_null]
+      - name: hand_shape
+        tests:
+          - accepted_values:
+              values: ['', pair, suited, offsuit]
