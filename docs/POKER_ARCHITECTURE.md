@@ -2,8 +2,13 @@
 
 > Companion docs: [POKER_STATUS.md](POKER_STATUS.md) *(live progress)* · [POKER_FEATURES.md](POKER_FEATURES.md) · [POKER_GAP_ANALYSIS.md](POKER_GAP_ANALYSIS.md) · [POKER_DATA_MODEL.md](POKER_DATA_MODEL.md) · [POKER_DECISIONS.md](POKER_DECISIONS.md) · [POKER_ROADMAP.md](POKER_ROADMAP.md) · [POKER_OBSERVABILITY.md](POKER_OBSERVABILITY.md)
 >
-> This is the **target**, not the MVP. [POKER_ROADMAP.md](POKER_ROADMAP.md) says which parts get
-> built when. Nothing here is implemented yet.
+> This is the **target as designed on 2026-09-06**. Most of the ingestion path, the stat layer,
+> the API, auth and the cache have since been built under `platform/` (not at the repo root as
+> drawn below). The 2026-09-09 audit ([POKER_AUDIT.md](POKER_AUDIT.md)) and the v2 plan
+> ([POKER_PLAN.md](POKER_PLAN.md)) refine the stat layer (decision-level fact + registry, ADR-020/021),
+> the module layering (ADR-023), the UI (ADR-024) and split analysis into hero/pool modules
+> (ADR-026). Where this file and those disagree, they win. Not yet built: `hands:batch`, `/v1/stream`,
+> the MVs (F-202), `web/`.
 
 ---
 
@@ -500,7 +505,9 @@ ru_de/
 │   └── sites/               #   pokerstars.py, ipoker.py, ggpoker.py, …
 ├── ingestion/               # Kafka consumer → Polars normalize → ClickHouse batch insert
 ├── api/                     # FastAPI: auth, uploads, stats, filters
-├── web/                     # Nuxt 4 dashboard
+├── stats/                   # (v2) stat registry, filter AST, compiler, router — POKER_PLAN.md §2.4–2.6
+├── analysis/hero, analysis/pool   # (v2) separate analysis modules — ADR-026
+├── web/                     # Nuxt 4 dashboard — NOT BUILT YET (POKER_PLAN.md phase D)
 ├── dbt/poker_dwh/           # staging → intermediate → marts (the stat layer)
 ├── ch/migrations/           # numbered .sql + the idempotent runner
 ├── infra/

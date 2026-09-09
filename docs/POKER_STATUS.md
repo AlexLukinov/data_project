@@ -5,20 +5,88 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice** · **Status: Phase 0 complete, Phase 1 spine complete**
-**Last updated:** 2026-09-08
+**Current phase: 1 — MVP thin slice** · **Status: spine complete · 9.1M real hands loaded · audited · v2 plan written (POKER_PLAN.md)**
+**Last updated:** 2026-09-09 (audit session)
+
+---
+
+## Next action
+
+> **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
+> which file, which command, what "done" looks like. Rewrite it at the end of every session.
+
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md), starting at step **A.0**
+
+The build is now **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
+(decisions ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status`
+block names the next step. This block only points there.
+
+**Why:** the 2026-09-09 audit ([POKER_AUDIT.md](POKER_AUDIT.md)) found the spine sound but the
+stat model, the stat definitions, the ingest loop and the UI structurally unable to deliver
+"any stat for any situation", module isolation, or an obvious UI. Fifteen concrete breakages
+(B1–B15) come first.
+
+**Do this:**
+1. Read `docs/POKER_PLAN.md` `## Status` → next step is **A.0** (checkpoint commit — ask first).
+2. Then **A.1**: bring ClickHouse up (`cd platform && make up`) and **verify the anchored rebuild**
+   that the previous session launched but could not confirm (container was stopped during the
+   audit): 160 partitions on all 8 chain tables, `marts.player_hand_flags` rows =
+   `core.hand_players FINAL` = 54,562,770, no duplicate `(hand_uid, seat)`, `sum(cbet_flop_action)`
+   > 0 in both datasets, `make check` green. If any fails: `uv run python scripts/backfill.py`.
+3. Continue down phase A. Tick a step only when its "Done means" is verified; add a row to the
+   plan's §6 and to the session log below at the end of the session.
+
+**Done means (for this block):** the plan's `## Status` says a step later than A.1 and the data
+figures below are re-counted.
+
+**Time-independent fingerprint** (pre-purge corpus; A.1 re-establishes it on the purged one):
+
+| rows | hands | vpip_action | rfi_opp | cbet_flop_action |
+|---|---|---|---|---|
+| 54,563,210 | 54,563,210 | 12,453,044 | 29,080,102 | 1,824,127 |
+
+Hero subset: 119,240 rows · 26,810 vpip · 63,715 rfi_opp · 3,951 cbet_flop.
+
+### Already done since the last session log entry (uncommitted)
+- Timezone fix applied to code **and data**: all hands re-imported with aware datetimes; stale
+  pre-fix rows purged (41,677 hands orphaned across day partitions by the shift).
+- Incremental chain converted to **daily** partitions with a per-partition watermark and one
+  anchor for all models; `scripts/backfill.py` bootstraps on 4 GB (19 passes / 581 s / 2.0 GiB).
+- ClickHouse default dropped to **4 GB** (`infra/clickhouse/small-node.xml`, `limits.xml`).
+- Test-tenant rows (384) and the 8-hand seed corpus purged from the analysis tables.
 
 ---
 
 ## Where we are, in one paragraph
 
-**Phase 0 and the Phase 1 spine are built, running and tested.** `platform/` holds a working
+**The spine is built, tested, and loaded with ~9.1M real hands.** `platform/` holds a working
 product: a five-service docker-compose stack, a PokerStars + GGPoker parser with pot-math
-validation, an upload → object-storage → Kafka → worker → ClickHouse pipeline, a dbt stat layer
-computing ~20 statistics, a FastAPI service with auth and tenant isolation, and a demo
-dashboard. 125 tests pass (unit + integration), dbt builds 19/19 green, lint and mypy are
-clean. What remains in Phase 1 is breadth, not spine: more parsers, more filters, the real
-Nuxt frontend, and the ClickHouse MV that makes rollups incremental.
+validation, an upload → object-storage → Kafka → worker → ClickHouse pipeline, a dbt stat layer,
+a FastAPI service with auth and tenant isolation, and a demo dashboard. 135 tests pass, dbt
+builds 22/22 green, lint and mypy are clean.
+
+Two bodies of real data are loaded under tenant 1, separated by the `dataset` column — see
+[Data loaded](#data-loaded). Keeping them apart is a correctness boundary, not a nicety:
+averaging a win rate over hands nobody played is meaningless, so `StatsQuery` defaults to
+`dataset='hero'` and pool baselines are opt-in.
+
+The stat layer went from 34 counters to **115** (155 columns in all, the rest being keys and
+dimensions), with **24 filterable dimensions** (board texture, SPR, bet sizing, hand class, pot
+type, in/out of position, opener's seat). That is what
+makes PokerTracker-style custom reports possible without new SQL per question, and it is what
+the pool-leak extraction and the range-heatmap artifact are both built on.
+
+What remains in Phase 1 is breadth, not spine: more parsers, the Nuxt frontend, the incremental
+MV, the all-in equity calculator, and an expression DSL so new counters stop requiring a dbt
+edit.
+
+**2026-09-09 audit verdict** ([POKER_AUDIT.md](POKER_AUDIT.md)): the spine is sound (parser seam,
+canonical model, validation, tenancy, incremental chain), but the wide-flag stat model cannot
+express arbitrary situations, stat definitions live in three drifting copies, the pool dataset is
+unreachable through the API, the worker and the importer run two diverged ingest loops, and the UI
+is a demo page. The remedy is the v2 plan in [POKER_PLAN.md](POKER_PLAN.md): a decision-level fact
+table, a data-driven stat registry, a typed filter AST, enforced module layering, separate
+hero/pool analysis modules, and a Nuxt UI with one shared filter model.
 
 ---
 
@@ -30,7 +98,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done & verified · `[!]`
 - [x] `POKER_GAP_ANALYSIS.md` — lab inventory vs. product needs
 - [x] `POKER_ARCHITECTURE.md` — target architecture, live-HUD streaming path, seams
 - [x] `POKER_DATA_MODEL.md` — canonical model, ClickHouse/Postgres/lake/Kafka/dbt design
-- [x] `POKER_DECISIONS.md` — 18 ADRs
+- [x] `POKER_DECISIONS.md` — 26 ADRs (019–026 added 2026-09-09)
+- [x] `POKER_AUDIT.md` + `POKER_PLAN.md` — audit of the shipped code and the v2 plan (2026-09-09)
 - [x] `POKER_FEATURES.md` — ~90-feature tiered backlog
 - [x] `POKER_ROADMAP.md` — phases reconciled with `LEARNING_PLAN.md`
 - [x] `POKER_OBSERVABILITY.md` — product vs. platform monitoring
@@ -89,9 +158,19 @@ redoing against ~50 REAL hands once exports exist)*.
 - [ ] F-309 All-in EV adjustment — columns and plumbing exist; the **equity calculator** is
       not implemented, so `ev_won_bb` currently falls back to the actual result
 - [ ] F-104/F-105/F-106/F-107 iPoker, WPN, partypoker, Winamax parsers
-- [ ] F-402/F-403/F-404/F-405 board texture, action sequence, SPR, holding filters
-- [ ] F-016 Nuxt dashboard *(the current one is a deliberate no-build-step demo page)*
-- [ ] F-312b Confidence intervals on bb/100
+- [x] F-402/F-404/F-405 **board texture, SPR and holding filters** — delivered by the wide-flag
+      expansion; `flop_pairing`/`suitedness`/`high_card`/`connectedness`, `spr_bucket`,
+      `stack_bucket`, `hand_class`, `hand_shape`, bet/faced size buckets, `is_ip`, `pot_type`
+- [ ] F-403 action-sequence filter — the individual actions are all counters now, but there is
+      no way to express an arbitrary line ("raise-call-bet-raise") without a new counter
+- [ ] Nuxt dashboard (ADR-016/024; no feature id — the current page is a deliberate
+      no-build-step demo) → [POKER_PLAN.md](POKER_PLAN.md) phase D
+- [ ] F-312 Confidence intervals on bb/100 → plan E.2
+- [ ] **Custom stats for any situation** (F-313/F-403/F-511) → plan phase C: decision-level
+      fact table + stat registry + filter AST (ADR-020/021/022) replace the "expression DSL" idea
+- [~] **Incremental flag table** — implemented (ADR-019: daily partitions, anchored,
+      `backfill.py`, 4 GB default) and fingerprint-verified at monthly grain; the daily anchored
+      rebuild is **unverified** (ClickHouse was down) → plan A.1
 
 ### Phase 2 — Differentiators · `[ ]` not started
 Population analysis (F-601/602), EV-per-decision (F-603), deviation scoring & leak ranking
@@ -125,9 +204,45 @@ Only features whose status has moved off `planned` are listed. Everything else i
 | F-501…506 | Graphs, stats table, replayer stub | ✅ done | demo dashboard, no build step |
 | F-701…703 | Auth + tenancy | ✅ done | Argon2id, rotating refresh, isolation suite |
 | F-801 | Ingestion API contract | ✅ done | versioned; the HUD agent attaches here |
-| F-B01/B02 | Structured logs, drift view | ✅ done | `core.v_format_drift` |
+| F-B01 | Structured logs (+ `core.v_format_drift`) | ✅ done | F-B02 ingest-lag metric is **not** built (was wrongly listed here) |
 | F-202 | Incremental MVs | ⏳ next | rollups are batch (dbt) today |
 | F-309 | All-in EV adjustment | ⏳ partial | plumbing done, equity calculator missing |
+| F-402/404/405 | Board texture, SPR, holding filters | ✅ done | delivered by the wide-flag expansion |
+| F-403 | Action-sequence filter | ⏳ partial | actions are counters; arbitrary lines need the DSL |
+| F-601 | Population analysis | ⏳ partial | pool aggregates extracted (`reports/pool_leaks.md`); cohort API not built |
+| — | Bulk archive importer | ✅ done | `scripts/import_archive.py`, nested zips, 40k hands/s, resumable |
+| — | Pool leak extraction | ✅ done | 436 stats, 74 queries → `reports/pool_leaks.{md,csv}` |
+| — | Range heatmap artifact | ✅ done | 10 tabs × 13×13 grids, published artifact |
+
+---
+
+## Data loaded
+
+Cross-session state: what is actually in ClickHouse right now.
+
+| | `dataset='hero'` | `dataset='population'` |
+|---|---|---|
+| What it is | The founder's own play | Observed pool hands (someone else's export) |
+| Hands | **~19,880** | **~9,074,000** (total 9,093,796 after the duplicate purge; exact split re-counted in plan A.1) |
+| Stakes | NL2 6.4k · NL5 11.8k · NL10 1.6k | NL10 2.97M · NL25 6.11M |
+| Dates | 2026-08-18 → 2026-09-04 | 2023-08-29 → 2025-05-13 |
+| Hero seat | present (`Hero`) | **none** — hero exclusion is structural |
+| Opponents | anonymized, session-scoped aliases | **real screen names**, 94,276 distinct ids |
+| Opponent tracking | impossible across sessions | possible (not yet built) |
+
+Totals (logical, after `FINAL` and the duplicate purge): **9,093,796** hands ·
+**54,562,770** player-rows · **100,346,158** actions · ~5 GB on disk. (The earlier "143.75M
+actions" was a physical count including ReplacingMergeTree duplicates.)
+Parse validity: pool **99.74%**, hero **99.94%**. Raw text for every file is in MinIO,
+content-addressed, so any parser fix can be replayed from the archive alone.
+
+**Sources are gitignored and must stay that way** — `hand_histories/` and `*.zip` contain other
+players' screen names and betting behaviour (third-party personal data). Only aggregates are
+committed.
+
+**Performance measured on this hardware:** import **40,100 hands/s** across 8 processes
+(full 9.1M archive, 2,494 nested-zip members, in **226–260 s**); full dbt refresh **~10–11 min**;
+a stat query over the 54M-row fact table uses **13–29 MiB** and returns in **under 0.1 s**.
 
 ---
 
@@ -135,8 +250,9 @@ Only features whose status has moved off `planned` are listed. Everything else i
 
 | | Purpose | Status |
 |---|---|---|
-| **minikube `dataplatform`** | The **learning lab** — interview prep, DE sprints. Not the product. | ✅ running, 17 pods healthy, node 20Gi |
-| **docker-compose (product)** | Local dev for the poker platform. | ✅ running — `platform/`, 5 services healthy. Ports shifted off the lab's: CH 8124, PG 5434, Kafka 9094, Redis 6380, MinIO 9010/9011 |
+| **minikube `dataplatform`** | The **learning lab** — interview prep, DE sprints. Not the product. | ⏸️ **PAUSED** via `scripts/pause.sh` to free ~11.5 GiB for the 9.1M-hand build. PVCs intact; `scripts/resume.sh` + `scripts/port-forwards.sh` to restore |
+| **docker-compose (product)** | Local dev for the poker platform. | ⏸️ **stopped** at the end of the audit session (`cd platform && make up` to start). Ports shifted off the lab's: CH 8124, PG 5434, Kafka 9094, Redis 6380, MinIO 9010/9011 |
+| **ClickHouse memory** | Sized as a production node. | ✅ **4 GB** default (`CLICKHOUSE_MEM`), per-query ceiling 2.5 GB, caches sized in `platform/infra/clickhouse/small-node.xml`, spill + `grace_hash` + `max_threads 2` in `limits.xml`. Bootstrapping the full corpus is `scripts/backfill.py`, never a one-shot full refresh (ADR-019) |
 | **production** | — | ❌ not chosen ([open question](POKER_GAP_ANALYSIS.md#open-questions-for-you-before-the-implementation-run)) |
 
 Why two: [ADR-015](POKER_DECISIONS.md#adr-015--docker-compose-for-the-product-minikube-stays-the-learning-lab).
@@ -159,20 +275,53 @@ section only records the link between the two tracks.
 
 ## Open blockers & decisions needed
 
-1. **Real hand-history files.** ← *the current blocker.* The corpus is synthetic and
-   hand-verified, but the PokerStars and especially the GGPoker parsers are written to the
-   documented format shape and **must be validated against real exports** before they can be
-   trusted. This also gates re-doing the ~50-hand manual stat verification against real data.
-2. ~~Approval to start Phase 0~~ — given.
-3. **Real hand-history files (detail).** Phase 0's F-007 corpus needs actual exports. No sample data
-   exists in the repo.
-3. **Sites to support first**, and cash vs. tournaments — drives parser order.
-4. **Hero-only or opponent stats in phase 1** — hero-only is dramatically simpler and still a
-   real product.
-5. **Production target** (managed ClickHouse vs. self-hosted) — not needed until Phase 3, but it
+1. ~~Real hand-history files~~ — **resolved.** 9.1M pool + 19,880 hero hands loaded and
+   validated; the parsers were corrected against them (four real bugs, below).
+2. **23,787 pool hands (0.26%) still fail pot reconciliation** and are discarded rather than
+   stored wrong. Characterised, not fixed: 97% are *overpays* (winner collected more than went
+   in), median $0.04, on small pots, and almost none carry a Cash Drop line. A rounding
+   hypothesis was tested and **rejected** — median discrepancy is 15% of the pot with a $60 max,
+   so loosening the validator's tolerance would be wrong. Root cause unknown; this is the next
+   parser dig.
+3. ~~The flag table must become incremental~~ — **done** (ADR-019). The remaining scale steps
+   are in [POKER_PLAN.md](POKER_PLAN.md) phase E: MV (F-202) → shard by `user_id` → quotas.
+   **New, from the audit:** the stat *model* itself is the limit for "any situation" and is
+   replaced in phase C (ADR-020); fifteen concrete breakages (AUDIT B1–B15, e.g. the pool dataset
+   unreachable via the API, two diverged ingest loops) are fixed in phase A.
+4. **~50-hand manual stat verification against REAL hands** is still outstanding. It was done
+   against 8 synthetic hands. Everything downstream rests on it.
+5. **Stake mismatch to be aware of when interpreting pool stats.** The pool is NL10/NL25; the
+   founder plays NL2–NL5. The two pools open within half a point of each other at every seat,
+   but that equivalence has only been checked preflop.
+6. **Opponent tracking is now possible in the pool** (real screen names, 94,276 ids) and remains
+   impossible in the hero export (session-scoped aliases). Whether to build per-opponent stats
+   is an open product decision.
+7. **Production target** (managed ClickHouse vs. self-hosted) — not needed until Phase 3, but it
    shapes hardening work.
+8. **Sites to support next**, and cash vs. tournaments — drives parser order. No PokerStars or
+   tournament export has been tested against real data yet.
 
 Full list: [POKER_GAP_ANALYSIS.md](POKER_GAP_ANALYSIS.md#open-questions-for-you-before-the-implementation-run).
+
+---
+
+## Parser corrections made against real data
+
+Kept here because each was **silent** — the parser raised nothing and the hands validated.
+
+| # | Bug | Cost | Fixed in |
+|---|---|---|---|
+| 1 | Rake regex unreachable past a `$` anchor | 47% of hands got `rake=0` | v2 |
+| 2 | Jackpot/Bingo/Fortune/Tax drops uncounted | further 8% | v2 |
+| 3 | GG opponents assumed anonymous | destroyed 881k real identities | v2 |
+| 4 | Alias regex anchored at exactly 8 hex chars | leaked 6.2% of aliases (GG renders a uint32 with `%x`, no zero-padding) | v3 |
+| 5 | `Cash Drop to Pot` unparsed | 56,872 hands wrongly rejected; recovered 33,050 | v4 |
+| 6 | LEFT JOIN padding invented a phantom raise in every raise-less pot | inflated every 3-bet/4-bet **denominator** | dbt |
+| 7 | Two dbt models quadratic in players × raises | died at 9M hands; rewritten with window/array aggregation | dbt |
+
+Bug 6 is the one to remember: ClickHouse pads unmatched LEFT JOIN rows with the type's **zero**,
+not NULL, so `r.action_index < first_idx` was true against padding. Guard joins on an explicit
+`1 as is_row` marker, never on a column whose zero is a legal value.
 
 ---
 
@@ -192,13 +341,41 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-09 (3) | **Audited the platform and wrote the v2 plan.** Three agent audits (stat engine, module boundaries, API/UI) plus first-hand reads → `POKER_AUDIT.md` (keep / 15 breakages / structural limits / benchmark vs PT4 & Hand2Note / 23 doc-drift items). Founder decisions: Hand2Note-class speed and power, **separate hero and pool analysis modules**, both UI audiences, English only, Vue/Nuxt confirmed. Wrote `POKER_PLAN.md` (decision-level fact table, stat registry as data, JSON filter AST, enforced layering, Nuxt SPA, phases A–E with checkbox steps), rewrote ADR-019 (daily + anchored + backfill), added ADR-020…026, made CLAUDE.md plan-driven. No code changed; nothing committed. | **`POKER_PLAN.md` step A.0** (checkpoint commit — ask first), then A.1 verify the rebuild |
+| 2026-09-09 (2) | **Timezone fix landed in data; chain made daily, anchored, bootstrapped on 4 GB.** Re-imported both datasets with aware datetimes; purged 41,677 orphaned pre-fix rows (ReplacingMergeTree dedups only within a partition), 384 test-tenant rows and the 8 seed hands. Converted the chain to daily partitions with a per-partition watermark; found and fixed two silent bugs (global watermark skipped partitions; per-model selection zeroed c-bets after a failed pass) by anchoring every model on `player_hand_flags`; `scripts/backfill.py` with adaptive batching (19 passes / 581 s / 2.0 GiB); ClickHouse default 4 GB with sized caches. Launched the final anchored rebuild — **unverified** (session ended, container later stopped). | verify the rebuild |
+| 2026-09-09 | **Made the build resumable across sessions.** Audited the dbt chain and designed the incremental conversion (partition-grain `insert_overwrite`, watermark on `core.hands.parsed_at`, dirty-month predicate on both sides of every join) — recorded in full under [Next action](#next-action), not yet implemented. Captured the pre-change fingerprint of `marts.player_hand_flags` to verify against. Added a `## Next action` block to this file and a deterministic start/end-of-session procedure to [CLAUDE.md](../CLAUDE.md), plus a `platform/` make-target contract there so a cold session knows how to run the product stack. | **[Next action](#next-action) — implement the incremental chain** |
+| 2026-09-08 (3) | **Widened the stat layer to 115 counters and extracted pool stats.** Added a generic facing-an-open triple (`vs_open_opp/_call/_fold`) so cold-call, BB and SB defence come from one counter set sliced by seat and opener, plus 25 leak counters (limp follow-through, raise-c-bet, float-fold, fold-to-donk, fold-to-raise per street, probe/delayed-c-bet folds, river probe/raise/bet-call, check-fold vs check-call). Published a 10-tab 13×13 range-heatmap artifact with a companion 'never shown' grid. Produced `reports/pool_leaks.{md,csv}` — 436 stats, 74 audited queries, low-N flagged. Raised ClickHouse to 15 GB and paused the lab to fit the full-refresh build. | **Make the flag table incremental, then drop ClickHouse back to ~4 GB** |
+| 2026-09-08 (2) | **Loaded real data and widened the stat layer.** Imported 19,810 hero hands + ~9.07M population hands (2,494 source files inside nested zips) via a new bulk importer, at ~40k hands/s. Added the `dataset` column separating own play from observed pool. Widened `int_hand_player_flags` from 34 to ~130 counters and ~24 filterable dimensions (board texture, SPR, bet sizing, hand class, pot type, IP/OOP); API now routes coarse queries to the rollup and fine ones to the fact table. **Four real bugs fixed:** GG alias regex missed 6.2% of aliases (uint32 `%x`, not zero-padded); a LEFT-JOIN padding bug invented a phantom raise in every raise-less pot, inflating 3-bet/4-bet denominators; `Cash Drop to Pot` was unparsed, failing pot reconciliation on 56,872 hands; two dbt models were quadratic and died at 9M hands. | **Verify stats vs GG's own reports; then F-601 population analysis** |
 | 2026-09-08 | **Built Phase 0 + the Phase 1 spine.** `platform/` monorepo, docker-compose (CH/PG/Kafka/Redis/MinIO), canonical model, PokerStars + GGPoker parsers, pot-math validation, ingestion pipeline, 5 CH migrations, Alembic, dbt stat layer (19/19 green), FastAPI + auth + tenancy, Redis cache, demo dashboard, 125 tests, CI. Widened the model mid-run for all table sizes (HU–10max), all tournament structures (KO/PKO/satellite/speeds/Spin&Go), 17 game variants, format-drift detection, and custom stats with user-chosen opportunity. | **Phase 1 breadth: MVs, EV equity calc, more parsers, Nuxt frontend** |
 | 2026-09-06 | Inventoried the lab; wrote the six original planning docs; then added `POKER_FEATURES.md` (~90-feature backlog), this status file, refreshed the roadmap around build phases, added ADRs 015–018 | Awaiting approval to start Phase 0 |
 
 ---
 
+## Artifacts produced
+
+| What | Where |
+|---|---|
+| **Audit of the shipped code and docs** (2026-09-09) | `docs/POKER_AUDIT.md` |
+| **v2 plan — the file "Continue" resumes from** | `docs/POKER_PLAN.md` |
+| Pool statistics report (436 stats, SQL appendix) | `platform/reports/pool_leaks.md` |
+| Same, flat for slicing | `platform/reports/pool_leaks.csv` |
+| Generator (re-runnable, lint-clean) | `platform/scripts/pool_report.py` |
+| Bulk archive importer | `platform/scripts/import_archive.py` |
+| Screen-name registration | `platform/scripts/register_account.py` |
+| Range heatmaps (10 tabs, published) | https://claude.ai/code/artifact/32a965f9-8c77-456d-99a3-cfd533e74618 |
+
+---
+
 ## How to update this file
 
+- **Rewrite [`## Next action`](#next-action) at the end of every session.** It is the first
+  thing the next session reads and the only thing that makes "continue" mean something. Write
+  it for someone starting cold: name the file, the command, and what "done" looks like.
+  "Continue the refactor" is a failed handoff. While [POKER_PLAN.md](POKER_PLAN.md) is being
+  implemented, this block points at the plan's next step and the plan's `## Status` block is
+  updated in the same session.
+- Update this file **as you go on a long session**, not only at the end — context runs out
+  mid-task and this file is the only thing that survives it.
 - Flip a checkbox only when the thing **runs and is verified** — same rule as
   [LEARNING_PLAN.md](../LEARNING_PLAN.md) and golden rule 1 in [CLAUDE.md](../CLAUDE.md).
 - Move the **Current phase** marker only when every box in a phase is `[x]`.

@@ -5,6 +5,12 @@
 > Everything in this document was read from the repo and the live `dataplatform` cluster
 > on 2026-09-06, not assumed. Where I could not determine something, it is listed under
 > **Assumptions** at the bottom rather than guessed silently.
+>
+> **Historical snapshot.** The "absent" verdicts below (application layer, parser, Redis, sample
+> data) were true on 2026-09-06 and are no longer: see [POKER_STATUS.md](POKER_STATUS.md) for what
+> shipped and [POKER_AUDIT.md](POKER_AUDIT.md) for the audit of it. The open questions at the
+> bottom are still worth reading; several were answered on 2026-09-09 (frontend in scope: yes,
+> Nuxt; hero-only vs opponent stats: both, in separate modules — ADR-026).
 
 ---
 

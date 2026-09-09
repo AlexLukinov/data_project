@@ -2,8 +2,12 @@
 
 > Companion docs: [POKER_STATUS.md](POKER_STATUS.md) *(live progress)* · [POKER_ROADMAP.md](POKER_ROADMAP.md) · [POKER_ARCHITECTURE.md](POKER_ARCHITECTURE.md) · [POKER_DATA_MODEL.md](POKER_DATA_MODEL.md) · [POKER_DECISIONS.md](POKER_DECISIONS.md) · [POKER_GAP_ANALYSIS.md](POKER_GAP_ANALYSIS.md) · [POKER_OBSERVABILITY.md](POKER_OBSERVABILITY.md)
 >
-> The master backlog. **Planning artifact — nothing here is built yet.** Live status per feature
-> lives in [POKER_STATUS.md](POKER_STATUS.md), which is the file to update as work lands.
+> The master backlog — a **planning snapshot of 2026-09-06**. About 45 features have shipped
+> since; live status per feature lives in [POKER_STATUS.md](POKER_STATUS.md). The 2026-09-09 audit
+> ([POKER_AUDIT.md](POKER_AUDIT.md)) and the v2 plan ([POKER_PLAN.md](POKER_PLAN.md)) supersede the
+> *how* described here for F-301/F-313/F-403/F-408/F-409/F-511 (stat registry, decision-level fact,
+> filter AST) and F-5xx (Nuxt UI, two areas). Where this file and those disagree, they win.
+> Note: the master index below counts 99 ids but the file lists 104; F-115 appears in two tiers.
 
 ## How to read this
 

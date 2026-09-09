@@ -28,6 +28,14 @@ not a change I've made.
 | [016](#adr-016--nuxt-4--vue-3-for-the-dashboard) | Nuxt 4 / Vue 3 for the dashboard | ✅ |
 | [017](#adr-017--clickhouse-migrations-are-versioned-sql-not-a-framework) | ClickHouse migrations are versioned SQL, not a framework | ✅ |
 | [018](#adr-018--all-in-equity-uses-a-vetted-evaluator-computed-at-parse-time) | All-in equity uses a vetted evaluator, computed at parse time | ✅ |
+| [019](#adr-019--the-stat-chain-is-incremental-by-daily-partition-anchored-and-backfilled-in-batches) | The stat chain is incremental by daily partition, anchored, and backfilled in batches | ✅ implemented |
+| [020](#adr-020--a-decision-level-fact-table-is-the-source-of-truth-for-situations) | A decision-level fact table is the source of truth for situations | ✅ planned (POKER_PLAN C) |
+| [021](#adr-021--the-stat-registry-is-data-and-every-consumer-is-generated-from-it) | The stat registry is data, and every consumer is generated from it | ✅ planned (C) |
+| [022](#adr-022--filters-and-custom-stats-are-a-typed-json-ast-not-a-text-dsl) | Filters and custom stats are a typed JSON AST, not a text DSL | ✅ planned (C) |
+| [023](#adr-023--strict-module-layering-enforced-in-ci-with-storage-behind-protocols) | Strict module layering enforced in CI, with storage behind Protocols | ✅ planned (B) |
+| [024](#adr-024--nuxt-4-app-in-spa-mode-with-one-shared-filter-model-and-two-entry-points) | Nuxt 4 app in SPA mode, one shared filter model, two entry points | ✅ planned (D) |
+| [025](#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant) | Freshness and scale: MVs generated from the registry, then shard by tenant | ✅ planned (E) |
+| [026](#adr-026--hero-analysis-and-pool-analysis-are-separate-modules-as-in-hand2note) | Hero analysis and pool analysis are separate modules, as in Hand2Note | 🔒 |
 
 ---
 
@@ -546,3 +554,291 @@ enumerate the rest). Storage cost is two columns. Query cost is zero.
 equity against the whole field is not what determines your share of each pot. Model it per-pot,
 and if that's too much for MVP, restrict EV adjustment to two-player all-ins and **say so in the
 UI**. Silently computing a wrong number for multiway spots is worse than not computing one.
+
+---
+
+
+
+## ADR-019 — The stat chain is incremental by daily partition, anchored, and backfilled in batches
+**Status:** ✅ Implemented 2026-09-09 *(rewritten the same day — the first version recorded monthly
+partitions and per-model watermarks, both of which were replaced within hours; see
+[POKER_AUDIT.md](POKER_AUDIT.md) §6)*
+
+**Context.** `int_hand_player_flags` was a full-refresh CTAS joining eight relations at 54.5M-row
+grain, and `marts.player_hand_flags` rebuilt on top of it. That single pattern was the only
+reason ClickHouse was configured for 15 GB — serving a stat query over the same table uses
+13–29 MiB. Production is a cluster of **small (~4 GB) nodes**, not one large server, so peak
+memory per dbt run is the constraint that decides the design.
+
+**Decision.** Four parts, all in `dbt/poker_dwh/macros/incremental.sql` and `scripts/backfill.py`:
+
+1. **Partition-grain `insert_overwrite`**, partitioned by **`toYYYYMMDD(played_at_utc)`** (daily).
+   Every model in the chain is `materialized='incremental'`; the gate `dirty_partitions()` is
+   repeated on **every** relation of every join, because ClickHouse builds the right-hand side in
+   memory and does not push the predicate through a `LEFT JOIN`.
+2. **Per-partition watermark.** A partition is dirty when `max(core.hands.parsed_at)` for that day
+   exceeds `max(src_parsed_at)` already built for that day. A single global watermark was tried
+   first and silently skipped partitions: ingest order and partition order are unrelated, so one
+   late-ingested 2023 hand pushed the watermark past 972,943 December-2024 hands. The per-partition
+   comparison is answered from part metadata in ~20 ms.
+3. **One anchor for every model.** The built side of the comparison is always
+   `marts.player_hand_flags` (the last model), never `{{ this }}`. With per-model state, a failed
+   pass let upstream models advance while downstream ones did not, so the next pass built day X in
+   `int_hand_player_flags` before `int_postflop_context` had it — every c-bet counter for that day
+   came out zero with no error (pool c-bets 1,824,127 → 626,804). Flop-only models also never
+   "contain" a flopless day and would stay dirty forever. Anchoring gives every pass one identical
+   partition set built in dependency order; a failure anywhere leaves the set dirty and the next
+   pass redoes it.
+4. **Bootstrap in batches, never in one shot.** `scripts/backfill.py` loops dbt over the oldest N
+   dirty partitions (`--vars batch_partitions`), halving N on a memory failure and doubling after
+   three clean passes. `max_partitions_per_insert_block` stays at its default of 100 on purpose:
+   an unbatched full refresh fails fast with a clear error instead of exhausting memory.
+
+**Measured.** Monthly grain, one-shot full refresh: 781 s at 7.30 GiB, fingerprint reproduced
+exactly (54,563,210 rows / 12,453,044 vpip / 29,080,102 rfi_opp / 1,824,127 cbet_flop). Hero
+increment: **781 s → 4 s, peak 591 MiB** (700 MiB at `CLICKHOUSE_MEM=4G`). Rebuilding one
+partition of `int_hand_player_flags`: monthly 2024-12 (5.9M rows) 2.27 GiB fits; monthly 2025-01
+(20.5M rows) 3.06 GiB **fails on 4 GB** and gets *worse* with fewer threads (the cost is the
+20.5M × 155-column output, not parallelism); daily (≤ 898k rows) is comfortable. **Daily bootstrap
+of the full 9.09M-hand corpus on a 4 GB node: 19 passes, 581 s, peak 2.00 GiB.** ClickHouse
+baseline RSS 3.60 → 1.12 GiB after sizing the caches (`infra/clickhouse/small-node.xml`:
+mark cache 512 MiB, uncompressed cache off); per-query ceiling 2.5 GB, `max_threads 2`
+(`limits.xml`).
+
+**Why daily works now when it failed before.** Daily was first rejected because a one-shot full
+refresh opens every partition at once and ClickHouse holds a write buffer per column per open part:
+155 columns × 164 parts demanded > 11 GiB in `int_postflop_context`. That failure belongs to the
+one-shot path. With the batch loop writing a few partitions per pass the buffers never multiply, and
+the one-shot path is no longer used to bootstrap.
+
+**Why partition grain is not a detail.** `insert_overwrite` works by `ALTER TABLE … REPLACE
+PARTITION`, which swaps the **whole** partition. Filtering at row grain —
+`parsed_at > watermark`, the instinctive choice — would emit only the newly-parsed hands of a
+month and then replace that month with just them, silently deleting every hand already there.
+The filter must select *all* hands in any partition that received new data.
+
+**Two data traps met on the way, recorded because both were silent.** (a) `core.*` is
+`ReplacingMergeTree` partitioned by `played_at_utc`, and ReplacingMergeTree only deduplicates
+*within* a partition: the timezone fix moved boundary hands into the next day and orphaned 41,677
+pre-fix copies that no merge or `FINAL` would ever collapse; they had to be deleted by `parsed_at`
+cutoff. Any re-parse that changes `played_at_utc` will do the same. (b) clickhouse-connect treats a
+*naive* datetime as local time and converts it to UTC, so stripping `tzinfo` shifted every hand by
+the host's UTC offset; the loader now passes aware datetimes and a regression test guards it.
+
+**Alternatives.** *`append` + ReplacingMergeTree* — collapses rows only when they share a sort
+key, and a re-parse can change one: parser bug #4 corrected `player_key` for 6.2% of GGPoker
+seats, which moves the row. `append` would leave two rows per seat that never merge.
+*`delete+insert`* — lightweight deletes are asynchronous mutations; at this row count that is a
+worse failure mode than a partition swap. *dbt `microbatch` on `played_at_utc`* — keys on event
+time, so a backfill of older dates is never picked up.
+
+**Consequences.**
+- The gate must be repeated on **every** relation in a join, not just the driving table:
+  ClickHouse does not push the predicate through a `LEFT JOIN`, and the unfiltered right-hand
+  side is exactly what has to be built in memory.
+- Five intermediates gained `played_at_utc` and `src_parsed_at` so they can be partitioned and
+  watermarked.
+- The loader now stamps `parsed_at` explicitly once per batch instead of letting the column
+  default fire per-INSERT, which had been giving one hand four timestamps milliseconds apart
+  across the four core tables.
+- ClickHouse's default drops from 15 GB to **4 GB** (`CLICKHOUSE_MEM`), per-query ceiling
+  2.5 GB. Keep `infra/clickhouse/limits.xml`, `small-node.xml` and the compose limit in step: a
+  ceiling above the container cap means Docker OOM-kills the server instead of ClickHouse
+  rejecting one query, which is exactly what happened when 12 GB was tried inside 15 GB.
+- Changing partition granularity means changing it in three places: the model configs, the macro,
+  and `PARTITION_EXPR` in `scripts/backfill.py` (they drifted once).
+
+**Known edge, accepted:** if a re-parse removed *every* hand from a day, the temp table would
+produce no partition for it and the stale partition would survive. Hands are never deleted, so
+this is theoretical; a full refresh is the remedy.
+
+**Not addressed here:** F-202 materialized views and sharding by `user_id` (ADR-025). The
+incremental scan still reads every row of each source before filtering (`read_rows` 54.7M to write
+20k) because `IN (subquery)` does not prune partitions at scan time; resolving the dirty days to
+literals at compile time would fix that — a read cost, not a memory cost, deliberately deferred.
+
+---
+
+## ADR-020 — A decision-level fact table is the source of truth for situations
+**Status:** ✅ Recommended, accepted by the founder 2026-09-09 ("as fast as Hand2Note or faster,
+and the most powerful"). Built in [POKER_PLAN.md](POKER_PLAN.md) phase C.
+
+**Context.** The v1 stat layer is one wide row per (hand, player) with a fixed opportunity/action
+counter pair per stat — 156 columns. It answers any of its 86 counters sliced by any of 28
+pre-bucketed dimensions, and nothing else: no numeric thresholds (`spr`, `stack_at_flop_bb`,
+`bet_size_pct` are computed and discarded), no "when I was the aggressor", no action-line filter,
+no `a/(a+b+c)` arithmetic. A new situation is a dbt edit on a 54M-row table plus a rebuild
+([POKER_AUDIT.md](POKER_AUDIT.md) §3.1).
+
+**Decision.** `marts.decisions`: **one row per decision point** (a seat that must act), carrying
+the full state *before* the decision — street, what is being faced and its size, raises so far,
+callers, aggressor flags, position and IP/OOP, effective stack and SPR as raw numbers, the action
+line so far as compact strings, board texture at that street, holding — plus the action taken and
+the hand's outcome. Any situation is a predicate over that row; any situation stat is
+`countIf(situation AND action) / countIf(situation)`. A slim `marts.player_hands` (one row per
+hand and player, ~25 columns) serves hand-grain stats (VPIP, PFR, WTSD, bb/100). Both use the
+ADR-019 incremental gate; `player_hands` becomes the anchor. All "before this decision" facts are
+computed from per-hand arrays so joins stay at hand grain. Column list in POKER_PLAN §2.3.
+
+**Alternatives.** *Keep the wide row and add action-line strings + an expression DSL* — cheaper
+now, but every new counter still widens the table and needs a rebuild, and numeric situations stay
+impossible without new columns. *Compute situations at query time from `core.actions`* — correct
+and infinitely flexible, but every question is a window-function pass over 100M actions; the
+decision table is exactly that pass, done once at write time.
+
+**Consequences.** ~65M rows for the current corpus (100M actions minus posts/wins/shows), narrow
+LowCardinality columns; a pool question is a filtered aggregate over a sorted MergeTree — the
+ClickHouse-ideal shape. The v1 chain is deleted only after a parity gate on every built-in stat
+(POKER_PLAN §3). `made_hand` is reserved for the evaluator (F-902).
+
+---
+
+## ADR-021 — The stat registry is data, and every consumer is generated from it
+**Status:** ✅ Recommended. Built in phase C.
+
+**Context.** Stat definitions exist in three hand-written copies (`int_hand_player_flags.sql`,
+`api/queries.py`, `dim_stat_definitions.sql`) and have already diverged; 29 stats exist in the
+mart but not in the API; the dbt law test covers 14 of 46 pairs (AUDIT B3, B6).
+
+**Decision.** `platform/stats/registry/*.yaml` is the single source: each stat has a code, label,
+category, grain (`hand` | `decision`), a situation predicate and an action predicate (or explicit
+numerator/denominator expressions), `higher_is_better`, a typical range, a description and a
+`cached` flag. Dimensions are declared the same way (type, allowed ops, enum values, which tables
+hold them). `scripts/gen_stats.py` (`make gen`) renders the rollup model, the definitions seed and
+the law tests for **every** stat; CI fails if regeneration produces a diff. The API loads the same
+YAML at startup; the UI reads `/v1/definitions`. Adding a built-in stat is one YAML entry; a user
+stat is a Postgres row; neither touches SQL by hand.
+
+**Alternatives.** *Keep Python as the source and generate SQL from it* — works, but couples the
+definitions to the API process and makes dbt depend on the app package. *dbt-only definitions*
+(the v1 intent) — dbt cannot serve labels, typical ranges or filter metadata to the UI, which is
+how the three copies appeared.
+
+**Consequences.** Generated SQL files carry a header and are never edited; a registry entry is
+validated at load (dimension exists, op allowed, value in enum). The registry is the contract
+between dbt, the API and the UI.
+
+---
+
+## ADR-022 — Filters and custom stats are a typed JSON AST, not a text DSL
+**Status:** ✅ Recommended. Built in phase C.
+
+**Context.** Filters today are `column IN (list)` over an allowlist; PT4's custom stats are SQL,
+which is a remote-code-execution surface in a multi-tenant cloud product. F-313 asked for an
+"expression DSL".
+
+**Decision.** Filters are a JSON tree (`all` / `any` / `not` / leaf `{dim, op, value}`) with ops
+`in, not_in, eq, ne, lt, lte, gt, gte, between, prefix, like`, validated by Pydantic against the
+dimension registry before anything reaches the compiler. Custom stats are `{numerator, denominator}`
+expressions over `count`, `sum(dim)`, `countIf(node)` and `+ − × ÷`. The compiler emits only bound
+parameters and registry-qualified identifiers; `tenant_id` and `dataset` are constructor arguments.
+The table router picks the cheapest of rollup → `player_hands` → `decisions` by *both* the stats
+and the dimensions requested (fixes AUDIT B4).
+
+**Alternatives.** *A text expression language* — needs a parser, an error model and escaping
+rules, and is harder for a UI to build; the JSON tree is what a form produces anyway.
+*Free-form SQL with a sandbox* — no.
+
+**Consequences.** A situation builder in the UI maps 1:1 to the AST; saved filters, reports and
+stats are JSON rows; the existing 25 injection tests carry over and gain AST cases.
+
+---
+
+## ADR-023 — Strict module layering enforced in CI, with storage behind Protocols
+**Status:** ✅ Recommended. Built in phase B.
+
+**Context.** `ingestion/*` and `ch/migrate.py` import from `api/`; `api/db.py` builds a database
+engine at import time; storage clients are `lru_cache` singletons with no interface; the Kafka
+worker and the bulk importer run two diverged copies of the ingest loop; the core schema is spelled
+out in seven places; table names are hardcoded so tests write into the analysis database
+(AUDIT B2, B10, B11, B12).
+
+**Decision.** Layers `core ← parser ← ingestion ← stats ← analysis ← api`, with `scripts/` and
+`web/` as leaves, enforced by `import-linter` in `make check`. Settings live in `core/settings.py`;
+the ClickHouse client factory in `ingestion/`. `HandSink`, `RawStore`, `EventBus` are Protocols
+with real and fake implementations; `pipeline.ingest_text()` is the only ingest loop and takes
+sinks by constructor. `core/schema.py` declares every core table once; row builders and staging
+SELECTs derive from it and an integration test compares it to `system.columns`. Database names
+carry a settings-driven prefix so the integration suite uses `test_core`/`test_marts` and the
+founder's analysis tables are never written by a test. Function and file size limits
+(40 / 300) are checked mechanically.
+
+**Alternatives.** *Separate Python packages per layer in a uv workspace* — stronger isolation,
+more ceremony; revisit when a second deployable (the worker image) actually ships separately.
+*Trust code review* — that is how the backwards imports got in.
+
+**Consequences.** A backwards import fails CI; a sink can be swapped by config; unit tests cover
+the ingest loop without a stack; the analysis databases are protected by construction, not by a
+cleanup fixture.
+
+---
+
+## ADR-024 — Nuxt 4 app in SPA mode, one shared filter model, two entry points
+**Status:** ✅ Recommended (extends ADR-016). Built in phase D.
+
+**Context.** The shipped UI is one static page with three controls (AUDIT §3.4). The founder wants
+both a guided dashboard for end users and an advanced workbench, from the start, English only.
+
+**Decision.** `platform/web/`: Nuxt 4 / Vue 3, `ssr: false` (everything is behind auth and FastAPI
+is the only server), Pinia setup stores, TypeScript strict. Two areas — **My game** and **Pool** —
+plus Hands and Upload. One filter object shared by every page and encoded in the URL; a dataset
+toggle (My hands / Pool / Compare) on every analytical page; a `SituationBuilder` that emits the
+ADR-022 AST; one `StatGrid` component reused by both areas; every number shown with its sample size
+and greyed under the registry's `min_n`; labels and definitions come from `/v1/definitions`; presets
+are the landing state of every page. Auth: access token in memory with silent refresh via the
+HttpOnly cookie; CORS with an explicit origin; per-IP limits on auth routes.
+
+**Components are modular by rule (founder, 2026-09-09):** each poker concept — the 13×13 hand
+matrix, a card, a board, a position picker, an action line, a stat cell — is exactly one typed
+component in `web/components/poker/`, with no store or API knowledge, reviewed on a fixture page.
+Pages and feature components compose these primitives and never re-implement them; the hand
+matrix, for example, serves the pool ranges view, the holding filter and hand-class results from
+one file. New report types register a panel component instead of adding a page.
+
+**Alternatives.** *Server-rendered pages* — rejected in ADR-016 for the same reasons that still
+hold. *Grow the static page* — its own header says "Replace it, don't grow it."
+
+**Consequences.** A JS toolchain in CI (`nuxt typecheck`, ESLint, Playwright); the client holds no
+stat logic, so the API remains the product contract.
+
+---
+
+## ADR-025 — Freshness and scale: materialized views generated from the registry, then shard by tenant
+**Status:** ✅ Recommended. Phase E.
+
+**Context.** ADR-003 requires dbt and the ClickHouse MV to express the same logic and flagged
+drift as the main risk. Production is a cluster of small nodes.
+
+**Decision.** The rollup SQL is generated from the registry (ADR-021) once, and the same template
+emits the `MATERIALIZED VIEW … TO marts.stats_daily` DDL, with the boundary-marker backfill and a
+reconciliation test on a window. The rollup engine is `SummingMergeTree` with every group key in
+the sort key. Scale: shard `marts.*` by `cityHash64(user_id)`, keep the population dataset on its
+own shard, `Distributed` tables on top, dbt per shard; per-tenant settings profiles and quotas.
+Written as a design document first; built when a second node exists.
+
+**Consequences.** Stats are fresh seconds after an upload without a dbt run; the MV cannot drift
+from the model because neither is written by hand.
+
+---
+
+## ADR-026 — Hero analysis and pool analysis are separate modules, as in Hand2Note
+**Status:** 🔒 Locked by the founder, 2026-09-09.
+
+**Context.** Hand2Note keeps *player reports* (hero or any opponent, filtered by situation) apart
+from *population analysis* (a cohort of many players; ranges and frequencies by spot). The founder
+wants the same separation so the two evolve independently.
+
+**Decision.** Two packages under `platform/analysis/`, each with its own service, API router,
+report presets and UI area: **`hero`** (My game: overview, sessions, saved reports, leaks vs a
+baseline, hand context) and **`pool`** (Pool: population stats by situation, cohorts by stat
+criteria, per-opponent reports on real screen names, ranges from showdowns, and the
+`BaselineProvider`). Both call the shared `stats` engine and contain no stat SQL. `hero` may import
+only `pool.baselines` (a Protocol), `pool` never imports `hero`; import-linter enforces it. A new
+analysis module is one package plus one `include_router`.
+
+**Alternatives.** *One analysis module with a dataset switch* — simpler, but every hero feature
+would read pool tables directly and the two could never be deployed, cached or scaled apart.
+
+**Consequences.** Population baselines reach the hero module only through the seam that a solver
+implementation will later use (ADR-011). The UI mirrors the split, which is also how players
+think about the two questions.

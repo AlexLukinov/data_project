@@ -26,19 +26,61 @@ check whether we're going back to the plan.
 
 ## Session flow
 
-### At the start of every session
-- Read `LEARNING_PLAN.md`, find the "Current sprint" marker and the first unchecked item in it.
-- Read `docs/POKER_STATUS.md` — the cross-session state of the **poker platform build** (current
-  phase marker, phase board, blockers, session log). It is to the product what `LEARNING_PLAN.md`
-  is to the learning track. Update it at the end of every session; flip a checkbox only when the
-  thing runs and is verified (golden rule 1).
-- Briefly (1-2 sentences) remind me where we left off — not a summary of the whole plan.
-- If the current sprint has a **Recap** or **Review** block, start there: ask 2-3 questions on
-  earlier material and make me answer from memory before moving on. Don't hint right away — let
-  me try to recall first, correct me after.
-- If it's the "Big review" sprint (13) or a "Final review" sprint (21-23), treat it as a real
-  check, not a formality: make me actually build or explain things from old sprints without
-  documentation, rather than just asking "does this all make sense?".
+There are **two tracks** running in this repo and both are resumable from files, never from
+memory of a previous chat:
+
+| Track | State file | What it is |
+|---|---|---|
+| **Poker platform build** (the product) | `docs/POKER_STATUS.md` + `docs/POKER_PLAN.md` | `platform/` — the thing being shipped. STATUS = where it is; PLAN = the v2 architecture and the checkbox steps being implemented |
+| **DE learning plan** (interview prep) | `LEARNING_PLAN.md` | the minikube lab + sprints + Anki |
+
+### At the start of every session — do this before anything else
+
+1. **Read `docs/POKER_STATUS.md` first.** Its **`## Next action`** block at the top is the
+   single authoritative statement of where the build stopped and what comes next. **Then read
+   the `## Status` block at the top of `docs/POKER_PLAN.md`** — the v2 plan with phases A–E as
+   checkbox steps; its "Next step" is the concrete unit of work. Then read `LEARNING_PLAN.md`
+   for the "Current sprint" marker and its first unchecked item.
+2. **Tell me where both tracks stand in 1-2 sentences each** — not a summary of either plan,
+   and don't re-narrate the roadmap. For the product, name the plan phase and step.
+3. **"Continue", "continue with the plan", or an empty-ish prompt means: do the first
+   unchecked step in `docs/POKER_PLAN.md`** (STATUS's `Next action` points at it). Read that
+   step's "Done means" before starting and the architecture section it references
+   (`POKER_PLAN.md` §2, the ADR it names). Do not re-derive what to work on, do not propose a
+   different task, and do not go looking for something more interesting. If the step is
+   genuinely blocked, say so plainly and take the next unblocked step in the same phase.
+   The plan may be **amended** when implementation proves a decision wrong — record why in the
+   step and in an ADR, don't silently deviate.
+4. **Verify the state file against reality before trusting it.** It records what was true at
+   the end of the last session. Check the stack is up (`cd platform && make ps`), check the
+   row counts / table list it claims, and check git status. If they disagree with the doc,
+   say so plainly and fix the doc — golden rule 1 applies to documentation too.
+5. If the current learning sprint has a **Recap** or **Review** block, start there: ask 2-3
+   questions on earlier material and make me answer from memory before moving on. Don't hint
+   right away — let me try to recall first, correct me after.
+6. If it's the "Big review" sprint (13) or a "Final review" sprint (21-23), treat it as a real
+   check, not a formality: make me actually build or explain things from old sprints without
+   documentation, rather than just asking "does this all make sense?".
+
+### At the end of every session — non-negotiable
+
+The session is not finished until `docs/POKER_STATUS.md` is updated. A session that ends with
+working code and a stale status file has lost the work, because the next session starts blind.
+
+- **Update `docs/POKER_PLAN.md`:** tick each finished step `[x]` **only after its "Done means"
+  is verified**, set the `## Status` block (phase, next step, date, blockers), add a row to its
+  §6 status log. A step that was started but not verified stays `[ ]` with a note.
+- **Rewrite the `## Next action` block** in STATUS to point at the plan's next step, concretely
+  enough to start from cold: which file, which command, what "done" looks like. Not "continue
+  the refactor".
+- **Add one row to the session log** (newest first): what changed, what's next.
+- **Flip a checkbox only when the thing runs and is verified** (golden rule 1) — never by
+  default, never because it was written.
+- Record any new decision as an ADR in `docs/POKER_DECISIONS.md` and link it; don't bury a
+  decision in status prose.
+- Do the same for `LEARNING_PLAN.md` if the session moved the learning track.
+- Update these files **as you go on long sessions**, not only at the very end — context runs
+  out mid-task and the file is the only thing that survives it.
 
 ### How to teach
 - Start with the minimum theory needed to understand what we're doing and why (2-4 paragraphs,
@@ -98,13 +140,15 @@ check whether we're going back to the plan.
 - Lab credentials: `infra/secrets.yaml` (lab-only admin/admin-style; intentionally committed).
 - Lab docs: `docs/ARCHITECTURE.md`, `docs/versions.md`, `docs/data-quality.md`, `docs/drills/`.
 - **Poker platform docs** (the product; separate from the lab): `docs/POKER_STATUS.md` (live
-  progress — read first), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`,
-  `POKER_ARCHITECTURE.md`, `POKER_DATA_MODEL.md`, `POKER_DECISIONS.md` (ADRs),
-  `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md`. Prefixed because `docs/ARCHITECTURE.md` is
-  the lab's. The product gets its own docker-compose stack; the minikube lab stays the learning
-  artifact (ADR-015).
+  progress — read first), **`POKER_PLAN.md` (the v2 plan being implemented — read second)**,
+  `POKER_AUDIT.md` (2026-09-09 audit: what is sound, what is broken, why v2), `POKER_DECISIONS.md`
+  (ADRs 001–026), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
+  `POKER_DATA_MODEL.md`, `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md` (the last five are
+  2026-09-06 planning snapshots; where they disagree with AUDIT/PLAN, AUDIT/PLAN win). Prefixed
+  because `docs/ARCHITECTURE.md` is the lab's. The product gets its own docker-compose stack; the
+  minikube lab stays the learning artifact (ADR-015).
 
-## The make-target contract
+## The make-target contract — the lab (run from the repo root)
 
 | Target | Does |
 |---|---|
@@ -135,7 +179,45 @@ check whether we're going back to the plan.
 
 Core ≈ 4.5–5Gi · core+streaming ≈ 6.5Gi.
 
-## Stack-specific gotchas (do not relearn the hard way)
+## The poker platform (`platform/`) — the product
+
+Its own docker-compose stack and its own `Makefile`, deliberately separate from the lab
+(ADR-015). Ports are shifted off the lab's so both can run: **CH 8124 · PG 5434 · Kafka 9094 ·
+Redis 6380 · MinIO 9010/9011**.
+
+| Target (run from `platform/`) | Does |
+|---|---|
+| `make up` / `make down` / `make ps` | start / stop (volumes kept) / status |
+| `make migrate` | Alembic (Postgres) + `ch/migrations/*.sql` (ClickHouse) |
+| `make seed` | migrate + load the 8-hand corpus + build dbt |
+| `make dbt-build` / `make dbt-test` | run the dbt models / tests only |
+| `make api` / `make worker` | FastAPI on :8000 (dashboard `/`, docs `/docs`) / Kafka parser worker |
+| `make check` | lint + typecheck + unit tests — what CI runs |
+| `make test-all` | includes integration tests (needs `make up && make seed`) |
+| `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
+
+- **dbt lives in `platform/.venv-dbt`**, not the app venv — its pins clash with the app's, same
+  lesson as the lab. Invoke it as `.venv-dbt/bin/dbt`, or via `make dbt-build`.
+- Layout: `parser/sites/` (one file per network) · `ingestion/` (upload → MinIO → Kafka → worker
+  → ClickHouse) · `core/` (canonical model + pot-math validation) · `api/` · `ch/migrations/` ·
+  `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, pool report, account registration)
+  · `reports/` · `infra/clickhouse/` (small-node sizing). Planned by `POKER_PLAN.md`: `stats/`
+  (registry + filter AST + compiler), `analysis/hero/` and `analysis/pool/` (separate modules,
+  ADR-026), `web/` (Nuxt 4).
+- **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
+  `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.
+- **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. The seed
+  corpus and test uploads must never land there (until plan step B.4 adds a `test_` database
+  prefix, the integration suite purges what it wrote; don't run `make seed` against the real DB).
+- **ClickHouse runs at 4 GB by default** (`CLICKHOUSE_MEM`), sized as a production node
+  (`infra/clickhouse/small-node.xml` + `limits.xml`). Never bootstrap the mart chain with a
+  one-shot `dbt build --full-refresh`; use `uv run python scripts/backfill.py` (ADR-019).
+- Bootstrapping the full corpus and the lab together may not fit in Docker's memory.
+  `scripts/pause.sh` frees the lab; `scripts/resume.sh` + `scripts/port-forwards.sh` bring it back.
+- **Run dbt via `make dbt-build`** or with `CLICKHOUSE_PORT=8124` exported: `profiles.yml`
+  defaults to 8123, which is the *lab's* ClickHouse (fixed in plan step A.7).
+
+## Stack-specific gotchas — the lab (do not relearn the hard way)
 
 - **Airflow chart must default to a 2.x appVersion** (scheduler+webserver layout). Newer charts
   (~1.22) render the Airflow-3 `api-server` and break 2.11. Verify with `helm show chart`.
