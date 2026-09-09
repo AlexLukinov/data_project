@@ -3,41 +3,80 @@
 -- some stat can exceed 100% — and a HUD showing "3-bet: 140%" is the tell that the
 -- opportunity condition is wrong, not the action condition.
 --
--- Checked for every stat pair in one query. Adding a stat means adding a line here.
+-- Checked for EVERY stat pair in one query, per tenant and dataset. Adding a stat means adding
+-- its (action, opportunity) tuple below; tests/test_stat_vocabulary.py fails the build if a
+-- ratio stat in api/queries.py has no tuple here. (POKER_PLAN.md phase C generates this file
+-- from the stat registry; until then it is maintained by hand.)
+
+{% set pairs = [
+    ('vpip_action', 'vpip_opp'),
+    ('pfr_action', 'pfr_opp'),
+    ('threebet_action', 'threebet_opp'),
+    ('fold_to_3bet_action', 'fold_to_3bet_opp'),
+    ('fourbet_action', 'fourbet_opp'),
+    ('steal_action', 'steal_opp'),
+    ('fold_bb_steal_action', 'fold_bb_steal_opp'),
+    ('cbet_flop_action', 'cbet_flop_opp'),
+    ('cbet_turn_action', 'cbet_turn_opp'),
+    ('fold_to_cbet_f_action', 'fold_to_cbet_f_opp'),
+    ('checkraise_f_action', 'checkraise_f_opp'),
+    ('wwsf_action', 'wwsf_opp'),
+    ('wtsd_action', 'wtsd_opp'),
+    ('wsd_action', 'wsd_opp'),
+    ('rfi_action', 'rfi_opp'),
+    ('limp_action', 'limp_opp'),
+    ('iso_action', 'iso_opp'),
+    ('cold_call_action', 'cold_call_opp'),
+    ('squeeze_action', 'squeeze_opp'),
+    ('call_3bet_action', 'call_3bet_opp'),
+    ('fivebet_action', 'fivebet_opp'),
+    ('fold_to_4bet_action', 'fold_to_4bet_opp'),
+    ('vs_open_call', 'vs_open_opp'),
+    ('vs_open_fold', 'vs_open_opp'),
+    ('vs_4bet_call', 'vs_4bet_opp'),
+    ('cbet_river_action', 'cbet_river_opp'),
+    ('fold_to_cbet_t_action', 'fold_to_cbet_t_opp'),
+    ('fold_to_cbet_r_action', 'fold_to_cbet_r_opp'),
+    ('donk_f_action', 'donk_f_opp'),
+    ('probe_t_action', 'probe_t_opp'),
+    ('delayed_cbet_action', 'delayed_cbet_opp'),
+    ('float_action', 'float_opp'),
+    ('checkraise_t_action', 'checkraise_t_opp'),
+    ('checkraise_r_action', 'checkraise_r_opp'),
+    ('saw_river_action', 'saw_river_opp'),
+    ('limp_fold_action', 'limp_faced_raise_opp'),
+    ('limp_call_action', 'limp_faced_raise_opp'),
+    ('limp_raise_action', 'limp_faced_raise_opp'),
+    ('raise_cbet_f_action', 'fold_to_cbet_f_opp'),
+    ('float_fold_action', 'float_fold_opp'),
+    ('fold_to_donk_action', 'fold_to_donk_opp'),
+    ('fold_to_flop_raise_action', 'fold_to_flop_raise_opp'),
+    ('fold_to_turn_raise_action', 'fold_to_turn_raise_opp'),
+    ('fold_to_river_raise_action', 'fold_to_river_raise_opp'),
+    ('bet_call_river_action', 'fold_to_river_raise_opp'),
+    ('fold_to_probe_t_action', 'fold_to_probe_t_opp'),
+    ('fold_to_delayed_cbet_action', 'fold_to_delayed_cbet_opp'),
+    ('probe_r_action', 'probe_r_opp'),
+    ('fold_to_probe_r_action', 'fold_to_probe_r_opp'),
+    ('river_raise_action', 'river_face_bet_opp'),
+    ('river_check_fold_action', 'river_check_faced_opp'),
+    ('river_check_call_action', 'river_check_faced_opp'),
+] %}
 
 with totals as (
     select
         user_id,
-        sum(vpip_action)          as vpip_a,          sum(vpip_opp)          as vpip_o,
-        sum(pfr_action)           as pfr_a,           sum(pfr_opp)           as pfr_o,
-        sum(threebet_action)      as tb_a,            sum(threebet_opp)      as tb_o,
-        sum(fold_to_3bet_action)  as f3_a,            sum(fold_to_3bet_opp)  as f3_o,
-        sum(fourbet_action)       as fb_a,            sum(fourbet_opp)       as fb_o,
-        sum(steal_action)         as st_a,            sum(steal_opp)         as st_o,
-        sum(fold_bb_steal_action) as fbb_a,           sum(fold_bb_steal_opp) as fbb_o,
-        sum(cbet_flop_action)     as cf_a,            sum(cbet_flop_opp)     as cf_o,
-        sum(cbet_turn_action)     as ct_a,            sum(cbet_turn_opp)     as ct_o,
-        sum(fold_to_cbet_f_action) as fcf_a,          sum(fold_to_cbet_f_opp) as fcf_o,
-        sum(checkraise_f_action)  as cr_a,            sum(checkraise_f_opp)  as cr_o,
-        sum(wwsf_action)          as ww_a,            sum(wwsf_opp)          as ww_o,
-        sum(wtsd_action)          as wt_a,            sum(wtsd_opp)          as wt_o,
-        sum(wsd_action)           as ws_a,            sum(wsd_opp)           as ws_o
+        dataset,
+        {%- for action, opp in pairs %}
+        sum({{ action }}) as {{ action }}__a,
+        sum({{ opp }}) as {{ opp }}__o{{ "," if not loop.last }}
+        {%- endfor %}
     from {{ ref('stats_daily') }}
-    group by user_id
+    group by user_id, dataset
 )
 
 select * from totals
-where vpip_a > vpip_o
-   or pfr_a  > pfr_o
-   or tb_a   > tb_o
-   or f3_a   > f3_o
-   or fb_a   > fb_o
-   or st_a   > st_o
-   or fbb_a  > fbb_o
-   or cf_a   > cf_o
-   or ct_a   > ct_o
-   or fcf_a  > fcf_o
-   or cr_a   > cr_o
-   or ww_a   > ww_o
-   or wt_a   > wt_o
-   or ws_a   > ws_o
+where
+    {%- for action, opp in pairs %}
+    {{ action }}__a > {{ opp }}__o{{ " or" if not loop.last }}
+    {%- endfor %}

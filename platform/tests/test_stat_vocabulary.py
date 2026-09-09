@@ -21,8 +21,10 @@ DBT_MODELS = Path(__file__).resolve().parents[1] / "dbt" / "poker_dwh" / "models
 ROLLUP_SQL = DBT_MODELS / "marts" / "stats_daily.sql"
 FLAGS_SQL = DBT_MODELS / "intermediate" / "int_hand_player_flags.sql"
 DEFINITIONS_SQL = DBT_MODELS / "marts" / "dim_stat_definitions.sql"
+LAW_TEST_SQL = DBT_MODELS.parent / "tests" / "assert_action_le_opportunity.sql"
 
 _ALIAS = re.compile(r"\bas\s+([a-z][a-z0-9_]*)\s*,?\s*$", re.MULTILINE)
+_PAIR = re.compile(r"\('([a-z0-9_]+)',\s*'([a-z0-9_]+)'\)")
 
 
 def _aliases(path: Path) -> set[str]:
@@ -61,6 +63,21 @@ def test_every_opportunity_counter_on_the_flag_table_is_exposed(flag_columns: se
     """A `*_opp` column nobody can query is a stat that was paid for and never delivered."""
     stranded = sorted(c for c in flag_columns if c.endswith("_opp") and c not in COUNTERS)
     assert not stranded, f"opportunity counters on the flag table but not in COUNTERS: {stranded}"
+
+
+def test_every_ratio_stat_is_covered_by_the_law_test() -> None:
+    """`assert_action_le_opportunity` must check every action/opportunity pair, not 14 of them.
+
+    The law test is what catches an opportunity condition that is narrower than its action --
+    plausible, wrong numbers with no error anywhere. A pair it does not list is unprotected.
+    """
+    checked = set(_PAIR.findall(LAW_TEST_SQL.read_text()))
+    missing = sorted(
+        f"{code} ({stat.numerator}, {stat.denominator})"
+        for code, stat in STATS.items()
+        if stat.kind == "ratio" and (stat.numerator, stat.denominator) not in checked
+    )
+    assert not missing, f"ratio stats without a law-test pair: {missing}"
 
 
 def test_every_builtin_stat_has_a_definition_row() -> None:
