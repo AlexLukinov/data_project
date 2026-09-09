@@ -1,0 +1,61 @@
+"""Which table answers a report (POKER_PLAN.md §2.6; fixes docs/POKER_AUDIT.md B4).
+
+The rollup is cheapest and serves a request only when EVERY stat is cached and EVERY
+dimension the filter or the group-by names lives on it. Otherwise the stats split by grain --
+hand-grain on `player_hands`, decision-grain on `decisions` -- and each query's dimensions must
+exist on its table: "VPIP when facing a 3-bet" is not a question a hand-grain stat can answer,
+and the router says so instead of letting ClickHouse fail on an unknown column.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+
+from stats.definitions import TABLE_FOR_GRAIN, Dimension, Table
+from stats.errors import RegistryError, ReportError
+from stats.registry import Registry
+from stats.resolve import ResolvedStat
+
+ROLLUP: Table = "stats_daily"
+
+
+@dataclass(frozen=True, slots=True)
+class Plan:
+    """One query: these stats, on this table."""
+
+    table: Table
+    stats: tuple[ResolvedStat, ...]
+
+
+def plan(stats: Sequence[ResolvedStat], dims_used: Iterable[str], reg: Registry) -> list[Plan]:
+    """At most two plans, cheapest table first."""
+    dims = _dimensions(dims_used, reg)
+    if all(s.cached for s in stats) and all(ROLLUP in d.tables for d in dims):
+        return [Plan(ROLLUP, tuple(stats))]
+    plans: list[Plan] = []
+    for grain in ("hand", "decision"):
+        mine = tuple(s for s in stats if s.grain == grain)
+        if not mine:
+            continue
+        table = TABLE_FOR_GRAIN[grain]
+        for dim in dims:
+            if table not in dim.tables:
+                raise ReportError(
+                    f"dimension {dim.code!r} is not available for {grain}-grain stat "
+                    f"{mine[0].code!r} (it is on {dim.tables})"
+                )
+        plans.append(Plan(table, mine))
+    return plans
+
+
+def _dimensions(codes: Iterable[str], reg: Registry) -> list[Dimension]:
+    found: dict[str, Dimension] = {}
+    for code in codes:
+        if code in found:
+            continue
+        try:
+            found[code] = reg.dimension(code)
+        except RegistryError as exc:
+            raise ReportError(f"unknown dimension {code!r}") from exc
+    return list(found.values())

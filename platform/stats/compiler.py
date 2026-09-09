@@ -110,7 +110,8 @@ class Compiler:
         if isinstance(node, Leaf):
             return self.leaf(node)
         if isinstance(node, All):
-            return " AND ".join(self.node(child) for child in node.all) if node.all else "1"
+            parts = [self.node(child) for child in node.all]
+            return " AND ".join(p for p in parts if p != "1") or "1"
         if isinstance(node, AnyOf):
             return "(" + " OR ".join(self.node(child) for child in node.any) + ")"
         if isinstance(node, Not):
@@ -147,7 +148,8 @@ class Compiler:
                 )
             return f"sum({self.column(expr.sum)})"
         if isinstance(expr, CountIf):
-            return f"countIf({self.node(expr.count_if)})"
+            condition = self.node(expr.count_if)
+            return "count()" if condition == "1" else f"countIf({condition})"
         name, children = operands(expr)
         parts = [self.expr(child) for child in children]
         if name == "div":
