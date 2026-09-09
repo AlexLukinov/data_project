@@ -148,6 +148,7 @@
   typical: [4, 12]
   cached: true
   description: Re-raised facing a raise and at least one cold caller.
+  notes: Every decision facing one raise with callers counts, a limper's second decision included; v1 counted a seat's first decision only (+1% opportunities).
 
 - code: fold_to_3bet
   label: Fold to 3-bet
@@ -177,6 +178,7 @@
   typical: [30, 50]
   cached: true
   description: Called after open-raising and facing a 3-bet.
+  notes: Exactly a 3-bet in front; v1 counted the opener facing any further raise, a 4-bet included (-3% opportunities).
 
 - code: fourbet
   label: 4-bet %
@@ -189,8 +191,11 @@
   action: {dim: action, op: eq, value: raise}
   typical: [2, 8]
   cached: true
-  description: Re-raised when facing two raises (a cold-call then 4-bet counts).
-  notes: Every decision facing two raises counts, a caller's second decision included; v1 counted a seat's first decision only.
+  description: Re-raised when facing two raises (the opener's raise over a 3-bet counts).
+  notes: >-
+    The opener facing a 3-bet is the common 4-bet spot and counts here; v1 measured a seat's
+    first decision only, so it saw cold 4-bets alone (hero 2.4% of 5,019 vs 5.9% of 8,745
+    opportunities). v2 is the standard definition.
 
 - code: fold_to_4bet
   label: Fold to 4-bet
@@ -206,6 +211,7 @@
   typical: [40, 65]
   cached: true
   description: Folded after 3-betting and facing a 4-bet.
+  notes: Exactly a 4-bet in front; v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
 
 - code: call_4bet
   label: Call 4-bet
@@ -221,6 +227,7 @@
   typical: [20, 45]
   cached: true
   description: Called after 3-betting and facing a 4-bet.
+  notes: Exactly a 4-bet in front; v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
 
 - code: fivebet
   label: 5-bet %
@@ -233,8 +240,11 @@
   action: {dim: action, op: eq, value: raise}
   typical: [1, 6]
   cached: true
-  description: Re-raised when facing three raises.
-  notes: Every decision facing three raises counts; v1 counted a seat's first decision only.
+  description: Re-raised when facing three raises (the 3-bettor's raise over a 4-bet counts).
+  notes: >-
+    The 3-bettor facing a 4-bet is the common 5-bet spot and counts here; v1 measured a seat's
+    first decision only, so it saw cold 5-bets alone (hero 0% of 95 vs 10.3% of 783
+    opportunities). v2 is the standard definition.
 
 - code: fold_bb_to_steal
   label: Fold BB to steal

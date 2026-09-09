@@ -33,30 +33,40 @@ engine, so the demo dashboard still works and nothing reads the v1 chain except
 `test_stat_vocabulary.py`), `scripts/pool_report.py`, and the `_v2` suffix on the generated
 rollup.
 
-**Do this:**
-1. `cd platform && make ps` (all five services healthy), then `make check` (317 unit tests).
-2. Read `docs/POKER_PLAN.md` `## Status` → **C.6** (parity and cut-over). First the parity
-   gate: `scripts/fingerprint.py` computes every built-in stat on v1 (`player_hand_flags`
-   counters) and v2 (`run_report`, or the rollup sums) for hero and population, overall and by
-   position, and writes `reports/parity_2026-09-09.md`; a stat without `notes` must match within
-   rounding, one with `notes` must differ in the direction its note predicts (the C.2 preview:
-   3-bet opportunities +0.6%, fold-to-c-bet/check-raise −0.5…−0.9%, float_fold about a third).
-   Then the cut-over, in this order: (a) delete the v1 dbt models and tests listed above and
-   `dim_stat_definitions.sql`; (b) drop the `_v2` suffix — `ROLLUP` in `scripts/gen_stats.py`,
-   `PHYSICAL` in `stats/query.py`, the law-test file name, `make gen`, then
-   `RENAME TABLE marts.stats_daily_v2 TO marts.stats_daily` after `DROP TABLE marts.stats_daily`
-   (v1) — with a `BACKUP`-equivalent first: the v1 tables are reproducible from `core.*` by
-   the retired chain, which is what the parity report documents, so record that in the step;
-   (c) the default anchor stays `stats_daily` — now the generated one, downstream of both
-   facts — so `scripts/backfill.py` and `macros/incremental.sql` need no change; (d) delete
-   `api/queries.py`, `test_query_compiler.py`, `test_query_routing.py`,
-   `test_stat_vocabulary.py`, `scripts/pool_report.py` (move `DATASETS` to `stats.request`);
-   (e) turn `int_hand_arrays` into a macro CTE (2.39 GiB persisted for nothing) and drop the
-   table; (f) `make check`, `make test-all`, a full `make dbt-build` on the real data and the
-   pool VPIP/RFI/c-bet by position against `reports/pool_leaks.csv`. Golden rule 2 applies to
-   every DROP: list them, run them one by one, verify counts after each.
-3. Continue down phase C in order. Tick a step only when verified; update the plan's Status and
-   §6 and this block at the end.
+**C.6 parity is done** (`reports/parity_2026-09-09.md`: 756 cells, 0 mismatches, every delta
+explained by a registry `notes` line). **The cut-over waits for the founder's confirmation**,
+because it drops tables in the analysis ClickHouse (golden rule 2). Backup step, documented:
+every table below is derived from `core.*` by the v1 dbt models at commit `cab27e3`; to restore,
+check those models out, create them empty (`dbt run --full-refresh --vars 'empty_chain: true'`)
+and run `scripts/backfill.py`. Nothing in `core.*` is touched.
+
+**Do this, after the founder says "drop":**
+1. `cd platform && make ps`, `make check` (317 unit tests).
+2. In the repo: delete the v1 dbt models `int_preflop_context`, `int_postflop_context`,
+   `int_hand_context`, `int_player_context`, `int_board_texture`, `int_hand_player_flags`,
+   `marts/player_hand_flags`, `marts/stats_daily` (hand-written), `marts/dim_stat_definitions`,
+   `tests/assert_action_le_opportunity.sql`, `assert_vpip_gte_pfr.sql`, and the intermediate
+   `schema.yml` entries for them; delete `api/queries.py`, `tests/test_query_compiler.py`,
+   `tests/test_query_routing.py`, `tests/test_stat_vocabulary.py`, `scripts/pool_report.py`
+   (`uploads.py` takes `DATASETS` from `stats.request`; the size baseline loses its 6 entries;
+   `scripts/fingerprint.py` keeps the v1 counter pairs it compared against in a small frozen
+   module so the report stays reproducible while the v1 tables exist).
+3. Drop the `_v2` suffix: `ROLLUP` in `scripts/gen_stats.py`, `PHYSICAL` in `stats/query.py`,
+   the law-test file name, tests that mention `stats_daily_v2`; `make gen`.
+4. In ClickHouse, one statement at a time, counts checked after each:
+   `DROP TABLE marts.player_hand_flags`, `DROP TABLE marts.stats_daily`,
+   `DROP TABLE marts.dim_stat_definitions`, `DROP TABLE intermediate.int_hand_player_flags`,
+   `…int_preflop_context`, `…int_postflop_context`, `…int_hand_context`,
+   `…int_player_context`, `…int_board_texture`; then
+   `RENAME TABLE marts.stats_daily_v2 TO marts.stats_daily`. Same in `test_*` (or just
+   `make seed`, which recreates the test databases).
+5. Turn `int_hand_arrays` into a macro CTE like `decision_state()` (it persists 2.39 GiB no
+   consumer reads after the pass), drop `intermediate.int_hand_arrays`, and rebuild nothing:
+   the facts and the rollup are already full.
+6. Verify: `make check`, `make test-all`, `make dbt-build` on the real data (must report
+   nothing dirty), `uv run python -m scripts.backfill` (must say "caught up after 0 passes"),
+   and pool VPIP/RFI/c-bet by position through `/v1/reports/run` against
+   `reports/pool_leaks.csv`. Then tick C.6, update the plan's Status and §6 and this block.
 
 **Time-independent fingerprint** (`marts.player_hand_flags`, purged corpus, verified 2026-09-09
 after a rebuild from empty; the rollup `marts.stats_daily` reproduces every figure exactly):
@@ -359,6 +369,7 @@ Newest first. One line per session: what changed, what's next.
 | Date | Session did | Left off at |
 |---|---|---|
 | 2026-09-09 (7) | **Off-plan (founder request): pool spot-frequency census + board texture.** Five new modules — `scripts/spot_nodes.py` (preflop/flop *node* per hand from `core.actions`, e.g. `BU open, BB call`; seat→position is a fixed lookup because `button_seat` is always 1, and `FINAL` is skippable because `parser_version` is uniform and `hand_uid` unique, both asserted at runtime by `verify_corpus_assumptions()`), `spot_texture.py` (flop classifier, ace counted **high or low** so A-2-3 is connected), `spot_report.py`, `spot_plan.py`, `spot_frequency.py` → `reports/spot_frequency.{md,csv}`. One unified ranking of all 346 nodes over 9,093,794 six-max hands: 5 spots = 43% of decisions, 10 = 62%. **Three findings.** (1) The texture classifier is parity-checked each run against enumeration of all C(52,3)=22,100 flops — connectedness and suitedness match to 0.07pp, confirming the board parser. (2) The high card deliberately does *not* match, and the deviation is card removal: ace-high flops fall monotonically 23.89% (limped) → 21.7% (SRP) → 20.2% (3bet) → 17.9% (4bet) → 15.1% (5bet), vs 21.74% for a random deck. Texture is otherwise independent of the spot, so spot × texture is a clean product. (3) A node ending in a raise can still show flops — an already-all-in player owed a runout, not a parse bug. **Found a real defect in the dbt chain:** `int_board_texture.sql` computes straight span ace-high only, so A-2-3 lands in `disconnected`; it disagrees with this classifier and should be fixed. `make check` 240 green. **Overlaps plan C.2** — this node grammar is C.2's action-line tokens; reconcile with `marts.decisions`, do not duplicate. | Back to plan **C.2** (decision model); fix `int_board_texture.sql` wheel handling |
+| 2026-09-09 (11) | C.5 merged (`cab27e3`). **C.6 parity done**: `scripts/fingerprint.py` → `reports/parity_2026-09-09.md`, 756 cells, 0 mismatches, 20 more registry `notes`; two v1 undercounts found (4-bet%, 5-bet%). Cut-over drops await confirmation. | Plan **C.6 cut-over** (after the founder confirms the drops) |
 | 2026-09-09 (10) | C.4 merged (`a2b8741`). **Plan C.5 done**: `/v1/definitions`, `/v1/reports/run`, saved filters/reports/stats CRUD (migration `513730dcd5be`), v1 `/v1/stats*` routes as adapters over the engine. 12 unit + 3 integration tests; `make check` 317, `make test-all` 331 + 2 skipped. | Plan **C.6** (parity report, then the v1 cut-over) |
 | 2026-09-09 (9) | C.3 merged (`af503bb`). **Plan C.4 done**: `stats.service.run_report` — resolve, route (rollup vs facts by stats and dimensions), one bound-parameter query per plan, merge, population baseline, per-tenant cache; 37 new unit tests (305); real reports verified from all three tables. | Plan **C.5** (API v2 + saved filters/reports/stats) |
 | 2026-09-09 (8) | C.1 + C.2 committed and merged into `main` (`8d8b5ac`). **Plan C.3 done**: `scripts/gen_stats.py` renders the rollup (`marts.stats_daily_v2`), the definitions seed and the law test from the registry; `stats/compiler.py` underneath; `make gen`/`gen-check`/CI extended. Rollup bootstrapped in 35 passes / 186 s at ≤1.66 GiB; sums equal the facts and v1; law test green on real data. `make check` 273. | Plan **C.4** (router + service on the compiler) |

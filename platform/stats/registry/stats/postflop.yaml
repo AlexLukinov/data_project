@@ -37,6 +37,10 @@
   typical: [40, 65]
   cached: true
   description: Bet the turn after c-betting the flop (double barrel).
+  notes: >-
+    The opportunity is the chance to bet (nothing in front) as the flop's last aggressor; v1
+    counted every turn seen after betting the flop, including turns where a lead came first
+    and flops where the c-bet was raised and called (-11% opportunities, +5 points).
 
 - code: cbet_river
   label: C-bet river
@@ -52,6 +56,9 @@
   typical: [30, 55]
   cached: true
   description: Bet the river after barrelling the turn (triple barrel).
+  notes: >-
+    The opportunity is the chance to bet (nothing in front) as the turn's last aggressor; v1
+    counted every river seen after betting the turn (-12% opportunities, +7 points).
 
 - code: delayed_cbet
   label: Delayed c-bet
@@ -160,6 +167,7 @@
   typical: [40, 65]
   cached: true
   description: Folded to the aggressor's turn bet after the flop checked through.
+  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever the aggressor bet the turn (-0.4% opportunities).
 
 # ---- floats, donks and probes ------------------------------------------------------------
 - code: float_flop
@@ -178,6 +186,10 @@
   typical: [20, 45]
   cached: true
   description: Bet the turn when checked to, after calling a flop bet in position.
+  notes: >-
+    The opportunity needs the turn checked to this seat; v1 counted every turn reached after
+    calling in position, turns where the opponent led included (about 40% of v1's
+    opportunities, the rate roughly doubles).
 
 - code: float_fold
   label: Float, fold turn
@@ -214,6 +226,7 @@
   typical: [0, 6]
   cached: true
   description: Led into the preflop aggressor on the flop, out of position.
+  notes: The opportunity is the chance to bet (nothing in front); v1 counted every out-of-position non-aggressor on the flop, those facing an earlier lead included (-3% opportunities).
 
 - code: fold_to_donk
   label: Fold to donk bet
@@ -228,6 +241,7 @@
   typical: [30, 55]
   cached: true
   description: Folded as the preflop aggressor when led into on the flop.
+  notes: The lead must be the only bet in front; v1 also counted a lead that was raised before the aggressor acted (-1% opportunities).
 
 - code: probe_turn
   label: Probe turn
@@ -262,6 +276,7 @@
   typical: [35, 60]
   cached: true
   description: Checked back the flop as the aggressor, then folded to a turn bet.
+  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever a turn bet happened (-0.5% opportunities).
 
 - code: probe_river
   label: Probe river
@@ -296,6 +311,7 @@
   typical: [35, 65]
   cached: true
   description: Folded as the aggressor to a river bet after the turn checked through.
+  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever a river bet happened (-0.2% opportunities).
 
 # ---- check-raises ------------------------------------------------------------------------
 - code: check_raise_flop
@@ -357,6 +373,7 @@
   typical: [40, 65]
   cached: true
   description: Bet the flop and folded when raised.
+  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street, a re-raise or the seat's own raise included (-0.3% opportunities).
 
 - code: fold_to_turn_raise
   label: Fold to turn raise
@@ -371,6 +388,7 @@
   typical: [40, 65]
   cached: true
   description: Bet the turn and folded when raised.
+  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 - code: fold_to_river_raise
   label: Fold to river raise
@@ -385,6 +403,7 @@
   typical: [40, 70]
   cached: true
   description: Bet the river and folded when raised.
+  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 - code: bet_call_river
   label: Bet-call river
@@ -399,6 +418,7 @@
   typical: [25, 50]
   cached: true
   description: Bet the river and called a raise.
+  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 # ---- river responses ---------------------------------------------------------------------
 - code: river_raise
@@ -413,6 +433,7 @@
   typical: [4, 12]
   cached: true
   description: Raised when facing a river bet.
+  notes: The bet faced must be the only one in front; v1 also counted facing a bet that had already been raised (-0.3% opportunities).
 
 - code: river_check_fold
   label: River check-fold
@@ -427,6 +448,7 @@
   typical: [45, 70]
   cached: true
   description: Checked the river, then folded to a bet.
+  notes: The bet faced must be the only one in front; v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
 
 - code: river_check_call
   label: River check-call
@@ -441,6 +463,7 @@
   typical: [25, 50]
   cached: true
   description: Checked the river, then called a bet.
+  notes: The bet faced must be the only one in front; v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
 
 # ---- aggression: bets + raises against calls (AF) and against all actions (AFq) ---------
 - code: af_flop
