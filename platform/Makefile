@@ -136,5 +136,13 @@ typecheck: ## Static type check
 lint-arch: ## Enforce the module-boundary contracts in .importlinter (ADR-023)
 	$(UV) lint-imports
 
+.PHONY: gen
+gen: ## Regenerate files derived from core/schema (dbt staging models)
+	$(UV) python -m scripts.gen_schema
+
+.PHONY: gen-check
+gen-check: ## Fail if a generated file is stale (run `make gen`)
+	$(UV) python -m scripts.gen_schema --check
+
 .PHONY: check
-check: lint typecheck lint-arch test ## Everything CI runs
+check: lint typecheck lint-arch gen-check test ## Everything CI runs

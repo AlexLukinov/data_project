@@ -179,8 +179,42 @@ class HandSummary(BaseModel):
     went_to_showdown: bool
 
 
+class HandPlayerOut(BaseModel):
+    """One seat in the replayer."""
+
+    seat: int
+    screen_name: str
+    position: str
+    is_hero: bool
+    is_anonymized: bool
+    starting_stack: float
+    hole_cards: str
+    net_won: float
+    net_won_bb: float
+    went_to_showdown: bool
+    won_hand: bool
+
+
+class ActionOut(BaseModel):
+    """One action in the replayer, in global order within the hand."""
+
+    action_index: int
+    street: str
+    seat: int
+    action_type: str
+    amount: float
+    amount_to: float
+    pot_before: float
+    to_call: float
+    is_allin: bool
+
+
 class HandDetail(BaseModel):
-    """Everything the replayer needs for one hand."""
+    """Everything the replayer needs for one hand.
+
+    Fully typed: OpenAPI describes every field, and a renamed column fails here instead of
+    silently shifting a value.
+    """
 
     hand_uid: str
     site: str
@@ -192,5 +226,5 @@ class HandDetail(BaseModel):
     board: list[str]
     total_pot: float
     rake: float
-    players: list[dict[str, object]]
-    actions: list[dict[str, object]]
+    players: list[HandPlayerOut]
+    actions: list[ActionOut]

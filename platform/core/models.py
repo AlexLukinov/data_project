@@ -65,6 +65,10 @@ class Action:
     pot_before: Decimal = ZERO
     to_call: Decimal = ZERO
     is_allin: bool = False
+    cards_revealed: str = ""
+    """Cards shown by this action (`show` / a showdown line), space-delimited; empty when the
+    action revealed nothing. Stored on `core.actions` since migration 0003; parsers fill it
+    when the format prints cards on the action line."""
 
     @property
     def is_voluntary(self) -> bool:
