@@ -63,8 +63,9 @@ select
     -- in a 4-bet pot and a c-bet in a limped pot are not the same action.
     -- Every bucket column below is cast to LowCardinality(String) explicitly: coalesce() over a
     -- LowCardinality input and a String literal yields plain String, and these fifteen columns
-    -- hold 4-6 distinct values each. As Strings they cost 222 MiB of a 2.09 GiB table; as
-    -- dictionaries they are nearly free.
+    -- hold 4-6 distinct values each, so grouping and filtering on a dictionary is cheaper.
+    -- Measured on 2026-09-09: this does NOT change the table's size (63.7 vs 64.3 bytes/row);
+    -- LZ4 already handled the repetition. The size is hand_uid (52%), see POKER_PLAN B.5b.
     hx.pot_type                                                      as pot_type,
     hx.players_to_flop                                               as players_to_flop,
     hx.is_multiway                                                   as is_multiway,

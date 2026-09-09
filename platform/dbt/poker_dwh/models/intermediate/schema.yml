@@ -1,0 +1,96 @@
+version: 2
+
+# Key columns of every intermediate model are never null. Cheap column scans, run on every
+# `dbt build` pass. Uniqueness of (user_id, hand_uid[, seat[, street]]) is guaranteed by
+# construction (each model is one GROUP BY or one join at that grain, rebuilt per partition)
+# and is verified after a bootstrap with a disk-spilling GROUP BY -- a `unique` test here
+# would be a 54M-row aggregation inside every incremental pass and would trip the 4 GB node.
+
+models:
+  - name: int_preflop_context
+    description: Per (hand, seat) preflop facts as of the seat's first decision.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: seat
+        tests: [not_null]
+      - name: played_at_utc
+        tests: [not_null]
+      - name: src_parsed_at
+        tests: [not_null]
+
+  - name: int_postflop_context
+    description: Per (hand, seat, street) postflop facts.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: seat
+        tests: [not_null]
+      - name: street
+        tests: [not_null]
+      - name: played_at_utc
+        tests: [not_null]
+
+  - name: int_hand_context
+    description: Per hand — pot type, players per street, pot at the flop.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: pot_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['limped', 'srp', '3bet', '4bet', '5bet_plus']
+
+  - name: int_player_context
+    description: Per (hand, seat) — holding class, stack depth, SPR, in/out of position.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: seat
+        tests: [not_null]
+      - name: spr_bucket
+        tests:
+          - accepted_values:
+              values: ['na', '0-1', '1-3', '3-6', '6-13', '13+']
+
+  - name: int_board_texture
+    description: Per hand — flop facets and full-board features.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: flop_suitedness
+        tests:
+          - accepted_values:
+              values: ['monotone', 'two_tone', 'rainbow']
+      - name: flop_pairing
+        tests:
+          - accepted_values:
+              values: ['trips', 'paired', 'unpaired']
+
+  - name: int_hand_player_flags
+    description: The wide per (hand, seat) flag row; marts.player_hand_flags is its projection.
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: hand_uid
+        tests: [not_null]
+      - name: seat
+        tests: [not_null]
+      - name: dataset
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['hero', 'population']
+      - name: src_parsed_at
+        tests: [not_null]

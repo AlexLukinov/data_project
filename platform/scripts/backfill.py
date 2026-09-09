@@ -23,7 +23,7 @@ number of partitions is either wasteful on quiet days or fatal on dense ones -- 
 of the oldest dirty partitions as fit under a row budget. The budget still ADAPTS as a safety
 net: it halves when a pass runs out of memory and doubles back after a run of clean passes.
 
-    uv run python scripts/backfill.py                        # 2.5M rows/pass, adapt
+    uv run python scripts/backfill.py                        # 2.0M rows/pass, adapt
     uv run python scripts/backfill.py --row-budget 1000000   # gentler
     uv run python scripts/backfill.py --max-passes 5         # stop early
 """
@@ -44,9 +44,10 @@ PLATFORM = Path(__file__).resolve().parent.parent
 DBT = PLATFORM / ".venv-dbt" / "bin" / "dbt"
 PROJECT = PLATFORM / "dbt" / "poker_dwh"
 
-DEFAULT_ROW_BUDGET = 2_500_000
-"""Player-rows per pass. Measured on a 4 GB node with the 2.5 GB query ceiling: ~1.8M rows
-(two dense days) rebuilt at ~2.0 GiB peak; ~3.6M rows exceeded the server's 3.6 GiB total."""
+DEFAULT_ROW_BUDGET = 2_000_000
+"""Player-rows per pass. Measured on a 4 GB node with the 2.5 GB query ceiling: passes of
+2.28M rows succeeded, 2.41M and 2.49M failed (the server's 3.6 GiB total, not the query
+ceiling, is what trips), so 2.0M leaves margin without wasting a failed pass per growth."""
 
 MAX_PARTITIONS_PER_PASS = 16
 """Hard cap regardless of the budget. ClickHouse holds a write buffer per column per open
@@ -118,6 +119,51 @@ def _batch_for(pending: list[tuple[int, int]], row_budget: int) -> tuple[int, in
     return taken, rows
 
 
+def _drop_scratch_tables() -> None:
+    """Drop the `__dbt_new_data_*` temp tables a failed pass leaves behind.
+
+    dbt creates one per model for `insert_overwrite` and drops it on success; a pass killed by
+    the memory limit leaves them, and they accumulate (22 of them, 396 MiB, were found after
+    one bad afternoon). Called only after a failed pass, when no dbt process is running.
+    """
+    listing = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "clickhouse",
+            "clickhouse-client",
+            "-q",
+            "SELECT concat(database, '.', name) FROM system.tables "
+            "WHERE database IN ('intermediate', 'marts') AND name LIKE '%__dbt_new_data%' "
+            "FORMAT TSVRaw",
+        ],
+        cwd=PLATFORM,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    for table in listing.stdout.split():
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "clickhouse",
+                "clickhouse-client",
+                "-q",
+                f"DROP TABLE IF EXISTS {table}",
+            ],
+            cwd=PLATFORM,
+            capture_output=True,
+            check=False,
+        )
+    if listing.stdout.strip():
+        log.info("dropped %d scratch table(s) from the failed pass", len(listing.stdout.split()))
+
+
 def _run_pass(batch: int) -> bool:
     """One dbt pass over the oldest `batch` dirty partitions. True if it succeeded."""
     env = {**os.environ, "CLICKHOUSE_PORT": os.environ.get("CLICKHOUSE_PORT", "8124")}
@@ -181,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{budget:,}",
         )
         if not _run_pass(batch):
+            _drop_scratch_tables()
             if batch > 1:
                 budget = max(1, budget // 2)
                 streak = 0

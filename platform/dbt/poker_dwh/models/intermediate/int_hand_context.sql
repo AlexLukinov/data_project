@@ -59,8 +59,8 @@ seen as (
         p.hand_uid                                                  as hand_uid,
         max(p.played_at_utc)                                        as played_at_utc,
         max(p.src_parsed_at)                                        as src_parsed_at,
-        -- UInt8, not the UInt64 countIf() would infer: a table seats at most 10, and the
-        -- 8-byte default cost 50 MiB on the 35M-row flag table for values that never exceed 6.
+        -- UInt8, not the UInt64 countIf() would infer: a table seats at most 10, so the
+        -- narrow type is the honest one (and the one the API binds filters against).
         toUInt8(countIf(p.saw_flop = 1))                            as players_to_flop,
         toUInt8(countIf(p.saw_turn = 1))                            as players_to_turn,
         toUInt8(countIf(p.saw_river = 1))                           as players_to_river,
@@ -80,8 +80,9 @@ select
     coalesce(r.n_calls, 0)                                          as n_preflop_calls,
     -- Poker's off-by-one: the big blind counts as the first bet, so the FIRST raise opens the
     -- pot ("single raised") and the SECOND raise is the 3-bet.
-    -- LowCardinality: five distinct values ever. As a plain String this and the other bucket
-    -- columns cost 222 MiB on the flag table; as a dictionary they cost almost nothing.
+    -- LowCardinality: five distinct values ever, so GROUP BY and IN-filters work on a small
+    -- dictionary. (Measured: it does NOT shrink the table -- LZ4 already compresses such
+    -- repetitive strings to ~0.4 bytes/row; the type is about query cost, not disk.)
     multiIf(
         coalesce(r.n_raises, 0) = 0, 'limped',
         r.n_raises = 1, 'srp',
