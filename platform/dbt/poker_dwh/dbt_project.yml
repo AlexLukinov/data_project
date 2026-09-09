@@ -21,3 +21,15 @@ models:
     marts:
       +schema: marts
       +materialized: table
+
+# `seeds/stat_definitions.csv` is GENERATED from the stat registry (`make gen`); it lands
+# beside the marts so the UI's definitions can be joined to results in SQL if ever needed.
+seeds:
+  poker_dwh:
+    +schema: marts
+    stat_definitions:
+      +column_types:
+        higher_is_better: Nullable(UInt8)
+        typical_low: Nullable(Float64)
+        typical_high: Nullable(Float64)
+        cached: UInt8

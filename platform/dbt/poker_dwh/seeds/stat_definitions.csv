@@ -1,0 +1,66 @@
+code,label,category,grain,format,higher_is_better,typical_low,typical_high,cached,description,notes
+hands,Hands,money,hand,count,,,,1,Hands dealt in.,
+bb_per_100,bb/100,money,hand,per100,1,0.0,10.0,1,Big blinds won per 100 hands.,
+ev_bb_per_100,EV bb/100,money,hand,per100,1,0.0,10.0,1,All-in adjusted big blinds won per 100 hands.,
+sd_bb_per_100,Showdown bb/100,money,hand,per100,1,0.0,30.0,1,Big blinds won at showdown per 100 hands.,
+nsd_bb_per_100,Non-showdown bb/100,money,hand,per100,1,-30.0,0.0,1,Big blinds won without showdown per 100 hands.,
+cbet_flop,C-bet flop,postflop,decision,percent,,50.0,75.0,1,Bet the flop as the preflop aggressor when checked to or first to act.,"v1 counted every flop the aggressor saw, including flops where a donk bet came first."
+cbet_turn,C-bet turn,postflop,decision,percent,,40.0,65.0,1,Bet the turn after c-betting the flop (double barrel).,
+cbet_river,C-bet river,postflop,decision,percent,,30.0,55.0,1,Bet the river after barrelling the turn (triple barrel).,
+delayed_cbet,Delayed c-bet,postflop,decision,percent,,30.0,55.0,1,Bet the turn as the aggressor after checking the flop.,"v1 required only ""did not bet the flop"", which included calling a flop donk bet."
+fold_to_cbet_flop,Fold to c-bet flop,postflop,decision,percent,,40.0,55.0,1,Folded facing the preflop aggressor's flop bet.,The c-bet must be the only bet in front; v1 still counted it as faced when another player had raised it before this seat acted (-0.5% opportunities).
+call_cbet_flop,Call c-bet flop,postflop,decision,percent,,35.0,50.0,1,Called facing the preflop aggressor's flop bet.,The c-bet must be the only bet in front (see fold_to_cbet_flop).
+raise_cbet_flop,Raise c-bet flop,postflop,decision,percent,,6.0,14.0,1,Raised the preflop aggressor's flop bet.,The c-bet must be the only bet in front (see fold_to_cbet_flop).
+fold_to_cbet_turn,Fold to c-bet turn,postflop,decision,percent,,40.0,60.0,1,Folded facing the preflop aggressor's turn bet.,The c-bet must be the only bet in front (see fold_to_cbet_flop).
+fold_to_cbet_river,Fold to c-bet river,postflop,decision,percent,,40.0,65.0,1,Folded facing the preflop aggressor's river bet.,The c-bet must be the only bet in front (see fold_to_cbet_flop).
+fold_to_delayed_cbet,Fold to delayed c-bet,postflop,decision,percent,,40.0,65.0,1,Folded to the aggressor's turn bet after the flop checked through.,
+float_flop,Float flop,postflop,decision,percent,,20.0,45.0,1,"Bet the turn when checked to, after calling a flop bet in position.",
+float_fold,"Float, fold turn",postflop,decision,percent,,35.0,60.0,1,Folded to a turn bet after calling a flop bet in position.,"v1's denominator was ""called the flop c-bet and reached the turn"" from any position, turns checked through included; this counts in-position turns where a bet was actually faced, the decision the name describes (about a third of v1's action count)."
+donk_flop,Donk bet flop,postflop,decision,percent,,0.0,6.0,1,"Led into the preflop aggressor on the flop, out of position.",
+fold_to_donk,Fold to donk bet,postflop,decision,percent,,30.0,55.0,1,Folded as the preflop aggressor when led into on the flop.,
+probe_turn,Probe turn,postflop,decision,percent,,25.0,50.0,1,Bet the turn out of position after the aggressor checked back the flop.,v1 did not require out of position.
+fold_to_probe_turn,Fold to probe turn,postflop,decision,percent,,35.0,60.0,1,"Checked back the flop as the aggressor, then folded to a turn bet.",
+probe_river,Probe river,postflop,decision,percent,,25.0,50.0,1,Bet the river out of position after the turn checked through.,v1 did not require out of position.
+fold_to_probe_river,Fold to probe river,postflop,decision,percent,,35.0,65.0,1,Folded as the aggressor to a river bet after the turn checked through.,
+check_raise_flop,Check-raise flop,postflop,decision,percent,,6.0,14.0,1,Raised the flop after checking and facing a bet.,The bet must be the only one in front; v1 counted the chance when a raise had followed the bet before this seat acted (-0.9% opportunities).
+check_raise_turn,Check-raise turn,postflop,decision,percent,,5.0,14.0,1,Raised the turn after checking and facing a bet.,The bet must be the only one in front (see check_raise_flop).
+check_raise_river,Check-raise river,postflop,decision,percent,,3.0,10.0,1,Raised the river after checking and facing a bet.,The bet must be the only one in front (see check_raise_flop).
+fold_to_flop_raise,Fold to flop raise,postflop,decision,percent,,40.0,65.0,1,Bet the flop and folded when raised.,
+fold_to_turn_raise,Fold to turn raise,postflop,decision,percent,,40.0,65.0,1,Bet the turn and folded when raised.,
+fold_to_river_raise,Fold to river raise,postflop,decision,percent,,40.0,70.0,1,Bet the river and folded when raised.,
+bet_call_river,Bet-call river,postflop,decision,percent,,25.0,50.0,1,Bet the river and called a raise.,
+river_raise,River raise,postflop,decision,percent,,4.0,12.0,1,Raised when facing a river bet.,
+river_check_fold,River check-fold,postflop,decision,percent,,45.0,70.0,1,"Checked the river, then folded to a bet.",
+river_check_call,River check-call,postflop,decision,percent,,25.0,50.0,1,"Checked the river, then called a bet.",
+af_flop,Aggression factor (flop),postflop,decision,ratio,,1.5,4.0,0,Bets and raises divided by calls on the flop.,
+af_turn,Aggression factor (turn),postflop,decision,ratio,,1.5,4.0,0,Bets and raises divided by calls on the turn.,
+af_river,Aggression factor (river),postflop,decision,ratio,,1.0,3.0,0,Bets and raises divided by calls on the river.,
+af_total,Aggression factor,postflop,decision,ratio,,1.5,3.5,0,Postflop bets and raises divided by postflop calls.,
+afq_flop,Aggression frequency (flop),postflop,decision,percent,,35.0,55.0,0,Share of flop actions (checks excluded) that were a bet or a raise.,
+afq_turn,Aggression frequency (turn),postflop,decision,percent,,35.0,55.0,0,Share of turn actions (checks excluded) that were a bet or a raise.,
+afq_river,Aggression frequency (river),postflop,decision,percent,,30.0,50.0,0,Share of river actions (checks excluded) that were a bet or a raise.,
+afq_total,Aggression frequency,postflop,decision,percent,,35.0,55.0,0,Share of postflop actions (checks excluded) that were a bet or a raise.,
+vpip,VPIP,preflop,hand,percent,,18.0,28.0,1,"Voluntarily put money in the pot preflop, per hand dealt in (blind posts excluded).",
+pfr,PFR,preflop,hand,percent,,14.0,24.0,1,"Raised preflop, per hand dealt in.",
+rfi,RFI (open %),preflop,decision,percent,,15.0,50.0,1,"Raised when first in, from any position.",
+steal,Steal %,preflop,decision,percent,,25.0,45.0,1,"Raised first in from the cutoff, button or small blind.",
+limp,Limp %,preflop,decision,percent,,0.0,5.0,1,Called the big blind when first in rather than raising.,
+iso_raise,Isolation raise %,preflop,decision,percent,,30.0,60.0,1,Raised over one or more limpers with no raise in front.,
+cold_call,Cold call %,preflop,decision,percent,,3.0,10.0,1,"Called a raise at the first decision of the hand, not already invested as a blind.",
+defend_vs_open,Call vs open,preflop,decision,percent,,10.0,25.0,1,"Called when facing exactly one raise, from any seat (blinds included).","Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities)."
+fold_vs_open,Fold vs open,preflop,decision,percent,,60.0,85.0,1,"Folded when facing exactly one raise, from any seat.","Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities)."
+threebet,3-bet %,preflop,decision,percent,,5.0,11.0,1,Re-raised when facing exactly one raise (a limp-reraise counts).,"Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities, +0.4% 3-bets on the pool)."
+squeeze,Squeeze %,preflop,decision,percent,,4.0,12.0,1,Re-raised facing a raise and at least one cold caller.,
+fold_to_3bet,Fold to 3-bet,preflop,decision,percent,,40.0,60.0,1,Folded after open-raising and facing a 3-bet.,"v1 counted any fold by the opener once two raises existed, including a fold to a later 5-bet."
+call_3bet,Call 3-bet,preflop,decision,percent,,30.0,50.0,1,Called after open-raising and facing a 3-bet.,
+fourbet,4-bet %,preflop,decision,percent,,2.0,8.0,1,Re-raised when facing two raises (a cold-call then 4-bet counts).,"Every decision facing two raises counts, a caller's second decision included; v1 counted a seat's first decision only."
+fold_to_4bet,Fold to 4-bet,preflop,decision,percent,,40.0,65.0,1,Folded after 3-betting and facing a 4-bet.,
+call_4bet,Call 4-bet,preflop,decision,percent,,20.0,45.0,1,Called after 3-betting and facing a 4-bet.,
+fivebet,5-bet %,preflop,decision,percent,,1.0,6.0,1,Re-raised when facing three raises.,Every decision facing three raises counts; v1 counted a seat's first decision only.
+fold_bb_to_steal,Fold BB to steal,preflop,decision,percent,,45.0,70.0,1,"Folded the big blind facing a first-in raise from the cutoff, button or small blind.",v1 did not require the raise to be first in (a late raise over limpers counted as a steal).
+limp_fold,"Limp, fold to raise",preflop,decision,percent,,40.0,70.0,1,"Limped, then folded when someone raised behind.",v1 counted open limps only; this counts every limp (over-limps included).
+limp_call,"Limp, call raise",preflop,decision,percent,,25.0,55.0,1,"Limped, then called a raise behind.",v1 counted open limps only; this counts every limp (over-limps included).
+limp_raise,Limp-raise,preflop,decision,percent,,0.0,10.0,1,"Limped, then re-raised a raise behind.",v1 counted open limps only; this counts every limp (over-limps included).
+wwsf,WWSF,showdown,hand,percent,1,43.0,52.0,1,"Won the pot, given the flop was seen.",
+wtsd,WTSD,showdown,hand,percent,,24.0,30.0,1,"Reached showdown, given the flop was seen.",
+wsd,W$SD,showdown,hand,percent,1,48.0,56.0,1,"Won at showdown, given showdown was reached.",

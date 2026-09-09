@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1 (stat registry) and C.2 (decision model, 73.7M decisions built) done**
-**Last updated:** 2026-09-09 (phase C session, C.2)
+**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1 (registry), C.2 (73.7M decisions built), C.3 (generated rollup) done**
+**Last updated:** 2026-09-09 (phase C session, C.3)
 
 ---
 
@@ -15,43 +15,39 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.3**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.4**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
-**Where C.2 left things (2026-09-09):** the v2 facts exist and are full. `marts.decisions`
-holds 73,679,949 rows — one per fold/check/call/bet/raise in `core.actions FINAL`, exactly — over
-160/160 daily partitions (3.84 GiB), and `marts.player_hands` 54,562,770 rows (2.18 GiB). They
-are built from `intermediate.int_hand_arrays` (per-hand action and seat arrays) and
-`int_board_by_street` by the macro `decision_state()`; the columns are the `decisions` /
-`player_hands` entries of `stats/registry/dimensions.yaml`, and every v2 table carries
-`hand_uid FixedString(16)` (B.5b's mart half). Bootstrapped beside the **untouched v1 chain**
-(`player_hand_flags`, `stats_daily` still serve the API) with
-`uv run python -m scripts.backfill --anchor decisions:played_date --anchor player_hands:played_date --select '+decisions +player_hands'`
-in 35 passes / 641 s, peak 1.21 GiB per insert. Parity preview (hero + population): hands, VPIP,
-PFR, RFI, c-bet flop, WTSD, W$SD, net bb identical to the v1 fingerprint below; the other stats
-differ by documented definition (`notes` in the registry). The stat registry (C.1) is in
-`platform/stats/`. **C.1 and C.2 are staged on `feat/phase-c-stat-engine`, not committed** — the
-founder declined the commit prompt once; ask again.
+**Where C.3 left things (2026-09-09):** the whole v2 data side exists and is full, beside the
+untouched v1 chain that still serves the API. `marts.decisions` (73,679,949 rows, one per
+decision, 160/160 partitions) and `marts.player_hands` (54,562,770) are the facts; the generated
+rollup `marts.stats_daily_v2` (2.5M rows, one `<code>_opp`/`<code>_action` pair per cached stat
+plus `hands`) and the seed `marts.stat_definitions` (65 rows) come from `scripts/gen_stats.py`
+(`make gen`; `make gen-check` and CI fail on a stale file). Every column is a dimension in
+`stats/registry/dimensions.yaml`; `stats/compiler.py` turns a registry tree into SQL with bound
+parameters (`Params`) and is the only path a request may take. Rollup sums equal the facts and
+the v1 rollup (on stats without `notes`); the generated law test passes on the real data.
+Routine `make dbt-build` rebuilds v1 and v2 for the same dirty partitions (default anchor
+`stats_daily`); the v2-only bootstrap flags are documented in `macros/incremental.sql`.
 
 **Do this:**
-1. `cd platform && make ps` (all five services healthy), then `make check` (248 unit tests).
-2. Ask whether to commit the staged work (two commits: the registry; the decision model).
-3. Read `docs/POKER_PLAN.md` `## Status` → **C.3**: `scripts/gen_stats.py` renders from the
-   registry: `dbt/poker_dwh/models/marts/stats_daily.sql` (SummingMergeTree, every group key in
-   the ORDER BY, one `<code>_opp` / `<code>_action` pair per `cached` stat — decision-grain
-   stats from `decisions`, hand-grain from `player_hands`, unioned on the group key),
-   `seeds/dim_stat_definitions.csv`, `tests/assert_action_le_opportunity.sql`, each with a
-   `-- GENERATED` header; `make gen` / `make gen-check` extended. Mind two things: the
-   generated `stats_daily` **replaces the hand-written one the v1 API reads**, so either the
-   v1 routes switch to `stats.service` in the same step or the v1 counter names
-   (`api/queries.py` `COUNTERS`) are generated as aliases until C.5; and once `stats_daily`
-   reads both v2 facts it is downstream of them again, so the default anchor applies
-   (recreate it empty with `empty_chain: true` and backfill with the default anchor). "Done
-   means" is in the step.
-4. Continue down phase C in order. Tick a step only when verified; update the plan's Status and
+1. `cd platform && make ps` (all five services healthy), then `make check` (273 unit tests).
+2. Read `docs/POKER_PLAN.md` `## Status` → **C.4**: on top of `stats/compiler.py`, build
+   `stats/router.py` (rollup when every stat is `cached` and every filter/group dimension is on
+   `stats_daily`; else `player_hands` for hand-grain stats and `decisions` for decision-grain,
+   ≤2 queries merged on the group key — by stats AND dimensions, plan §2.6) and
+   `stats/service.py` (`run_report(ReportRequest, tenant_id) -> ReportResult`: `{value, n}`
+   per cell, `format` applied, number group-bys through the dimension's `buckets`,
+   `compare_to: population`, Redis cache key = tenant + sha256 of the canonical request;
+   `tenant_id` and `dataset` are constructor arguments, never fields of the filter). The
+   table name of the rollup is `stats_daily_v2` until C.6. Port the 25 cases of
+   `tests/test_query_compiler.py` and `tests/integration/test_tenant_isolation.py` to the new
+   path; add AST injection cases. "Done means" is in the step: unit tests green, `run_report`
+   returns `{value, n}` per cell — verify one report against the fingerprint below.
+3. Continue down phase C in order. Tick a step only when verified; update the plan's Status and
    §6 and this block at the end.
 
 **Time-independent fingerprint** (`marts.player_hand_flags`, purged corpus, verified 2026-09-09
@@ -355,6 +351,7 @@ Newest first. One line per session: what changed, what's next.
 | Date | Session did | Left off at |
 |---|---|---|
 | 2026-09-09 (7) | **Off-plan (founder request): pool spot-frequency census + board texture.** Five new modules — `scripts/spot_nodes.py` (preflop/flop *node* per hand from `core.actions`, e.g. `BU open, BB call`; seat→position is a fixed lookup because `button_seat` is always 1, and `FINAL` is skippable because `parser_version` is uniform and `hand_uid` unique, both asserted at runtime by `verify_corpus_assumptions()`), `spot_texture.py` (flop classifier, ace counted **high or low** so A-2-3 is connected), `spot_report.py`, `spot_plan.py`, `spot_frequency.py` → `reports/spot_frequency.{md,csv}`. One unified ranking of all 346 nodes over 9,093,794 six-max hands: 5 spots = 43% of decisions, 10 = 62%. **Three findings.** (1) The texture classifier is parity-checked each run against enumeration of all C(52,3)=22,100 flops — connectedness and suitedness match to 0.07pp, confirming the board parser. (2) The high card deliberately does *not* match, and the deviation is card removal: ace-high flops fall monotonically 23.89% (limped) → 21.7% (SRP) → 20.2% (3bet) → 17.9% (4bet) → 15.1% (5bet), vs 21.74% for a random deck. Texture is otherwise independent of the spot, so spot × texture is a clean product. (3) A node ending in a raise can still show flops — an already-all-in player owed a runout, not a parse bug. **Found a real defect in the dbt chain:** `int_board_texture.sql` computes straight span ace-high only, so A-2-3 lands in `disconnected`; it disagrees with this classifier and should be fixed. `make check` 240 green. **Overlaps plan C.2** — this node grammar is C.2's action-line tokens; reconcile with `marts.decisions`, do not duplicate. | Back to plan **C.2** (decision model); fix `int_board_texture.sql` wheel handling |
+| 2026-09-09 (8) | C.1 + C.2 committed and merged into `main` (`8d8b5ac`). **Plan C.3 done**: `scripts/gen_stats.py` renders the rollup (`marts.stats_daily_v2`), the definitions seed and the law test from the registry; `stats/compiler.py` underneath; `make gen`/`gen-check`/CI extended. Rollup bootstrapped in 35 passes / 186 s at ≤1.66 GiB; sums equal the facts and v1; law test green on real data. `make check` 273. | Plan **C.4** (router + service on the compiler) |
 | 2026-09-09 (7) | **Plan C.2 done**: v2 facts built — `marts.decisions` (73.7M rows, one per decision with the state before it) and `marts.player_hands` (54.6M) from per-hand arrays, `hand_uid FixedString(16)`; multi-anchor incremental gate; bootstrapped beside the v1 chain in 35 passes / 641 s at ≤1.21 GiB; counts exact vs `core.* FINAL`; parity preview 9/16 identical, rest by definition. `make check` 248. Staged, not committed. | Plan **C.3** (generator: `stats_daily` from the registry) |
 | 2026-09-09 (6) | Merged phase B into `main` (fast-forward). **Plan C.1 done**: `stats/` package — filter/expression AST, entry models, semantic checks, and the YAML registry (77 dimensions, 65 stats, definitions tightened to standard tracker meaning with `notes` for the parity check). 65 new unit tests; `make check` 240 green; mypy, import-linter, size check extended to `stats/`. Branch `feat/phase-c-stat-engine`. | Plan **C.2** (decision model, built to `dimensions.yaml`) |
 | 2026-09-09 (5) | **Phase B (module boundaries) done and verified**, on branch `feat/phase-b-module-boundaries` (6 commits; phase A merged to `main` at `35acf83`). Settings and the ClickHouse client out of `api/`; import-linter with 5 contracts; sinks behind Protocols with fakes and one ingest loop; a `test_`-prefixed test environment the integration conftest insists on (analysis databases byte-identical before/after); the core schema declared once in `core/schema/` with generated staging models and a spec-vs-`system.columns` test; migration 0009 (dataset on actions/pot_winners + pool repair, 0 disagreements); typed hand endpoints; size limits enforced (28 → 6 baselined violations; PokerStars parser split into a package, real-export fingerprint identical). Founder's storage analysis recorded as plan step B.5b (`hand_uid` FixedString(16)), deferred to C.2's rebuild. `make check` 175 unit tests, `make test-all` 186 passed / 2 skipped. | Phase-B gate: merge the branch (founder's call), then **POKER_PLAN.md C.1** (stat registry as data) |

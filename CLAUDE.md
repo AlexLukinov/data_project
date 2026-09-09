@@ -195,7 +195,7 @@ Redis 6380 · MinIO 9010/9011**.
 | `make check` | lint + typecheck + import-linter + generated-file check + size check + unit tests — what CI runs |
 | `make test-all` | includes integration tests, in the test environment (needs `make up`) |
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
-| `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` / fail if they are stale |
+| `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` and the rollup, definitions seed and law test from `stats/registry/` / fail if any is stale |
 | `make size-check` / `make size-baseline` | functions ≤40 lines, files ≤300, against the burn-down list `scripts/size_baseline.txt` (an entry that stops violating fails too) / rewrite that list |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 
