@@ -1,0 +1,347 @@
+spot,pattern,level,work,players,hands,pct_hands,flop_hands,preflop_hands,pct_sees_flop,avg_pot_bb
+walk (folded to BB),walk,walk,preflop only,0,1503894,16.5376,0,1503894,0.00,0.87
+BU open,open,SRP,preflop only,1,801401,8.8126,0,801401,0.00,2.43
+CO open,open,SRP,preflop only,1,653841,7.1900,0,653841,0.00,2.43
+UTG open,open,SRP,preflop only,1,607351,6.6787,0,607351,0.00,2.43
+HJ open,open,SRP,preflop only,1,606465,6.6690,0,606465,0.00,2.43
+SB open,open,SRP,preflop only,1,591456,6.5040,0,591456,0.00,2.00
+"BU open, BB call","open, call",SRP,postflop,2,371149,4.0813,371103,46,99.99,12.18
+"SB open, BB call","open, call",SRP,postflop,2,305700,3.3616,305637,63,99.98,13.87
+"CO open, BB call","open, call",SRP,postflop,2,287746,3.1642,287701,45,99.98,12.52
+"HJ open, BB call","open, call",SRP,postflop,2,257886,2.8358,257836,50,99.98,12.73
+"UTG open, BB call","open, call",SRP,postflop,2,250242,2.7518,250178,64,99.97,12.88
+"BU open, SB 3bet","open, 3bet",3bet,preflop only,2,106678,1.1731,34,106644,0.03,5.62
+"BU open, SB call","open, call",SRP,postflop,2,75977,0.8355,75954,23,99.97,14.65
+"SB open, BB 3bet","open, 3bet",3bet,preflop only,2,74645,0.8208,0,74645,0.00,5.34
+"CO open, BU 3bet","open, 3bet",3bet,preflop only,2,73288,0.8059,45,73243,0.06,5.97
+"BU open, BB 3bet","open, 3bet",3bet,preflop only,2,69778,0.7673,0,69778,0.00,5.03
+"SB limp, BB check","limp, check",limped,postflop,2,68881,0.7575,68881,0,100.00,3.97
+"UTG open, BU call","open, call",SRP,postflop,2,67638,0.7438,67604,34,99.95,16.59
+"UTG open, SB call","open, call",SRP,postflop,2,65535,0.7207,65498,37,99.94,15.23
+"CO open, BU call","open, call",SRP,postflop,2,63517,0.6985,63493,24,99.96,16.13
+"CO open, SB call","open, call",SRP,postflop,2,63321,0.6963,63296,25,99.96,14.91
+"HJ open, BU call","open, call",SRP,postflop,2,63015,0.6929,62993,22,99.97,16.33
+"HJ open, SB call","open, call",SRP,postflop,2,62540,0.6877,62514,26,99.96,14.99
+"CO open, SB 3bet","open, 3bet",3bet,preflop only,2,51562,0.5670,39,51523,0.08,5.55
+"BU open, SB 3bet, BU call","open, 3bet, call",3bet,postflop,2,50770,0.5583,50691,79,99.84,50.49
+"HJ open, CO 3bet","open, 3bet",3bet,preflop only,2,50495,0.5553,66,50429,0.13,5.94
+"CO open, BU 3bet, CO call","open, 3bet, call",3bet,postflop,2,48112,0.5291,48051,61,99.87,39.35
+"UTG open, CO call","open, call",SRP,postflop,2,46282,0.5089,46261,21,99.95,17.00
+"HJ open, BU 3bet","open, 3bet",3bet,preflop only,2,45436,0.4996,50,45386,0.11,5.92
+"HJ open, CO call","open, call",SRP,postflop,2,43682,0.4803,43659,23,99.95,16.91
+"HJ open, CO 3bet, HJ call","open, 3bet, call",3bet,postflop,2,43581,0.4792,43504,77,99.82,39.71
+"HJ open, BU 3bet, HJ call","open, 3bet, call",3bet,postflop,2,39608,0.4355,39542,66,99.83,39.47
+"UTG open, HJ 3bet, UTG call","open, 3bet, call",3bet,postflop,2,39594,0.4354,39525,69,99.83,40.15
+"UTG open, CO 3bet, UTG call","open, 3bet, call",3bet,postflop,2,39128,0.4303,39066,62,99.84,39.46
+"UTG open, HJ 3bet","open, 3bet",3bet,preflop only,2,39109,0.4301,71,39038,0.18,5.98
+"UTG open, HJ call","open, call",SRP,postflop,2,38990,0.4288,38959,31,99.92,17.35
+"SB open, BB 3bet, SB call","open, 3bet, call",3bet,postflop,2,38880,0.4275,38771,109,99.72,42.91
+"CO open, SB 3bet, CO call","open, 3bet, call",3bet,postflop,2,37155,0.4086,37077,78,99.79,50.17
+"UTG open, CO 3bet","open, 3bet",3bet,preflop only,2,36881,0.4056,67,36814,0.18,6.03
+"UTG open, BU 3bet, UTG call","open, 3bet, call",3bet,postflop,2,35448,0.3898,35393,55,99.84,39.50
+"BU open, BB 3bet, BU call","open, 3bet, call",3bet,postflop,2,35012,0.3850,34895,117,99.67,49.35
+"UTG open, BU 3bet","open, 3bet",3bet,preflop only,2,32662,0.3592,74,32588,0.23,6.07
+"BU open, SB call, BB call","open, call, call",SRP,postflop,3,31990,0.3518,31990,0,100.00,20.55
+"HJ open, SB 3bet","open, 3bet",3bet,preflop only,2,31561,0.3471,47,31514,0.15,5.56
+"CO open, BB 3bet","open, 3bet",3bet,preflop only,2,30455,0.3349,0,30455,0.00,4.91
+"HJ open, SB 3bet, HJ call","open, 3bet, call",3bet,postflop,2,30368,0.3339,30293,75,99.75,51.25
+"UTG open, BU call, BB call","open, call, call",SRP,postflop,3,26705,0.2937,26705,0,100.00,22.05
+"CO open, SB call, BB call","open, call, call",SRP,postflop,3,26555,0.2920,26555,0,100.00,20.93
+"HJ open, SB call, BB call","open, call, call",SRP,postflop,3,26344,0.2897,26344,0,100.00,21.22
+"UTG open, SB call, BB call","open, call, call",SRP,postflop,3,26341,0.2897,26341,0,100.00,21.30
+"UTG open, SB 3bet, UTG call","open, 3bet, call",3bet,postflop,2,26099,0.2870,26024,75,99.71,50.67
+"CO open, BU call, BB call","open, call, call",SRP,postflop,3,25917,0.2850,25917,0,100.00,21.80
+"HJ open, BU call, BB call","open, call, call",SRP,postflop,3,25728,0.2829,25728,0,100.00,22.34
+"CO open, BB 3bet, CO call","open, 3bet, call",3bet,postflop,2,23769,0.2614,23659,110,99.54,49.84
+"UTG open, SB 3bet","open, 3bet",3bet,preflop only,2,23604,0.2596,72,23532,0.31,5.76
+"UTG limp, BB check","limp, check",limped,postflop,2,21538,0.2368,21538,0,100.00,4.89
+"HJ limp, BB check","limp, check",limped,postflop,2,19424,0.2136,19424,0,100.00,4.89
+"HJ open, BB 3bet, HJ call","open, 3bet, call",3bet,postflop,2,19415,0.2135,19340,75,99.61,50.02
+"HJ open, BB 3bet","open, 3bet",3bet,preflop only,2,18365,0.2020,0,18365,0.00,4.81
+"UTG open, CO call, BB call","open, call, call",SRP,postflop,3,18211,0.2003,18211,0,100.00,22.99
+"UTG open, BB 3bet, UTG call","open, 3bet, call",3bet,postflop,2,18112,0.1992,18016,96,99.47,49.96
+"HJ open, CO call, BB call","open, call, call",SRP,postflop,3,17906,0.1969,17906,0,100.00,22.53
+"CO limp, BB check","limp, check",limped,postflop,2,17670,0.1943,17670,0,100.00,4.82
+"BU limp, BB check","limp, check",limped,postflop,2,17530,0.1928,17530,0,100.00,4.76
+"UTG open, HJ call, BB call","open, call, call",SRP,postflop,3,15092,0.1660,15092,0,100.00,23.75
+"UTG open, BB 3bet","open, 3bet",3bet,preflop only,2,14038,0.1544,0,14038,0.00,4.83
+"SB limp, BB iso","limp, iso",SRP,preflop only,2,12256,0.1348,0,12256,0.00,2.00
+"CO open, BU 3bet, CO 4bet","open, 3bet, 4bet",4bet,preflop only,2,11422,0.1256,0,11422,0.00,15.91
+"SB limp, BB iso, SB call","limp, iso, call",SRP,postflop,2,10633,0.1169,10629,4,99.96,19.13
+"BU open, SB 3bet, BU 4bet","open, 3bet, 4bet",4bet,preflop only,2,8699,0.0957,0,8699,0.00,20.54
+"SB open, BB 3bet, SB 4bet","open, 3bet, 4bet",4bet,preflop only,2,8166,0.0898,0,8166,0.00,17.86
+"UTG open, BU call, SB call","open, call, call",SRP,postflop,3,7912,0.0870,7912,0,100.00,25.37
+"CO open, BU 3bet, CO 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,2,7645,0.0841,7432,213,97.21,97.85
+"HJ open, CO 3bet, HJ 4bet","open, 3bet, 4bet",4bet,preflop only,2,7603,0.0836,0,7603,0.00,15.55
+"HJ open, BU call, SB call","open, call, call",SRP,postflop,3,7443,0.0818,7443,0,100.00,24.75
+"HJ open, BU 3bet, HJ 4bet","open, 3bet, 4bet",4bet,preflop only,2,7353,0.0809,0,7353,0.00,15.61
+"CO open, BU call, SB call","open, call, call",SRP,postflop,3,7110,0.0782,7110,0,100.00,24.27
+"HJ open, CO 3bet, HJ 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,2,6108,0.0672,5913,195,96.81,99.37
+"BU open, SB call, BB 3bet","open, call, 3bet",3bet,preflop only,3,6081,0.0669,0,6081,0.00,6.86
+"HJ open, BU 3bet, HJ 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,2,5868,0.0645,5690,178,96.97,100.29
+"UTG open, CO 3bet, UTG 4bet","open, 3bet, 4bet",4bet,preflop only,2,5868,0.0645,0,5868,0.00,15.28
+"UTG open, CO 3bet, UTG 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,2,5588,0.0614,5405,183,96.73,101.13
+"UTG open, HJ 3bet, UTG 4bet, HJ call","open, 3bet, 4bet, call",4bet,mixed,2,5577,0.0613,5378,199,96.43,101.18
+"UTG open, CO call, SB call","open, call, call",SRP,postflop,3,5570,0.0613,5570,0,100.00,25.50
+"UTG open, HJ 3bet, UTG 4bet","open, 3bet, 4bet",4bet,preflop only,2,5424,0.0596,0,5424,0.00,15.34
+"UTG open, CO call, BU call","open, call, call",SRP,postflop,3,5396,0.0593,5396,0,100.00,27.34
+"HJ open, CO call, SB call","open, call, call",SRP,postflop,3,5312,0.0584,5312,0,100.00,25.04
+"CO open, SB 3bet, CO 4bet","open, 3bet, 4bet",4bet,preflop only,2,5296,0.0582,0,5296,0.00,20.17
+"SB open, BB 3bet, SB 4bet, BB call","open, 3bet, 4bet, call",4bet,mixed,2,5276,0.0580,4952,324,93.86,111.95
+"UTG open, BU 3bet, UTG 4bet","open, 3bet, 4bet",4bet,preflop only,2,5252,0.0578,0,5252,0.00,15.35
+"UTG open, BU 3bet, UTG 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,2,5121,0.0563,4945,176,96.56,101.81
+"HJ open, CO call, BU call","open, call, call",SRP,postflop,3,4952,0.0545,4952,0,100.00,26.89
+"UTG open, HJ call, SB call","open, call, call",SRP,postflop,3,4752,0.0523,4752,0,100.00,26.76
+"UTG limp, SB limp, BB check","limp, limp, check",limped,postflop,3,4692,0.0516,4692,0,100.00,10.18
+"UTG open, HJ call, BU call","open, call, call",SRP,postflop,3,4679,0.0515,4679,0,100.00,26.86
+"UTG limp, CO iso, UTG call","limp, iso, call",SRP,postflop,2,4519,0.0497,4510,9,99.80,20.97
+"BU open, SB 3bet, BU 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,2,4514,0.0496,4309,205,95.46,102.30
+"UTG limp, BU iso, UTG call","limp, iso, call",SRP,postflop,2,4502,0.0495,4496,6,99.87,22.13
+"BU open, BB 3bet, BU 4bet","open, 3bet, 4bet",4bet,preflop only,2,4405,0.0484,0,4405,0.00,19.97
+"UTG limp, HJ iso, UTG call","limp, iso, call",SRP,postflop,2,4369,0.0480,4351,18,99.59,23.67
+"CO open, BU call, SB 3bet","open, call, 3bet",3bet,preflop only,3,4318,0.0475,1,4317,0.02,7.79
+"CO limp, BU iso, CO call","limp, iso, call",SRP,postflop,2,4265,0.0469,4259,6,99.86,23.21
+"HJ limp, BU iso, HJ call","limp, iso, call",SRP,postflop,2,4199,0.0462,4194,5,99.88,23.06
+"HJ limp, SB limp, BB check","limp, limp, check",limped,postflop,3,4169,0.0458,4169,0,100.00,10.22
+"HJ limp, CO iso, HJ call","limp, iso, call",SRP,postflop,2,4105,0.0451,4100,5,99.88,23.86
+"BU limp, SB limp, BB check","limp, limp, check",limped,postflop,3,4017,0.0442,4017,0,100.00,9.69
+"BU open, SB 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,3938,0.0433,28,3910,0.71,22.00
+"CO limp, SB limp, BB check","limp, limp, check",limped,postflop,3,3737,0.0411,3737,0,100.00,9.95
+"UTG open, BU call, SB call, BB call","open, call, call, call",SRP,postflop,4,3447,0.0379,3447,0,100.00,33.17
+"HJ open, BU call, SB call, BB call","open, call, call, call",SRP,postflop,4,3329,0.0366,3329,0,100.00,32.43
+"CO open, BU call, SB call, BB call","open, call, call, call",SRP,postflop,4,3268,0.0359,3268,0,100.00,31.60
+"CO open, SB call, BB 3bet","open, call, 3bet",3bet,preflop only,3,3257,0.0358,2,3255,0.06,6.72
+"HJ open, BU call, SB 3bet","open, call, 3bet",3bet,preflop only,3,3251,0.0357,6,3245,0.18,7.78
+"CO open, SB 3bet, CO 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,2,3232,0.0355,3041,191,94.09,104.77
+"HJ open, SB 3bet, HJ 4bet","open, 3bet, 4bet",4bet,preflop only,2,3213,0.0353,0,3213,0.00,19.60
+"UTG open, HJ call, CO call","open, call, call",SRP,postflop,3,3209,0.0353,3209,0,100.00,27.87
+"BU open, BB 3bet, BU 4bet, BB call","open, 3bet, 4bet, call",4bet,mixed,2,3123,0.0343,2922,201,93.56,103.68
+"CO open, BU call, BB 3bet","open, call, 3bet",3bet,preflop only,3,3025,0.0333,1,3024,0.03,7.20
+"BU open, SB 3bet, BB call","open, 3bet, call",3bet,postflop,3,2960,0.0325,2946,14,99.53,56.23
+"CO open, BU 3bet, SB 4bet","open, 3bet, 4bet",4bet,preflop only,3,2954,0.0325,18,2936,0.61,18.01
+"CO open, BU 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,2765,0.0304,12,2753,0.43,17.35
+"BU limp, SB iso, BU call","limp, iso, call",SRP,postflop,2,2747,0.0302,2742,5,99.82,25.56
+"UTG limp, SB iso, UTG call","limp, iso, call",SRP,postflop,2,2715,0.0299,2707,8,99.71,25.33
+"HJ open, SB 3bet, HJ 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,2,2696,0.0296,2536,160,94.07,101.17
+"UTG open, BU call, SB 3bet","open, call, 3bet",3bet,preflop only,3,2681,0.0295,6,2675,0.22,7.80
+"HJ limp, SB iso, HJ call","limp, iso, call",SRP,postflop,2,2549,0.0280,2543,6,99.76,28.31
+"HJ open, CO call, BU 3bet","open, call, 3bet",3bet,preflop only,3,2502,0.0275,1,2501,0.04,8.03
+"CO limp, SB iso, CO call","limp, iso, call",SRP,postflop,2,2386,0.0262,2384,2,99.92,25.18
+"UTG open, CO call, SB call, BB call","open, call, call, call",SRP,postflop,4,2382,0.0262,2382,0,100.00,31.70
+"HJ open, SB call, BB 3bet","open, call, 3bet",3bet,preflop only,3,2367,0.0260,1,2366,0.04,6.57
+"UTG open, SB 3bet, UTG 4bet","open, 3bet, 4bet",4bet,preflop only,2,2337,0.0257,0,2337,0.00,19.28
+"HJ open, CO call, SB call, BB call","open, call, call, call",SRP,postflop,4,2306,0.0254,2306,0,100.00,33.28
+"HJ open, BU call, BB 3bet","open, call, 3bet",3bet,preflop only,3,2303,0.0253,0,2303,0.00,7.02
+"UTG open, CO call, BU call, BB call","open, call, call, call",SRP,postflop,4,2299,0.0253,2299,0,100.00,34.22
+"HJ open, CO call, BU call, BB call","open, call, call, call",SRP,postflop,4,2246,0.0247,2246,0,100.00,33.58
+"UTG open, SB 3bet, UTG 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,2,2229,0.0245,2056,173,92.24,106.03
+"UTG limp, BB iso, UTG call","limp, iso, call",SRP,postflop,2,2190,0.0241,2187,3,99.86,23.76
+"BU limp, BB iso, BU call","limp, iso, call",SRP,postflop,2,2187,0.0240,2183,4,99.82,24.57
+"CO open, BU 3bet, BB call","open, 3bet, call",3bet,postflop,3,2141,0.0235,2134,7,99.67,42.64
+"BU open, SB call, BB 3bet, SB call","open, call, 3bet, call",3bet,postflop,3,2136,0.0235,2125,11,99.49,56.60
+"CO open, BB 3bet, CO 4bet, BB call","open, 3bet, 4bet, call",4bet,mixed,2,2105,0.0231,1974,131,93.78,104.87
+"UTG open, CO call, BU 3bet","open, call, 3bet",3bet,preflop only,3,2095,0.0230,2,2093,0.10,8.06
+"CO open, BU 3bet, BB call, CO call","open, 3bet, call, call",3bet,postflop,3,2062,0.0227,2062,0,100.00,59.52
+"HJ open, CO call, SB 3bet","open, call, 3bet",3bet,preflop only,3,2021,0.0222,1,2020,0.05,7.75
+"UTG open, HJ call, SB call, BB call","open, call, call, call",SRP,postflop,4,2006,0.0221,2006,0,100.00,34.41
+"UTG open, SB call, BB 3bet","open, call, 3bet",3bet,preflop only,3,1991,0.0219,1,1990,0.05,6.58
+"UTG open, HJ call, BU call, BB call","open, call, call, call",SRP,postflop,4,1963,0.0216,1963,0,100.00,32.92
+"HJ open, CO 3bet, BB call, HJ call","open, 3bet, call, call",3bet,postflop,3,1950,0.0214,1950,0,100.00,58.23
+"UTG open, BU call, BB 3bet","open, call, 3bet",3bet,preflop only,3,1934,0.0213,0,1934,0.00,7.04
+"CO open, BB 3bet, CO 4bet","open, 3bet, 4bet",4bet,preflop only,2,1930,0.0212,0,1930,0.00,19.29
+"CO open, BU call, SB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1894,0.0208,1887,7,99.63,65.85
+"CO limp, BB iso, CO call","limp, iso, call",SRP,postflop,2,1892,0.0208,1886,6,99.68,24.05
+"HJ open, CO 3bet, BU 4bet","open, 3bet, 4bet",4bet,mixed,3,1851,0.0204,20,1831,1.08,18.48
+"HJ limp, BB iso, HJ call","limp, iso, call",SRP,postflop,2,1839,0.0202,1831,8,99.56,24.20
+"UTG open, CO 3bet, BB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1819,0.0200,1819,0,100.00,54.91
+"HJ open, BB 3bet, HJ 4bet, BB call","open, 3bet, 4bet, call",4bet,mixed,2,1798,0.0198,1706,92,94.88,104.17
+"UTG open, HJ 3bet, BB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1797,0.0198,1797,0,100.00,58.99
+"UTG open, CO call, SB 3bet","open, call, 3bet",3bet,preflop only,3,1775,0.0195,1,1774,0.06,7.75
+"UTG open, HJ call, CO 3bet","open, call, 3bet",3bet,preflop only,3,1760,0.0194,0,1760,0.00,8.00
+"BU open, SB 3bet, BB call, BU call","open, 3bet, call, call",3bet,postflop,3,1746,0.0192,1746,0,100.00,69.33
+"UTG open, BB 3bet, UTG 4bet, BB call","open, 3bet, 4bet, call",4bet,mixed,2,1731,0.0190,1601,130,92.49,106.09
+"HJ open, BU 3bet, BB call, HJ call","open, 3bet, call, call",3bet,postflop,3,1711,0.0188,1711,0,100.00,56.80
+"HJ open, CO 3bet, BU call, HJ call","open, 3bet, call, call",3bet,postflop,3,1707,0.0188,1707,0,100.00,63.90
+"UTG limp, BU limp, BB check","limp, limp, check",limped,postflop,3,1691,0.0186,1691,0,100.00,11.43
+"CO open, BU 3bet, SB call","open, 3bet, call",3bet,postflop,3,1681,0.0185,1675,6,99.64,46.37
+"HJ open, CO 3bet, SB 4bet","open, 3bet, 4bet",4bet,mixed,3,1642,0.0181,18,1624,1.10,18.33
+"HJ open, CO call, BU 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,1634,0.0180,1629,5,99.69,51.11
+"BU open, SB 3bet, BB 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,3,1626,0.0179,1556,70,95.69,100.21
+"UTG open, HJ 3bet, BU call, UTG call","open, 3bet, call, call",3bet,postflop,3,1606,0.0177,1606,0,100.00,64.97
+"CO open, SB 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,1575,0.0173,14,1561,0.89,22.14
+"CO open, BU 3bet, SB call, CO call","open, 3bet, call, call",3bet,postflop,3,1574,0.0173,1574,0,100.00,60.34
+"HJ open, BU 3bet, SB 4bet","open, 3bet, 4bet",4bet,mixed,3,1573,0.0173,25,1548,1.59,18.47
+"UTG open, BU 3bet, BB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1572,0.0173,1572,0,100.00,59.31
+"UTG open, HJ call, BU 3bet","open, call, 3bet",3bet,preflop only,3,1531,0.0168,4,1527,0.26,8.40
+"HJ limp, BU limp, BB check","limp, limp, check",limped,postflop,3,1521,0.0167,1521,0,100.00,12.09
+"HJ open, BU 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,1516,0.0167,6,1510,0.40,17.20
+"HJ open, CO 3bet, BB call","open, 3bet, call",3bet,postflop,3,1505,0.0165,1503,2,99.87,44.35
+"BU open, SB 3bet, BU 4bet, SB 5bet, BU call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1488,0.0164,1068,420,71.77,194.43
+"UTG open, CO 3bet, BU call, UTG call","open, 3bet, call, call",3bet,postflop,3,1484,0.0163,1484,0,100.00,68.32
+"HJ open, CO 3bet, SB call, HJ call","open, 3bet, call, call",3bet,postflop,3,1465,0.0161,1465,0,100.00,62.84
+"HJ open, CO 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,1458,0.0160,11,1447,0.75,17.56
+"CO open, BU call, BB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1451,0.0160,1445,6,99.59,64.34
+"CO limp, BU iso","limp, iso",SRP,preflop only,2,1428,0.0157,0,1428,0.00,3.44
+"UTG open, HJ 3bet, SB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1422,0.0156,1422,0,100.00,62.02
+"CO open, BU 3bet, SB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,1413,0.0155,1377,36,97.45,99.17
+"HJ open, BU call, SB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1387,0.0153,1383,4,99.71,65.43
+"CO limp, BU limp, BB check","limp, limp, check",limped,postflop,3,1373,0.0151,1373,0,100.00,12.52
+"HJ open, CO call, BB 3bet","open, call, 3bet",3bet,preflop only,3,1369,0.0151,1,1368,0.07,7.06
+"UTG open, CO 3bet, SB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1363,0.0150,1363,0,100.00,61.30
+"HJ open, BU 3bet, SB call, HJ call","open, 3bet, call, call",3bet,postflop,3,1359,0.0149,1359,0,100.00,61.28
+"SB open, BB 3bet, SB 4bet, BB 5bet, SB call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1354,0.0149,960,394,70.90,192.87
+"CO open, BU 3bet, BB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,1338,0.0147,1294,44,96.71,102.40
+"BU open, SB call, BB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1328,0.0146,1322,6,99.55,63.54
+"UTG open, CO call, BU 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,1319,0.0145,1316,3,99.77,54.47
+"UTG open, HJ call, CO call, BB call","open, call, call, call",SRP,postflop,4,1316,0.0145,1316,0,100.00,35.67
+"UTG limp, HJ iso","limp, iso",SRP,preflop only,2,1313,0.0144,0,1313,0.00,3.44
+"HJ open, BU 3bet, BB call","open, 3bet, call",3bet,postflop,3,1307,0.0144,1299,8,99.39,44.64
+"UTG open, HJ call, CO 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,1300,0.0143,1289,11,99.15,54.88
+"UTG open, HJ call, SB 3bet","open, call, 3bet",3bet,preflop only,3,1293,0.0142,1,1292,0.08,7.66
+"CO open, SB 3bet, BB call","open, 3bet, call",3bet,postflop,3,1286,0.0141,1279,7,99.46,58.01
+"CO open, BU 3bet, CO 4bet, BU 5bet, CO call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1286,0.0141,914,372,71.07,187.36
+"HJ open, CO 3bet, BU call","open, 3bet, call",3bet,postflop,3,1286,0.0141,1281,5,99.61,49.09
+"HJ limp, CO iso","limp, iso",SRP,preflop only,2,1286,0.0141,0,1286,0.00,3.43
+"CO open, SB 3bet, BB call, CO call","open, 3bet, call, call",3bet,postflop,3,1274,0.0140,1274,0,100.00,72.10
+"UTG open, HJ call, BU 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,1266,0.0139,1264,2,99.84,55.66
+"UTG open, CO 3bet, BU 4bet","open, 3bet, 4bet",4bet,mixed,3,1251,0.0138,15,1236,1.20,18.90
+"UTG open, HJ 3bet, CO call, UTG call","open, 3bet, call, call",3bet,postflop,3,1249,0.0137,1249,0,100.00,64.63
+"BU limp, SB iso","limp, iso",SRP,preflop only,2,1244,0.0137,0,1244,0.00,3.00
+"UTG open, BU call, SB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1223,0.0134,1220,3,99.75,66.63
+"UTG open, BU 3bet, SB call, UTG call","open, 3bet, call, call",3bet,postflop,3,1221,0.0134,1221,0,100.00,59.36
+"HJ limp, BU iso","limp, iso",SRP,preflop only,2,1199,0.0132,0,1199,0.00,3.43
+"UTG open, CO call, BB 3bet","open, call, 3bet",3bet,preflop only,3,1195,0.0131,2,1193,0.17,7.13
+"HJ open, BB 3bet, HJ 4bet","open, 3bet, 4bet",4bet,preflop only,2,1184,0.0130,0,1184,0.00,18.03
+"UTG open, HJ 3bet, CO 4bet","open, 3bet, 4bet",4bet,mixed,3,1170,0.0129,14,1156,1.20,19.01
+"UTG limp, CO iso","limp, iso",SRP,preflop only,2,1166,0.0128,0,1166,0.00,3.44
+"CO open, BU 3bet, CO 4bet, BU 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,1154,0.0127,0,1154,0.00,42.48
+"UTG open, CO 3bet, SB 4bet","open, 3bet, 4bet",4bet,preflop only,3,1142,0.0126,11,1131,0.96,17.89
+"UTG open, HJ 3bet, BU 4bet","open, 3bet, 4bet",4bet,mixed,3,1126,0.0124,23,1103,2.04,20.05
+"CO open, SB call, BB 3bet, SB call","open, call, 3bet, call",3bet,postflop,3,1101,0.0121,1098,3,99.73,58.79
+"BU open, BB 3bet, BU 4bet, BB 5bet, BU call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1097,0.0121,788,309,71.83,190.84
+"HJ open, CO 3bet, SB call","open, 3bet, call",3bet,postflop,3,1086,0.0119,1081,5,99.54,47.11
+"BU open, SB 3bet, BU 4bet, SB 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,1083,0.0119,0,1083,0.00,46.88
+"SB open, BB 3bet, SB 4bet, BB 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,1082,0.0119,0,1082,0.00,44.57
+"CO open, SB 3bet, CO 4bet, SB 5bet, CO call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1080,0.0119,781,299,72.31,196.42
+"UTG open, CO 3bet, BB call","open, 3bet, call",3bet,mixed,3,1065,0.0117,1054,11,98.97,45.08
+"UTG open, HJ 3bet, BB call","open, 3bet, call",3bet,postflop,3,1061,0.0117,1054,7,99.34,46.31
+"UTG limp, BU iso","limp, iso",SRP,preflop only,2,1045,0.0115,0,1045,0.00,3.43
+"HJ open, BU call, BB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,1044,0.0115,1038,6,99.43,65.15
+"HJ open, CO call, SB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,1039,0.0114,1036,3,99.71,62.22
+"HJ open, CO 3bet, HJ 4bet, CO 5bet, HJ call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1037,0.0114,792,245,76.37,185.01
+"HJ open, SB 3bet, BB call, HJ call","open, 3bet, call, call",3bet,postflop,3,1035,0.0114,1035,0,100.00,69.91
+"UTG limp, CO limp, BB check","limp, limp, check",limped,postflop,3,1034,0.0114,1034,0,100.00,12.31
+"CO open, SB call, BB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,1032,0.0113,1023,9,99.13,64.06
+"HJ limp, CO limp, BB check","limp, limp, check",limped,postflop,3,1027,0.0113,1027,0,100.00,13.57
+"UTG open, BU 3bet, SB 4bet","open, 3bet, 4bet",4bet,preflop only,3,1025,0.0113,10,1015,0.98,18.75
+"UTG open, HJ 3bet, UTG 4bet, HJ 5bet, UTG call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,1008,0.0111,777,231,77.08,180.37
+"UTG open, HJ 3bet, BB 4bet","open, 3bet, 4bet",4bet,mixed,3,1004,0.0110,22,982,2.19,17.88
+"UTG open, HJ 3bet, SB 4bet","open, 3bet, 4bet",4bet,mixed,3,1002,0.0110,18,984,1.80,18.68
+"UTG open, BU call, BB 3bet, BU call","open, call, 3bet, call",3bet,postflop,3,984,0.0108,981,3,99.70,66.02
+"UTG open, HJ 3bet, BU call","open, 3bet, call",3bet,postflop,3,981,0.0108,972,9,99.08,51.79
+"HJ open, BU 3bet, HJ 4bet, BU 5bet, HJ call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,973,0.0107,724,249,74.41,183.99
+"UTG open, BU 3bet, BB 4bet","open, 3bet, 4bet",4bet,preflop only,3,972,0.0107,3,969,0.31,16.55
+"UTG open, CO 3bet, BB 4bet","open, 3bet, 4bet",4bet,mixed,3,969,0.0107,15,954,1.55,18.00
+"HJ open, CO 3bet, SB 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,959,0.0105,924,35,96.35,102.45
+"CO open, BU call, SB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,957,0.0105,952,5,99.48,68.58
+"CO limp, SB iso","limp, iso",SRP,preflop only,2,955,0.0105,0,955,0.00,3.00
+"HJ open, CO call, BU 3bet, HJ call, CO call","open, call, 3bet, call, call",3bet,postflop,3,955,0.0105,955,0,100.00,72.53
+"HJ open, BU 3bet, SB call","open, 3bet, call",3bet,postflop,3,954,0.0105,950,4,99.58,45.25
+"UTG limp, HJ limp, BB check","limp, limp, check",limped,postflop,3,953,0.0105,953,0,100.00,14.56
+"HJ open, BU 3bet, SB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,945,0.0104,916,29,96.93,103.45
+"HJ open, CO 3bet, BU 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,940,0.0103,918,22,97.66,85.36
+"UTG open, CO 3bet, BU call","open, 3bet, call",3bet,postflop,3,925,0.0102,920,5,99.46,51.07
+"UTG open, CO call, SB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,920,0.0101,914,6,99.35,61.00
+"UTG open, BU 3bet, BB call","open, 3bet, call",3bet,postflop,3,918,0.0101,915,3,99.67,47.31
+"HJ open, BU call, SB 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,918,0.0101,909,9,99.02,68.46
+"CO open, BU call, SB 3bet, CO call, BU call","open, call, 3bet, call, call",3bet,postflop,3,917,0.0101,917,0,100.00,89.24
+"UTG open, BB 3bet, UTG 4bet","open, 3bet, 4bet",4bet,preflop only,2,916,0.0101,0,916,0.00,17.30
+"UTG open, CO 3bet, UTG 4bet, CO 5bet, UTG call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,914,0.0101,717,197,78.45,179.70
+"UTG open, HJ call, BB 3bet","open, call, 3bet",3bet,preflop only,3,910,0.0100,2,908,0.22,7.19
+"UTG open, CO call, BU 3bet, UTG call, CO call","open, call, 3bet, call, call",3bet,postflop,3,903,0.0099,903,0,100.00,78.86
+"HJ open, BU 3bet, BB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,895,0.0098,857,38,95.75,101.18
+"UTG open, HJ call, CO 3bet, UTG call, HJ call","open, call, 3bet, call, call",3bet,postflop,3,895,0.0098,895,0,100.00,74.94
+"HJ limp, SB iso","limp, iso",SRP,preflop only,2,886,0.0097,0,886,0.00,3.00
+"UTG open, HJ 3bet, SB call","open, 3bet, call",3bet,postflop,3,886,0.0097,882,4,99.55,47.20
+"HJ open, SB call, BB 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,879,0.0097,877,2,99.77,67.61
+"BU limp, BB iso","limp, iso",SRP,preflop only,2,878,0.0097,0,878,0.00,2.44
+"UTG open, BU call, SB 3bet, UTG call","open, call, 3bet, call",3bet,mixed,3,872,0.0096,863,9,98.97,72.18
+"HJ open, CO 3bet, BB 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,872,0.0096,850,22,97.48,101.09
+"HJ open, BU call, SB 3bet, HJ call, BU call","open, call, 3bet, call, call",3bet,postflop,3,862,0.0095,862,0,100.00,89.78
+"HJ open, SB call, BB 3bet, SB call","open, call, 3bet, call",3bet,postflop,3,856,0.0094,853,3,99.65,60.87
+"BU open, SB call, BB 3bet, BU call, SB call","open, call, 3bet, call, call",3bet,postflop,3,852,0.0094,852,0,100.00,77.26
+"UTG limp, CO iso, BB call, UTG call","limp, iso, call, call",SRP,postflop,3,852,0.0094,852,0,100.00,31.09
+"UTG open, SB 3bet, BB call, UTG call","open, 3bet, call, call",3bet,postflop,3,847,0.0093,847,0,100.00,69.58
+"CO open, SB 3bet, BB 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,3,843,0.0093,804,39,95.37,101.95
+"HJ open, CO call, BB 3bet, CO call","open, call, 3bet, call",3bet,mixed,3,842,0.0093,833,9,98.93,61.76
+"HJ open, SB 3bet, BB 4bet","open, 3bet, 4bet",4bet,mixed,3,833,0.0092,18,815,2.16,21.61
+"UTG open, BU 3bet, UTG 4bet, BU 5bet, UTG call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,832,0.0091,641,191,77.04,182.31
+"UTG limp, SB iso","limp, iso",SRP,preflop only,2,825,0.0091,0,825,0.00,3.00
+"UTG open, BU call, SB 3bet, UTG call, BU call","open, call, 3bet, call, call",3bet,postflop,3,823,0.0091,823,0,100.00,80.92
+"UTG open, HJ call, SB 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,818,0.0090,811,7,99.14,69.11
+"UTG open, HJ 3bet, CO call","open, 3bet, call",3bet,postflop,3,816,0.0090,812,4,99.51,50.65
+"UTG open, CO 3bet, BU 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,813,0.0089,788,25,96.92,90.15
+"UTG open, SB call, BB 3bet, UTG call","open, call, 3bet, call",3bet,mixed,3,804,0.0088,791,13,98.38,69.14
+"HJ open, SB 3bet, BB call","open, 3bet, call",3bet,postflop,3,796,0.0088,791,5,99.37,58.85
+"HJ open, SB 3bet, HJ 4bet, SB 5bet, HJ call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,795,0.0087,584,211,73.46,188.81
+"UTG limp, HJ iso, BB call, UTG call","limp, iso, call, call",SRP,postflop,3,793,0.0087,793,0,100.00,30.44
+"HJ limp, BU iso, BB call, HJ call","limp, iso, call, call",SRP,postflop,3,788,0.0087,788,0,100.00,29.53
+"UTG open, SB call, BB 3bet, SB call","open, call, 3bet, call",3bet,postflop,3,787,0.0087,783,4,99.49,60.26
+"UTG open, CO call, BU call, SB call","open, call, call, call",SRP,postflop,4,769,0.0085,769,0,100.00,33.95
+"UTG open, HJ 3bet, SB 4bet, HJ call","open, 3bet, 4bet, call",4bet,mixed,3,766,0.0084,735,31,95.95,100.64
+"HJ limp, CO iso, BB call, HJ call","limp, iso, call, call",SRP,postflop,3,761,0.0084,761,0,100.00,33.84
+"UTG limp, BU limp, SB limp, BB check","limp, limp, limp, check",limped,postflop,4,761,0.0084,761,0,100.00,25.01
+"UTG limp, BU iso, BB call, UTG call","limp, iso, call, call",SRP,postflop,3,760,0.0084,760,0,100.00,34.81
+"CO limp, BU iso, BB call, CO call","limp, iso, call, call",SRP,postflop,3,759,0.0083,759,0,100.00,33.71
+"UTG open, CO call, BB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,758,0.0083,754,4,99.47,64.04
+"CO open, BB 3bet, CO 4bet, BB 5bet, CO call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,756,0.0083,557,199,73.68,190.77
+"UTG open, CO 3bet, SB call","open, 3bet, call",3bet,postflop,3,755,0.0083,751,4,99.47,48.09
+"UTG open, CO 3bet, BB 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,747,0.0082,723,24,96.79,110.18
+"UTG open, CO 3bet, SB 4bet, CO call","open, 3bet, 4bet, call",4bet,mixed,3,739,0.0081,713,26,96.48,100.88
+"UTG open, HJ 3bet, CO 4bet, HJ call","open, 3bet, 4bet, call",4bet,mixed,3,734,0.0081,718,16,97.82,91.13
+"UTG open, SB call, BB 3bet, UTG call, SB call","open, call, 3bet, call, call",3bet,postflop,3,731,0.0080,731,0,100.00,80.22
+"UTG open, HJ call, BU 3bet, UTG call, HJ call","open, call, 3bet, call, call",3bet,postflop,3,731,0.0080,731,0,100.00,72.56
+"BU open, BB 3bet, BU 4bet, BB 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,729,0.0080,0,729,0.00,45.61
+"CO open, SB call, BB 3bet, CO call, SB call","open, call, 3bet, call, call",3bet,postflop,3,727,0.0080,727,0,100.00,84.24
+"UTG open, BU 3bet, SB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,722,0.0079,702,20,97.23,99.19
+"HJ open, SB call, BB 3bet, HJ call, SB call","open, call, 3bet, call, call",3bet,postflop,3,720,0.0079,720,0,100.00,78.96
+"UTG open, SB 3bet, UTG 4bet, SB 5bet, UTG call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,710,0.0078,533,177,75.07,183.91
+"HJ open, BU call, BB 3bet, HJ call, BU call","open, call, 3bet, call, call",3bet,postflop,3,707,0.0078,707,0,100.00,84.70
+"HJ open, BU call, BB 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,705,0.0078,699,6,99.15,68.13
+"HJ open, CO call, BU call, SB call","open, call, call, call",SRP,postflop,4,699,0.0077,699,0,100.00,39.97
+"UTG open, BU 3bet, BB 4bet, BU call","open, 3bet, 4bet, call",4bet,mixed,3,683,0.0075,661,22,96.78,104.66
+"HJ open, CO 3bet, HJ 4bet, CO 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,679,0.0075,0,679,0.00,41.68
+"UTG open, HJ 3bet, BB 4bet, HJ call","open, 3bet, 4bet, call",4bet,mixed,3,679,0.0075,658,21,96.91,100.68
+"UTG open, HJ call, BU call, SB call","open, call, call, call",SRP,postflop,4,675,0.0074,675,0,100.00,39.94
+"HJ open, CO call, BU 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,671,0.0074,670,1,99.85,60.78
+"UTG open, BU call, BB 3bet, UTG call, BU call","open, call, 3bet, call, call",3bet,postflop,3,671,0.0074,671,0,100.00,86.76
+"UTG open, HJ 3bet, BU 4bet, HJ call","open, 3bet, 4bet, call",4bet,mixed,3,667,0.0073,650,17,97.45,92.82
+"HJ limp, BU limp, SB limp, BB check","limp, limp, limp, check",limped,postflop,4,665,0.0073,665,0,100.00,24.51
+"CO open, BU call, BB 3bet, CO call","open, call, 3bet, call",3bet,postflop,3,658,0.0072,656,2,99.70,71.41
+"UTG open, BU 3bet, SB call","open, 3bet, call",3bet,postflop,3,658,0.0072,652,6,99.09,49.50
+"CO open, BU call, BB 3bet, CO call, BU call","open, call, 3bet, call, call",3bet,postflop,3,657,0.0072,657,0,100.00,84.97
+"UTG open, BU call, BB 3bet, UTG call","open, call, 3bet, call",3bet,postflop,3,640,0.0070,636,4,99.38,71.72
+"CO limp, BU limp, SB limp, BB check","limp, limp, limp, check",limped,postflop,4,637,0.0070,637,0,100.00,19.96
+"HJ open, BB 3bet, HJ 4bet, BB 5bet, HJ call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,630,0.0069,462,168,73.33,183.13
+"UTG open, CO call, BU 3bet, UTG call","open, call, 3bet, call",3bet,postflop,3,625,0.0069,620,5,99.20,56.13
+"HJ open, BU 3bet, HJ 4bet, BU 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,618,0.0068,0,618,0.00,42.06
+"UTG open, HJ call, BB 3bet, HJ call","open, call, 3bet, call",3bet,postflop,3,618,0.0068,614,4,99.35,63.77
+"CO open, SB 3bet, CO 4bet, SB 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,617,0.0068,0,617,0.00,46.13
+"HJ open, CO call, SB 3bet, HJ call, CO call","open, call, 3bet, call, call",3bet,postflop,3,611,0.0067,611,0,100.00,78.74
+"UTG open, CO call, SB 3bet, UTG call, CO call","open, call, 3bet, call, call",3bet,postflop,3,607,0.0067,607,0,100.00,82.28
+"UTG open, SB 3bet, BB call","open, 3bet, call",3bet,postflop,3,585,0.0064,580,5,99.15,63.24
+"HJ open, CO call, SB 3bet, HJ call","open, call, 3bet, call",3bet,mixed,3,578,0.0064,569,9,98.44,72.01
+"UTG open, CO 3bet, UTG 4bet, CO 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,567,0.0062,0,567,0.00,41.61
+"UTG open, BB 3bet, UTG 4bet, BB 5bet, UTG call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,2,565,0.0062,446,119,78.94,179.80
+"CO limp, BB iso","limp, iso",SRP,preflop only,2,557,0.0061,0,557,0.00,2.43
+"BU open, SB 3bet, BB 4bet, SB 5bet, BB call","open, 3bet, 4bet, 5bet, call",5bet+,mixed,3,541,0.0059,391,150,72.27,184.93
+"HJ open, SB 3bet, BB 4bet, SB call","open, 3bet, 4bet, call",4bet,mixed,3,539,0.0059,514,25,95.36,106.30
+"UTG open, HJ call, CO 3bet, UTG call","open, call, 3bet, call",3bet,mixed,3,536,0.0059,527,9,98.32,64.23
+"UTG open, CO call, BB 3bet, UTG call, CO call","open, call, 3bet, call, call",3bet,postflop,3,535,0.0059,535,0,100.00,81.42
+"UTG open, SB 3bet, BB 4bet","open, 3bet, 4bet",4bet,mixed,3,530,0.0058,14,516,2.64,22.42
+"CO open, BU call, SB 3bet, CO 4bet","open, call, 3bet, 4bet",4bet,mixed,3,529,0.0058,14,515,2.65,29.43
+"HJ open, CO call, BB 3bet, HJ call, CO call","open, call, 3bet, call, call",3bet,postflop,3,525,0.0058,525,0,100.00,83.05
+"UTG open, HJ call, BU 3bet, UTG call","open, call, 3bet, call",3bet,mixed,3,525,0.0058,519,6,98.86,64.22
+"HJ limp, BB iso","limp, iso",SRP,preflop only,2,525,0.0058,0,525,0.00,2.44
+"UTG open, CO call, SB 3bet, UTG call","open, call, 3bet, call",3bet,mixed,3,522,0.0057,513,9,98.28,73.59
+"UTG open, HJ 3bet, UTG 4bet, HJ 5bet","open, 3bet, 4bet, 5bet",5bet+,preflop only,2,516,0.0057,0,516,0.00,41.54
