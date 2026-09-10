@@ -109,6 +109,25 @@ api: ## Run the API (http://localhost:8000 — dashboard at /, docs at /docs)
 worker: ## Run a parser worker (consumes Kafka, writes ClickHouse)
 	$(UV) python -m ingestion.worker
 
+# ── web (platform/web: npm workspace — poker-core, poker-ui, the Nuxt app; ADR-027) ─────────
+WEB_DIR := web
+
+.PHONY: web-install
+web-install: ## Install the JavaScript workspace (npm ci from the lockfile)
+	cd $(WEB_DIR) && npm ci
+
+.PHONY: web-test
+web-test: ## Run the JavaScript unit tests (Vitest)
+	cd $(WEB_DIR) && npm test
+
+.PHONY: web-license
+web-license: ## Fail on any dependency licence outside the ADR-027 allowlist
+	cd $(WEB_DIR) && npm run license-check
+
+.PHONY: web-check
+web-check: ## typecheck + lint + tests + licence audit for the JavaScript workspace (what the CI `web` job runs)
+	cd $(WEB_DIR) && npm run check
+
 # ── quality ──────────────────────────────────────────────────────────────────
 .PHONY: test
 test: ## Run unit tests (no stack required)

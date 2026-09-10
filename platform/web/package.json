@@ -1,0 +1,30 @@
+{
+  "name": "poker-web",
+  "private": true,
+  "type": "module",
+  "description": "The poker platform's JavaScript workspace: framework-free packages (poker-core, poker-workers, poker-importers, poker-ui) and the Nuxt app (ADR-027).",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "license-check": "license-checker-rseidelsohn --start . --excludePrivatePackages --excludePackages \"spdx-exceptions@2.5.0\" --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Unlicense;CC0-1.0;0BSD;Zlib;BlueOak-1.0.0;Python-2.0;MPL-2.0\" --summary",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run license-check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.39.0",
+    "license-checker-rseidelsohn": "^5.0.1",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.0.0"
+  }
+}

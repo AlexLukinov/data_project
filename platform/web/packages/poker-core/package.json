@@ -1,0 +1,18 @@
+{
+  "name": "@poker/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure TypeScript poker mathematics: cards and combos, weighted ranges, range notations, hand evaluation, hand classification. No Vue, no DOM, no I/O.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "poker-hand-evaluator-wasm": "^0.4.0"
+  }
+}
