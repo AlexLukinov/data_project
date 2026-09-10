@@ -193,7 +193,7 @@ def test_a_fine_dimension_moves_a_cached_stat_to_its_fact_table() -> None:
     assert params["p0"] == "flop" and params["p1"] == "bet"
     assert "(s.spr BETWEEN {p7:Float64} AND {p8:Float64})" in sql
     assert params["p7"] == 3 and params["p8"] == 6
-    assert "uniqExact(s.hand_uid) AS __hands" in sql
+    assert "uniqCombined64(20)(s.hand_uid) AS __hands" in sql
 
 
 def test_an_uncached_stat_reads_its_fact_table() -> None:

@@ -28,6 +28,27 @@ MAX_GROUP_BY = 4
 MAX_STATS = 40
 MAX_CUSTOM = 20
 MAX_LIMIT = 10_000
+MAX_COHORT_RULES = 10
+
+CohortOp = Literal["lt", "lte", "gt", "gte"]
+
+
+class CohortRule(_Strict):
+    """One threshold on a cached stat, evaluated per player: `vpip lt 25`, `hands gte 1000`."""
+
+    stat: str = Field(pattern=CODE)
+    op: CohortOp
+    value: float
+
+
+class CohortSpec(_Strict):
+    """A set of pool players named by criteria (plan §2.8, F-602): every rule must hold.
+
+    Compiled by the engine into a subquery over the rollup, so a cohort is evaluated on each
+    player's whole history at query time and never stored as a member list.
+    """
+
+    rules: list[CohortRule] = Field(min_length=1, max_length=MAX_COHORT_RULES)
 
 
 class CustomStatSpec(_Strict):
@@ -64,6 +85,9 @@ class ReportRequest(_Strict):
     stats: list[str] = Field(default_factory=list, max_length=MAX_STATS)
     custom: list[CustomStatSpec] = Field(default_factory=list, max_length=MAX_CUSTOM)
     compare_to: Literal["population"] | None = None
+    cohort: CohortSpec | None = None
+    """Restrict the pool to these players. On a population request it scopes the report; on a
+    hero request with `compare_to` it scopes the baseline (hero vs regs)."""
     limit: int = Field(default=500, ge=1, le=MAX_LIMIT)
 
     @model_validator(mode="after")
@@ -73,6 +97,8 @@ class ReportRequest(_Strict):
             raise ValueError("hero_only cannot be combined with the population dataset")
         if self.compare_to is not None and self.dataset != DATASET_HERO:
             raise ValueError("compare_to needs the hero dataset")
+        if self.cohort is not None and self.dataset != DATASET_POPULATION and not self.compare_to:
+            raise ValueError("a cohort applies to the population dataset, or to a baseline")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("date_from is after date_to")
         return self

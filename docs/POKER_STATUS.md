@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase C** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A and B done and merged · C.1–C.6 done (registry, 73.7M decisions, generated rollup, report service, API v2 + saved objects, v1 chain deleted)**
-**Last updated:** 2026-09-09 (phase C session, C.6 cut-over)
+**Current phase: 1 — MVP thin slice → v2 plan phase D** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules); A–C.6 merged, C.7–C.8 awaiting the commit**
+**Last updated:** 2026-09-10 (session 6, C.7 analysis modules)
 
 ---
 
@@ -15,44 +15,35 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **C**, next step **C.7**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **D**, next step **D.1**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…026) and phases A–E as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
-**Where C.6 left things (2026-09-09):** v1 is gone. The analysis ClickHouse holds exactly the
-v2 chain — `intermediate.int_board_by_street`, `marts.decisions` (73,679,949 rows),
-`marts.player_hands` (54,562,770), `marts.stats_daily` (the generated rollup, no suffix),
-`marts.stat_definitions` (the generated seed) — plus the migration-owned
-`marts.baseline_strategies`. The per-hand arrays are the macro `hand_arrays()`
-(`dbt/poker_dwh/macros/hand_arrays.sql`), rendered inside `decision_state()` and
-`player_hands.sql`, so nothing is persisted that no query reads. The API's only engine is
-`stats/` (`POST /v1/reports/run`, `GET /v1/definitions`, `/v1/saved/*`, the v1 `/v1/stats*`
-adapters); `api/queries.py`, `scripts/pool_report.py` and the v1 dbt models exist only in git
-history (commit `cab27e3` is the documented restore point for the v1 chain, from `core.*`).
-Every gate is green: `make check` 275 unit tests, `make test-all` 289 + 2 skipped, `make
-dbt-build` 32/32 on the real data with nothing dirty, backfill "caught up after 0 passes".
+**Where phase C left things (2026-09-10):** the whole backend of the v2 plan is built and
+verified on the real data. The API is `POST /v1/reports/run` (any stat, any situation, any
+grouping, optional pool baseline and cohort), `GET /v1/definitions`, `/v1/saved/*`, and the two
+analysis areas: `GET /v1/hero/{leaks,sessions,presets}` and `/v1/pool/{cohorts,stats,players,
+presets}` (`api/routers/{hero,pool}.py` over `analysis/hero` and `analysis/pool`). Presets are
+YAML in `analysis/*/presets.yaml`, validated at load. Cohorts are stat criteria evaluated per
+player at query time (`ReportRequest.cohort`; Postgres `cohorts`, migration `8b2f4c6d1e3a`
+applied to the real database). The analysis ClickHouse holds exactly the v2 chain
+(`int_board_by_street`, `decisions` 73,679,949, `player_hands` 54,562,770, `stats_daily`,
+`stat_definitions`). Every gate is green: `make check` 310 unit tests, `make test-all` 328 + 2
+skipped. **C.7 and C.8 are on the branch, uncommitted, pending the founder's word.**
 
-**Do this (C.7, ADR-026):** read plan §2.2/§2.9 and ADR-026, then build the two analysis
-modules as siblings above `stats/` and below `api/` (the import-linter layer `(analysis)` is
-already declared in `platform/.importlinter`):
-1. `analysis/hero/{service,router,presets.yaml}` — **leaks v1**: for each preset stat, hero
-   value vs the population baseline through `stats.service.run_report(compare_to=population)`,
-   score `|delta| · sqrt(n)` with a `min_n` gate, ranked; **sessions** = gap-based split of the
-   hero's `played_at_utc` (from `marts.player_hands`, `is_hero = 1`); `GET /v1/hero/leaks`,
-   `GET /v1/hero/sessions`.
-2. `analysis/pool/{service,router,baselines,cohorts,presets.yaml}` — `BaselineProvider`
-   Protocol (population overall today; cohort baselines next); **cohorts** persisted in Postgres
-   (Alembic migration for §2.10 `cohorts`: name + a `ReportRequest`-shaped filter, e.g. "regs" =
-   `vpip < 25 and hands >= 1000` evaluated per `player_key_norm` on `population`);
-   **per-opponent report** = `run_report(player_key=…)` on `population`; `GET /v1/pool/cohorts`,
-   `POST /v1/pool/cohorts`, `POST /v1/pool/stats` (a `ReportRequest` restricted to a cohort).
-3. Register both routers in `api/main.py`; unit tests with a fake runner; one integration test
-   per module in the test environment.
-4. **Done means** (plan C.7): `/v1/hero/leaks` returns a ranked list on the real hero data;
-   `/v1/pool/cohorts` builds "regs" and `/v1/pool/stats` on it works; `make check` and
-   `make test-all` green. Then tick C.7, update the plan's Status and §6 and this block.
+**Do this (D.1, ADR-024, plan §2.9):**
+1. Scaffold `platform/web/` with Nuxt 4 in SPA mode (`ssr: false` — everything is behind auth
+   and FastAPI is the only server), TypeScript strict, Pinia, ESLint; English only.
+2. Add `make web` (dev server on :3000) and `make web-check` (`nuxt typecheck` + lint) to
+   `platform/Makefile`, a `web` job to `platform/.github/workflows/ci.yml`, and
+   `http://localhost:3000` to `cors_origins` in `core/settings.py` (explicit origins only).
+3. One page that calls `GET /health` on the API and shows the answer; `useFetch`/`useAsyncData`
+   in setup, `$fetch` only in handlers.
+4. **Done means** (plan D.1): `make web` serves a page that calls `/health`; `make web-check`
+   green; CI runs it. Then tick D.1, update the plan's Status and §6 and this block, and start
+   D.2 (auth: login/register pages, token in memory, silent refresh).
 
 **Time-independent fingerprint** (v2 tables, purged corpus, verified 2026-09-09 after the
 cut-over; `marts.stats_daily` sums reproduce every figure exactly):
@@ -360,6 +351,7 @@ Newest first. One line per session: what changed, what's next.
 | Date | Session did | Left off at |
 |---|---|---|
 | 2026-09-09 (7) | **Off-plan (founder request): pool spot-frequency census + board texture.** Five new modules — `scripts/spot_nodes.py` (preflop/flop *node* per hand from `core.actions`, e.g. `BU open, BB call`; seat→position is a fixed lookup because `button_seat` is always 1, and `FINAL` is skippable because `parser_version` is uniform and `hand_uid` unique, both asserted at runtime by `verify_corpus_assumptions()`), `spot_texture.py` (flop classifier, ace counted **high or low** so A-2-3 is connected), `spot_report.py`, `spot_plan.py`, `spot_frequency.py` → `reports/spot_frequency.{md,csv}`. One unified ranking of all 346 nodes over 9,093,794 six-max hands: 5 spots = 43% of decisions, 10 = 62%. **Three findings.** (1) The texture classifier is parity-checked each run against enumeration of all C(52,3)=22,100 flops — connectedness and suitedness match to 0.07pp, confirming the board parser. (2) The high card deliberately does *not* match, and the deviation is card removal: ace-high flops fall monotonically 23.89% (limped) → 21.7% (SRP) → 20.2% (3bet) → 17.9% (4bet) → 15.1% (5bet), vs 21.74% for a random deck. Texture is otherwise independent of the spot, so spot × texture is a clean product. (3) A node ending in a raise can still show flops — an already-all-in player owed a runout, not a parse bug. **Found a real defect in the dbt chain:** `int_board_texture.sql` computes straight span ace-high only, so A-2-3 lands in `disconnected`; it disagrees with this classifier and should be fixed. `make check` 240 green. **Overlaps plan C.2** — this node grammar is C.2's action-line tokens; reconcile with `marts.decisions`, do not duplicate. | Back to plan **C.2** (decision model); fix `int_board_texture.sql` wheel handling |
+| 2026-09-10 (13) | **Plan C.7 + C.8 done — phase C complete.** `analysis/` package (ADR-026): hero leaks ranked by `\|delta\|·√n` with a `min_n` floor, baseline through the `BaselineProvider` seam (population or a cohort); sessions by gap in play (ClickHouse window functions); pool reports, player lookup by prefix, cohorts by stat criteria; YAML presets validated at load. Engine extension for cohorts: `player_key` as a rollup dimension and `ReportRequest.cohort` compiled to a per-player `HAVING` subquery (`stats/query.py`, `stats/cohort.py`); Postgres `cohorts` (migration `8b2f4c6d1e3a`). Routers `api/routers/{hero,pool}.py` (analysis may not import api). Real data: 33 leaks in 1.3 s (steal +9, c-bet flop +18, fold to 3-bet +22 points vs the pool), 55 sessions, regs = 7,711 players, regs by position in 0.2 s. Phase-C exit demonstrated: a new situation as a filter — hero 0.05 s, pool 1.6 s (was 4.3 s; `hands` on `decisions` is now `uniqCombined64(20)`). `make check` 310, `make test-all` 328 + 2 skipped. Uncommitted, pending the founder's word. | **D.1** Nuxt scaffold |
 | 2026-09-09 (12) | Founder said "drop". **C.6 cut-over done**: nine v1 ClickHouse tables dropped one statement at a time with counts checked, `marts.stats_daily_v2` renamed to `marts.stats_daily`, `int_hand_arrays` turned into the `hand_arrays()` macro (verified hash-identical on 2024-12-31, the densest day, 505 MiB peak) and its 2.39 GiB table dropped; in the repo the nine v1 dbt models, both hand-written law tests, `api/queries.py` + its three test files and `scripts/pool_report.py` deleted, `_v2` suffix gone, the v1 counter pairs frozen in `scripts/v1_stats.py`, size baseline empty, README/CLAUDE.md layout updated. Verified: `make check` 275, `make seed` (chain + 23 dbt tests on the test corpus), `make dbt-build` 32/32 real data nothing dirty, backfill 0 passes, `make test-all` 289 + 2 skipped, pool VPIP/RFI by position = `pool_leaks.csv` within rounding; c-bet flop differs by the (now fuller) registry note — v1 counted all-in preflop aggressors as missed c-bets. | **C.7** analysis modules |
 | 2026-09-09 (11) | C.5 merged (`cab27e3`). **C.6 parity done**: `scripts/fingerprint.py` → `reports/parity_2026-09-09.md`, 756 cells, 0 mismatches, 20 more registry `notes`; two v1 undercounts found (4-bet%, 5-bet%). Cut-over drops await confirmation. | Plan **C.6 cut-over** (after the founder confirms the drops) |
 | 2026-09-09 (10) | C.4 merged (`a2b8741`). **Plan C.5 done**: `/v1/definitions`, `/v1/reports/run`, saved filters/reports/stats CRUD (migration `513730dcd5be`), v1 `/v1/stats*` routes as adapters over the engine. 12 unit + 3 integration tests; `make check` 317, `make test-all` 331 + 2 skipped. | Plan **C.6** (parity report, then the v1 cut-over) |

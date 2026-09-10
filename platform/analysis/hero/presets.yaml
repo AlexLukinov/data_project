@@ -1,0 +1,97 @@
+# Hero presets (plan §2.8): the landing reports of the My game area, and the stats the leak
+# finder ranks. Every request is validated against the registry when the module loads; a hero
+# preset reads the hero dataset, hero seat only (the defaults).
+
+leaks:
+  # Opportunities below this are noise, not a leak. Rollup (cached) stats only, so the whole
+  # list costs two rollup queries per side.
+  min_n: 100
+  stats:
+    - vpip
+    - pfr
+    - rfi
+    - steal
+    - limp
+    - cold_call
+    - threebet
+    - squeeze
+    - fold_to_3bet
+    - call_3bet
+    - fourbet
+    - fold_to_4bet
+    - fold_bb_to_steal
+    - defend_vs_open
+    - fold_vs_open
+    - cbet_flop
+    - cbet_turn
+    - cbet_river
+    - fold_to_cbet_flop
+    - call_cbet_flop
+    - raise_cbet_flop
+    - fold_to_cbet_turn
+    - fold_to_cbet_river
+    - check_raise_flop
+    - donk_flop
+    - float_flop
+    - probe_turn
+    - delayed_cbet
+    - fold_to_probe_turn
+    - fold_to_delayed_cbet
+    - fold_to_flop_raise
+    - fold_to_turn_raise
+    - river_raise
+    - river_check_fold
+    - river_check_call
+    - bet_call_river
+    - wwsf
+    - wtsd
+    - wsd
+
+reports:
+  - code: preflop_overview
+    label: Preflop overview
+    description: The core preflop numbers by position, beside the pool's.
+    request:
+      stats: [hands, vpip, pfr, rfi, threebet, fold_to_3bet, steal, fold_bb_to_steal]
+      group_by: [position]
+      compare_to: population
+
+  - code: blind_defence
+    label: Blind defence
+    description: How the blinds respond to an open, by the opener's seat.
+    request:
+      stats: [fold_vs_open, defend_vs_open, threebet]
+      filter: {dim: position, op: in, value: [SB, BB]}
+      group_by: [opener_position]
+      compare_to: population
+
+  - code: cbet_by_texture
+    label: C-bet by flop texture
+    description: C-betting and facing a c-bet, split by how connected and how suited the flop is.
+    request:
+      stats: [cbet_flop, fold_to_cbet_flop, raise_cbet_flop]
+      group_by: [flop_connectedness, flop_suitedness]
+      compare_to: population
+
+  - code: facing_cbet_by_size
+    label: Facing a flop c-bet, by size
+    description: Fold, call and raise frequencies against a c-bet, bucketed by its size.
+    request:
+      stats: [fold_to_cbet_flop, call_cbet_flop, raise_cbet_flop]
+      group_by: [facing_size_pct]
+      compare_to: population
+
+  - code: showdown
+    label: Showdown
+    description: Winning without and at showdown, by position.
+    request:
+      stats: [hands, wwsf, wtsd, wsd]
+      group_by: [position]
+      compare_to: population
+
+  - code: results
+    label: Results by stake
+    description: Hands and win rates, actual and all-in adjusted, showdown and non-showdown.
+    request:
+      stats: [hands, bb_per_100, ev_bb_per_100, sd_bb_per_100, nsd_bb_per_100]
+      group_by: [stake_level]

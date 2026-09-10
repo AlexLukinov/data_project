@@ -5,7 +5,8 @@
 #
 # Conventions
 #   tables     which tables hold the column. `stats_daily` is the coarse rollup: only the five
-#              table dimensions live there; everything finer routes to a fact table.
+#              table dimensions and the player live there; everything finer routes to a fact
+#              table.
 #   type       enum   fixed vocabulary, listed under `values`
 #              bool   0 / 1
 #              number raw value; `buckets` are PRESENTATION ranges [low, high), never stored
@@ -63,6 +64,16 @@
   values: [UTG, UTG1, UTG2, MP, MP1, HJ, CO, BTN, SB, BB, UNKNOWN]
   tables: [decisions, player_hands, stats_daily]
   description: The seat relative to the button.
+
+- code: player_key
+  label: Player
+  type: string
+  tables: [stats_daily]
+  ops: [eq, in, prefix, like]
+  description: >-
+    The seat's screen name as the site shows it; '' for an anonymized seat. On the rollup
+    only, so the pool can be grouped by player or a player looked up with cached stats; to
+    scope any report to one player, use `player_key` on the request instead.
 
 # ---- hand dimensions: on both fact tables ---------------------------------------------
 - code: players_dealt_in

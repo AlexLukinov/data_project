@@ -208,8 +208,9 @@ Redis 6380 · MinIO 9010/9011**.
   account registration) · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the
   stat registry as YAML in `stats/registry/` — dimensions and built-in stats, the column contract
   for the marts — plus the filter/expression AST, compiler, router and report service that
-  `POST /v1/reports/run` calls). Planned by `POKER_PLAN.md`:
-  `analysis/hero/` and `analysis/pool/` (separate modules, ADR-026), `web/` (Nuxt 4).
+  `POST /v1/reports/run` calls) · `analysis/` (`hero/` leaks, sessions; `pool/` reports, player
+  lookup, cohorts, the `BaselineProvider` seam; each with `presets.yaml`; ADR-026 — their routers
+  are `api/routers/{hero,pool}.py`). Planned by `POKER_PLAN.md`: `web/` (Nuxt 4).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
   `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.
 - **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. Tests and

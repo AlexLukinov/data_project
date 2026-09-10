@@ -78,7 +78,9 @@ line — is a `GROUP BY` rather than a new query.
 core/        canonical hand model, enums, positions, ids, validation   (no I/O, pure)
 parser/      parse(raw_text, site) -> CanonicalHand + site registry    ← the Rust seam
 ingestion/   object storage, Kafka, ClickHouse loader, worker
-api/         FastAPI: auth, uploads, stats, hands + the demo dashboard
+stats/       the stat registry (YAML), filter AST, compiler, router, report service
+analysis/    hero/ (leaks, sessions) and pool/ (reports, players, cohorts, baselines) + presets
+api/         FastAPI: auth, uploads, reports, hero, pool, saved objects, hands + the demo dashboard
 ch/          ClickHouse migrations (numbered SQL) + runner
 migrations/  Alembic (Postgres)
 dbt/         the stat layer: staging → intermediate → marts

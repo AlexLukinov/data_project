@@ -48,7 +48,7 @@ def test_enum_dimensions_mirror_the_core_enums() -> None:
 
 def test_rollup_holds_only_the_coarse_dimensions() -> None:
     coarse = {d.code for d in registry().dimensions_on("stats_daily")}
-    assert coarse == {"site", "stake_level", "game_type", "table_format", "position"}
+    assert coarse == {"site", "stake_level", "game_type", "table_format", "position", "player_key"}
 
 
 def test_both_stat_forms_expose_one_shape() -> None:

@@ -130,7 +130,7 @@ fmt: ## Auto-format
 
 .PHONY: typecheck
 typecheck: ## Static type check
-	$(UV) mypy core parser ingestion stats api
+	$(UV) mypy core parser ingestion stats analysis api
 
 .PHONY: lint-arch
 lint-arch: ## Enforce the module-boundary contracts in .importlinter (ADR-023)

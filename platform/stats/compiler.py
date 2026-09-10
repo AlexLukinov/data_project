@@ -64,13 +64,16 @@ class Params:
 
     def render(self, value: Scalar | list[Scalar], dim: Dimension) -> str:
         """`{p3:String}` or `{p3:Array(String)}`; the value is recorded under that name."""
-        name = f"{self.prefix}{len(self.values)}"
         scalar_type = SCALAR_TYPES[dim.type]
         if isinstance(value, list):
-            self.values[name] = list(value)
-            return f"{{{name}:Array({scalar_type})}}"
+            return self.scalar(list(value), f"Array({scalar_type})")
+        return self.scalar(value, scalar_type)
+
+    def scalar(self, value: Scalar | list[Scalar], ch_type: str) -> str:
+        """`{p3:<ch_type>}` for a value whose ClickHouse type the caller names outright."""
+        name = f"{self.prefix}{len(self.values)}"
         self.values[name] = value
-        return f"{{{name}:{scalar_type}}}"
+        return f"{{{name}:{ch_type}}}"
 
 
 class Literals:

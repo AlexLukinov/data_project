@@ -1,0 +1,72 @@
+# Pool presets (plan §2.8): the landing reports of the Pool area, and the two cohorts every
+# player names first. Every request is validated against the registry when the module loads;
+# a pool preset must read the population dataset with `hero_only: false`.
+
+reports:
+  - code: pool_by_position
+    label: Pool by position
+    description: The field's core numbers, one row per seat.
+    request:
+      dataset: population
+      hero_only: false
+      stats: [hands, vpip, pfr, rfi, threebet, fold_to_3bet, cbet_flop, fold_to_cbet_flop, wtsd, wsd]
+      group_by: [position]
+
+  - code: pool_vs_open
+    label: Pool facing an open, by the opener's seat
+    description: How each seat responds to a first raise, split by where it came from.
+    request:
+      dataset: population
+      hero_only: false
+      stats: [fold_vs_open, defend_vs_open, threebet]
+      group_by: [position, opener_position]
+
+  - code: pool_cbet_by_sizing
+    label: Pool facing a flop c-bet, by size
+    description: Fold, call and raise frequencies against a c-bet, bucketed by its size.
+    request:
+      dataset: population
+      hero_only: false
+      stats: [fold_to_cbet_flop, call_cbet_flop, raise_cbet_flop]
+      group_by: [facing_size_pct]
+
+  - code: regs_by_position
+    label: Regs by position
+    description: Players with VPIP under 25 over at least 1,000 hands.
+    request:
+      dataset: population
+      hero_only: false
+      stats: [hands, vpip, pfr, threebet, fold_to_3bet, cbet_flop, fold_to_cbet_flop]
+      group_by: [position]
+      cohort:
+        rules:
+          - {stat: vpip, op: lt, value: 25}
+          - {stat: hands, op: gte, value: 1000}
+
+  - code: fish_by_position
+    label: Recreational players by position
+    description: Players with VPIP of 35 or more over at least 200 hands.
+    request:
+      dataset: population
+      hero_only: false
+      stats: [hands, vpip, pfr, threebet, fold_to_3bet, cbet_flop, fold_to_cbet_flop]
+      group_by: [position]
+      cohort:
+        rules:
+          - {stat: vpip, op: gte, value: 35}
+          - {stat: hands, op: gte, value: 200}
+
+cohorts:
+  - code: regs
+    label: Regs
+    description: VPIP under 25 over at least 1,000 hands.
+    rules:
+      - {stat: vpip, op: lt, value: 25}
+      - {stat: hands, op: gte, value: 1000}
+
+  - code: fish
+    label: Recreational players
+    description: VPIP of 35 or more over at least 200 hands.
+    rules:
+      - {stat: vpip, op: gte, value: 35}
+      - {stat: hands, op: gte, value: 200}

@@ -32,7 +32,7 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
       - name: Type check
-        run: uv run mypy core parser ingestion stats api
+        run: uv run mypy core parser ingestion stats analysis api
       - name: Module boundaries (import-linter, ADR-023)
         run: uv run lint-imports
       - name: Generated files are current (core/schema -> dbt staging)

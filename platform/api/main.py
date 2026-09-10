@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.db import clickhouse
-from api.routers import auth, definitions, hands, reports, saved, stats, uploads
+from api.routers import auth, definitions, hands, hero, pool, reports, saved, stats, uploads
 from core.settings import DEFAULT_JWT_SECRET, Settings, get_settings
 
 # Structured JSON logs from day one. Retrofitting correlation ids across five services later
@@ -75,6 +75,8 @@ app.include_router(hands.router)
 app.include_router(definitions.router)
 app.include_router(reports.router)
 app.include_router(saved.router)
+app.include_router(hero.router)
+app.include_router(pool.router)
 
 
 @app.exception_handler(Exception)

@@ -20,7 +20,7 @@ MAX_FUNCTION_LINES = 40
 MAX_FILE_LINES = 300
 PLATFORM = Path(__file__).resolve().parent.parent
 BASELINE = PLATFORM / "scripts" / "size_baseline.txt"
-CHECKED_DIRS = ("core", "parser", "ingestion", "stats", "api", "ch", "scripts", "tests")
+CHECKED_DIRS = ("core", "parser", "ingestion", "stats", "analysis", "api", "ch", "scripts", "tests")
 
 
 def _python_files() -> list[Path]:

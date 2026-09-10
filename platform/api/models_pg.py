@@ -229,6 +229,26 @@ class SavedStat(Base, TimestampMixin):
     definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
 
 
+class Cohort(Base, TimestampMixin):
+    """A named set of pool players by stat criteria (`stats.request.CohortSpec`).
+
+    Criteria, never members: the engine evaluates the rules per player at query time, so a
+    cohort follows the data as more hands arrive.
+    """
+
+    __tablename__ = "cohorts"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_cohorts_user_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    criteria: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+
+
 class BaselineSet(Base, TimestampMixin):
     """Metadata for one set of baseline strategies. **Seam — created empty in Phase 1.**
 

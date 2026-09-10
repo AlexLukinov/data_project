@@ -12,22 +12,41 @@ root_packages =
     parser
     ingestion
     stats
+    analysis
     api
     ch
     scripts
 
-# core <- parser <- ingestion <- stats <- analysis <- api. A layer in parentheses is allowed
-# to be absent until it exists (`analysis` arrives with POKER_PLAN.md step C.7).
+# core <- parser <- ingestion <- stats <- analysis <- api.
 [importlinter:contract:layers]
 name = Layered architecture (lower layers never import higher ones)
 type = layers
 layers =
     api
-    (analysis)
-    (stats)
+    analysis
+    stats
     ingestion
     parser
     core
+
+# The two analysis modules are siblings (ADR-026): pool never knows hero exists, and hero
+# reaches the pool only through the `BaselineProvider` seam in `analysis.pool.baselines`.
+[importlinter:contract:pool-never-imports-hero]
+name = analysis.pool never imports analysis.hero
+type = forbidden
+source_modules =
+    analysis.pool
+forbidden_modules =
+    analysis.hero
+
+[importlinter:contract:hero-uses-pool-through-baselines-only]
+name = analysis.hero imports nothing of analysis.pool but its baselines
+type = forbidden
+source_modules =
+    analysis.hero
+forbidden_modules =
+    analysis.pool.service
+    analysis.pool.cohorts
 
 # The migration runner reads settings only. It must not depend on the web layer, the parser
 # or the ingestion pipeline: it runs before any of them exist in a fresh environment.
@@ -77,6 +96,8 @@ source_modules =
     core
     parser
     ingestion
+    stats
+    analysis
     api
     ch
 forbidden_modules =

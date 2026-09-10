@@ -74,7 +74,7 @@ async def test_definitions_serve_the_registry(client: AsyncClient) -> None:
     res = await client.get("/v1/definitions")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert len(body["stats"]) == 65 and len(body["dimensions"]) == 77
+    assert len(body["stats"]) == 65 and len(body["dimensions"]) == 78
     vpip = next(s for s in body["stats"] if s["code"] == "vpip")
     assert vpip["label"] == "VPIP" and vpip["typical"] == [18.0, 28.0]
     assert vpip["action"] == {"dim": "did_vpip", "op": "eq", "value": 1}
