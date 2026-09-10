@@ -9,6 +9,8 @@ import { blockerTable, classRemovalBreakdown, comboToString, rankBluffCandidates
 import { computed, ref } from 'vue';
 
 import { num, percent } from '../format';
+import type { GlossaryKey } from '../glossary';
+import MetricLabel from './MetricLabel.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -41,13 +43,13 @@ const selectedRow = computed(() => (props.selectedCombo === null ? null : (table
 const emit = defineEmits<{ comboSelect: [combo: ComboIndex] }>();
 
 type Column = 'combo' | 'weight' | 'removalCall' | 'removalFold' | 'bluffScore' | 'valueScore';
-const COLUMNS: { key: Column; label: string; title: string }[] = [
+const COLUMNS: { key: Column; label: string; title: string; term?: GlossaryKey }[] = [
   { key: 'combo', label: 'Combo', title: "Hero's combo" },
   { key: 'weight', label: 'Weight', title: 'Weight in the hero range' },
   { key: 'removalCall', label: 'Removes calls', title: "Share of villain's calling range this combo makes impossible" },
   { key: 'removalFold', label: 'Removes folds', title: "Share of villain's folding range this combo makes impossible" },
-  { key: 'bluffScore', label: 'Bluff score', title: 'removes calls − removes folds: higher is a better bluff' },
-  { key: 'valueScore', label: 'Value score', title: 'removes folds − removes calls: higher is a better thin value bet' },
+  { key: 'bluffScore', label: 'Bluff score', title: 'removes calls − removes folds: higher is a better bluff', term: 'blockerScore' },
+  { key: 'valueScore', label: 'Value score', title: 'removes folds − removes calls: higher is a better thin value bet', term: 'valueScore' },
 ];
 
 const sortBy = ref<Column>('bluffScore');
@@ -106,6 +108,7 @@ function cell(row: BlockerRow, column: Column): string {
           <tr>
             <th v-for="c in COLUMNS" :key="c.key" :title="c.title" :aria-sort="sortBy === c.key ? (descending ? 'descending' : 'ascending') : 'none'">
               <button type="button" class="pk-sort" @click="sort(c.key)">{{ c.label }}<span v-if="sortBy === c.key">{{ descending ? ' ▼' : ' ▲' }}</span></button>
+              <MetricLabel v-if="c.term" :term="c.term" label="?" />
             </th>
           </tr>
         </thead>

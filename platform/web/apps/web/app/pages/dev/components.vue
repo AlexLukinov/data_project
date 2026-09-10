@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
-import type { Card, ComboIndex, EquityResult, HandClass, WeightedRange } from '@poker/core';
-import { parseCards, parseCombo, parseRange } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EquityCalculator, RangeMatrix, RangeTextIO } from '@poker/ui';
+import type { Card, ComboIndex, EquityResult, HandClass, RakeConfig, WeightedRange } from '@poker/core';
+import { equityBuckets, parseCards, parseCombo, parseRange } from '@poker/core';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, MDFPanel, MetricLabel, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
 definePageMeta({ public: true });
@@ -18,6 +18,12 @@ const result = shallowRef<EquityResult | null>(null);
 const hovered = ref<Card | null>(null);
 const selectedCombo = ref<ComboIndex | null>(null);
 const lastEvent = ref('');
+const pot = ref(100);
+const bet = ref(66);
+const call = ref<number | null>(null);
+const extra = ref(0);
+const rake = ref<RakeConfig>({ rakePct: 0.05, rakeCapBB: 3 });
+const ev = ref<number | null>(38);
 </script>
 
 <template>
@@ -80,6 +86,47 @@ const lastEvent = ref('');
         <h2 class="pt-4 font-medium">CardRemovalPanel</h2>
         <CardRemovalPanel :range="range" :dead-cards="dead" @update:dead-cards="dead = $event" />
       </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">MetricLabel</h2>
+      <p class="text-sm">Hover, focus or tap a term: <MetricLabel term="mdf" /> · <MetricLabel term="alpha" /> · <MetricLabel term="eqr" /> · <MetricLabel term="nutAdvantage" /> · <MetricLabel term="rangeAdvantage" /> · <MetricLabel term="blockerScore" /></p>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-3">
+      <div class="space-y-2">
+        <h2 class="font-medium">PotOddsPanel</h2>
+        <PotOddsPanel v-model:pot="pot" v-model:bet="bet" v-model:call="call" v-model:implied-extra="extra" v-model:rake-config="rake" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">MDFPanel</h2>
+        <MDFPanel v-model:pot="pot" v-model:bet="bet" :rake-config="rake" :range="villain" :equities="result?.perComboEquityVillain ?? null" @defend-click="(c) => (lastEvent = `defendClick ${c.length} combos`)" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">EQRPanel</h2>
+        <EQRPanel v-model:ev="ev" :equity="result?.heroEquity ?? 0.45" :pot="pot" :pool-eqr="{ eqr: 0.91, sampleSize: 1200 }" />
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">RangeComparisonPanel</h2>
+      <RangeComparisonPanel :hero="range" :villain="villain" :hero-equities="result?.perComboEquity ?? null" :villain-equities="result?.perComboEquityVillain ?? null" :exact="result?.exact ?? null" />
+    </section>
+
+    <section v-if="result" class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">EquityDistributionChart</h2>
+        <EquityDistributionChart :hero-equities="result.perComboEquity" :villain-equities="result.perComboEquityVillain" :hero-weights="range.weights" :villain-weights="villain.weights" hero-label="Fixture" :threshold="0.8" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">EquityBucketBars</h2>
+        <EquityBucketBars :hero-buckets="equityBuckets({ equities: result.perComboEquity, weights: range.weights })" :villain-buckets="equityBuckets({ equities: result.perComboEquityVillain, weights: villain.weights })" hero-label="Fixture" />
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">RangeDiffView</h2>
+      <div class="max-w-md"><RangeDiffView :ranges="[{ label: 'Fixture', range }, { label: 'Villain', range: villain }]" @cell-click="(c) => (lastEvent = `diff cellClick ${c}`)" /></div>
     </section>
   </div>
 </template>

@@ -7,6 +7,7 @@
  * put together (default 5%). The "nut share split" is each side's nut weight over the total.
  */
 
+import type { ComboIndex } from '../cards';
 import { COMBO_COUNT } from '../cards';
 
 /** A range's per-combo equities (NaN where absent) and weights, both indexed by combo. */
@@ -15,23 +16,26 @@ export interface WeightedEquities {
   readonly weights: ArrayLike<number>;
 }
 
-interface Point {
+/** One live combo of a range: its equity and its weight. */
+export interface EquityPoint {
+  readonly combo: ComboIndex;
   readonly equity: number;
   readonly weight: number;
 }
 
 /** Live (weight > 0, finite equity) points, sorted by equity ascending. */
-export function equityPoints(side: WeightedEquities): Point[] {
-  const points: Point[] = [];
+export function equityPoints(side: WeightedEquities): EquityPoint[] {
+  const points: EquityPoint[] = [];
   for (let combo = 0; combo < COMBO_COUNT; combo++) {
     const w = side.weights[combo]!;
     const e = side.equities[combo]!;
-    if (w > 0 && Number.isFinite(e)) points.push({ equity: e, weight: w });
+    if (w > 0 && Number.isFinite(e)) points.push({ combo, equity: e, weight: w });
   }
   return points.sort((a, b) => a.equity - b.equity);
 }
 
-function totalWeight(points: readonly Point[]): number {
+/** The sum of the points' weights. */
+export function totalWeight(points: readonly EquityPoint[]): number {
   let sum = 0;
   for (const p of points) sum += p.weight;
   return sum;

@@ -62,6 +62,29 @@ describe('EquityCalculator', () => {
     wrapper.unmount();
   });
 
+  it('does not recompute when a parent re-render passes the same inputs in a new array', async () => {
+    const service = fakeService();
+    const hero = parseRange('AA,KK').range;
+    const villain = parseRange('QQ,AKs').range;
+    const board = parseCards('Kh 7d 2c 9s');
+    const wrapper = mount(EquityCalculator, { props: { ranges: [hero, villain], board, service, fastIterations: 2000, debounceMs: 0 } });
+    await wait(400);
+    await flushPromises();
+    expect(service.calls).toEqual(['fast-1', 'exact-1']);
+    // A result arriving re-renders the parent, which hands over fresh arrays of the same ranges.
+    await wrapper.setProps({ ranges: [hero, villain], board: [...board] });
+    await wait(100);
+    await flushPromises();
+    expect(service.calls).toEqual(['fast-1', 'exact-1']);
+    expect(service.cancelled).toEqual([]);
+    expect(wrapper.emitted('result')).toHaveLength(2);
+    // A real change does recompute.
+    await wrapper.setProps({ ranges: [hero, parseRange('QQ').range] });
+    await wait(400);
+    await flushPromises();
+    expect(service.calls).toEqual(['fast-1', 'exact-1', 'fast-2', 'exact-2']);
+  });
+
   it('shows a preflop answer as Monte Carlo only', async () => {
     const service = fakeService();
     const wrapper = mount(EquityCalculator, { props: { ranges: [parseRange('AA').range, parseRange('KK').range], board: [], service, fastIterations: 2000, debounceMs: 0 } });

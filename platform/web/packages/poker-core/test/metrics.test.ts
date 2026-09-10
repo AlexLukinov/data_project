@@ -6,6 +6,8 @@ import { COMBO_COUNT } from '../src/cards';
 import type { WeightedEquities } from '../src/metrics/advantage';
 import { bucketIndex, equityBuckets, nutAdvantage, nutThreshold, rangeAdvantage, weightedMeanEquity, weightedMedianEquity } from '../src/metrics/advantage';
 import { NO_RAKE, alpha, balancedBluffRatio, bluffBreakeven, effectivePot, impliedOddsEquity, mdf, oddsRatio, potOdds, rakeTaken, requiredEquity, requiredEquityFacingBet } from '../src/metrics/pot';
+import { equityAtShare, equityCurve } from '../src/metrics/curve';
+import { defendingSet } from '../src/metrics/defend';
 import { equityRealization, evFromRealization } from '../src/metrics/realization';
 
 const GG = { rakePct: 0.05, rakeCapBB: 3 };
@@ -145,5 +147,47 @@ describe('nut advantage', () => {
     expect(top20.villain.nutWeight).toBe(0);
     expect(top20.split).toEqual({ hero: 1, villain: 0 });
     expect(() => nutThreshold(hero, villain, 0)).toThrow(/topPercent/);
+  });
+});
+
+describe('equity curve', () => {
+  it('steps from the strongest combo to the weakest, one step per weight', () => {
+    // Villain: 0.85 with weight 2, then 0.1 with weight 1, of 3 → steps end at 2/3 and 1.
+    const curve = equityCurve(villain);
+    expect(curve.map((p) => p.share)).toEqual([0, 2 / 3, 1]);
+    expect(curve.map((p) => p.equity)[0]).toBeCloseTo(0.85, 6);
+    expect(curve.map((p) => p.equity)[2]).toBeCloseTo(0.1, 6);
+    expect(equityAtShare(curve, 0)).toBeCloseTo(0.85, 6);
+    expect(equityAtShare(curve, 0.5)).toBeCloseTo(0.85, 6);
+    expect(equityAtShare(curve, 0.7)).toBeCloseTo(0.1, 6);
+    expect(equityAtShare(curve, 1)).toBeCloseTo(0.1, 6);
+  });
+
+  it('is empty for an empty range', () => {
+    expect(equityCurve(side([]))).toEqual([]);
+    expect(equityAtShare([], 0.5)).toBeNaN();
+  });
+});
+
+describe('defending set', () => {
+  it('takes the strongest combos until the share is met and reports the cutoff', () => {
+    // MDF 2/3 of villain's weight 3 = 2: the 0.85 combo alone (weight 2) is enough.
+    const twoThirds = defendingSet(villain, 2 / 3);
+    expect(twoThirds.combos).toEqual([2]);
+    expect(twoThirds.weight).toBe(2);
+    expect(twoThirds.totalWeight).toBe(3);
+    expect(twoThirds.cutoffEquity).toBeCloseTo(0.85, 6);
+    // 90% of 3 = 2.7 needs both combos; the cutoff drops to the weaker one.
+    const ninety = defendingSet(villain, 0.9);
+    expect(ninety.combos).toEqual([2, 3]);
+    expect(ninety.weight).toBe(3);
+    expect(ninety.cutoffEquity).toBeCloseTo(0.1, 6);
+  });
+
+  it('defends nothing at share 0 and rejects a share outside [0, 1]', () => {
+    const none = defendingSet(villain, 0);
+    expect(none.combos).toEqual([]);
+    expect(none.cutoffEquity).toBeNaN();
+    expect(() => defendingSet(villain, 1.5)).toThrow(/share must be in/);
   });
 });

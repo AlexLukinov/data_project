@@ -19,14 +19,19 @@ const props = withDefaults(
     /** Per-combo values in 0..1 (equities, blocker scores…) shown as a colour overlay. */
     heatmap?: Float32Array | null;
     heatmapLabel?: string;
+    /** The heatmap holds −1..1 differences: positive and negative get their own hue, zero no overlay. */
+    heatmapSigned?: boolean;
     /** Combos to ring (a distribution group, a drill-down selection). */
     highlightCombos?: ReadonlySet<ComboIndex> | readonly ComboIndex[] | null;
     /** Board and dead cards: the combos they block are shaded. */
     blockedCards?: readonly Card[];
     selectedClass?: HandClass | null;
   }>(),
-  { mode: 'edit', brush: 1, heatmap: null, heatmapLabel: '', highlightCombos: null, blockedCards: () => [], selectedClass: null },
+  { mode: 'edit', brush: 1, heatmap: null, heatmapLabel: '', heatmapSigned: false, highlightCombos: null, blockedCards: () => [], selectedClass: null },
 );
+
+/** A signed difference below this is "no change" and gets no overlay. */
+const SIGNED_ZERO = 0.005;
 
 const emit = defineEmits<{
   'update:range': [range: WeightedRange];
@@ -68,7 +73,9 @@ function heatOf(cls: HandClass): number | null {
       n++;
     }
   }
-  return n === 0 ? null : sum / n;
+  if (n === 0) return null;
+  const mean = sum / n;
+  return props.heatmapSigned && Math.abs(mean) < SIGNED_ZERO ? null : mean;
 }
 
 const cells = computed<Cell[]>(() =>
@@ -147,7 +154,7 @@ onBeforeUnmount(stopPainting);
 function title(cell: Cell): string {
   const parts = [`${cell.name}: ${cell.count} of ${cell.possible} combos`];
   if (cell.fill > 0) parts.push(`weight ${(100 * cell.fill).toFixed(0)}%`);
-  if (cell.heat !== null) parts.push(`${props.heatmapLabel || 'value'} ${(100 * cell.heat).toFixed(1)}%`);
+  if (cell.heat !== null) parts.push(`${props.heatmapLabel || 'value'} ${props.heatmapSigned && cell.heat > 0 ? '+' : ''}${(100 * cell.heat).toFixed(1)}%`);
   if (cell.blocked > 0) parts.push(`${Math.round(cell.blocked * cell.possible)} blocked`);
   return parts.join(' · ');
 }
@@ -171,7 +178,7 @@ function title(cell: Cell): string {
       @focus="focused = cell.cls"
     >
       <span class="pk-fill" :style="{ height: `${100 * cell.fill}%` }" />
-      <span v-if="cell.heat !== null" class="pk-heat" :style="{ opacity: 0.15 + 0.6 * cell.heat }" />
+      <span v-if="cell.heat !== null" class="pk-heat" :class="{ 'pk-heat-more': heatmapSigned && cell.heat > 0, 'pk-heat-less': heatmapSigned && cell.heat < 0 }" :style="{ opacity: 0.15 + 0.6 * Math.abs(cell.heat) }" />
       <span v-if="cell.blocked > 0" class="pk-blocked" :style="{ width: `${100 * cell.blocked}%` }" />
       <span v-if="cell.highlight > 0" class="pk-highlight" :style="{ opacity: 0.35 + 0.65 * cell.highlight }" />
       <span class="pk-label">{{ cell.name }}</span>
@@ -231,6 +238,12 @@ function title(cell: Cell): string {
   position: absolute;
   inset: 0;
   background: hsl(var(--pk-heat, 220 80% 50%));
+}
+.pk-heat-more {
+  background: hsl(var(--pk-diff-more, 160 60% 38%));
+}
+.pk-heat-less {
+  background: hsl(var(--pk-diff-less, 330 70% 48%));
 }
 .pk-blocked {
   position: absolute;

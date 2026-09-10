@@ -22,6 +22,10 @@
   --pk-diamond: #2563eb;
   --pk-heart: #dc2626;
   --pk-spade: #18181b;
+  --pk-hero: #2563eb;
+  --pk-villain: #c2410c;
+  --pk-diff-more: 160 60% 38%;
+  --pk-diff-less: 330 70% 48%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -43,5 +47,9 @@
     --pk-diamond: #60a5fa;
     --pk-heart: #f87171;
     --pk-spade: #e4e4e7;
+    --pk-hero: #60a5fa;
+    --pk-villain: #fb923c;
+    --pk-diff-more: 160 60% 55%;
+    --pk-diff-less: 330 80% 65%;
   }
 }

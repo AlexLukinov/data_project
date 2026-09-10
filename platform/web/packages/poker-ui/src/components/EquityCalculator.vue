@@ -7,7 +7,7 @@
  * poker-core only.
  */
 import type { Card, EquityRequest, EquityResult, WeightedRange } from '@poker/core';
-import { EquityCancelled, isExactlySolvable } from '@poker/core';
+import { EquityCancelled, equityKey, isExactlySolvable } from '@poker/core';
 import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue';
 
 import { percent } from '../format';
@@ -45,6 +45,12 @@ const request = computed<EquityRequest>(() => ({
   board: [...props.board],
   deadCards: [...props.deadCards],
 }));
+/**
+ * What the inputs are, not which objects carry them: a parent that re-renders (because a
+ * result arrived) passes a fresh `ranges` array, and restarting on that would cancel the exact
+ * job and loop forever. Only a change in the ranges, the board or the dead cards recomputes.
+ */
+const key = computed(() => equityKey(request.value));
 const exactPossible = computed(() => isExactlySolvable(request.value));
 const label = computed(() => {
   if (result.value === null) return '';
@@ -98,7 +104,7 @@ function schedule(): void {
   timer = setTimeout(() => void compute(), props.debounceMs);
 }
 
-watch(request, schedule, { immediate: true });
+watch(key, schedule, { immediate: true });
 onBeforeUnmount(() => {
   if (timer !== null) clearTimeout(timer);
   cancelAll();

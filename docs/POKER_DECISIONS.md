@@ -39,6 +39,7 @@ not a change I've made.
 | [027](#adr-027--range-lab-is-a-typescript-workspace-of-framework-free-packages-behind-one-nuxt-app-with-a-licence-allowlist-in-ci) | Range Lab: framework-free TS packages behind one Nuxt app; licence allowlist in CI | 🔒 |
 | [028](#adr-028--a-node-is-a-predicate-over-decisions-nodekey-is-defined-once-and-buckets-live-in-the-registry) | A node is a predicate over `decisions`; `NodeKey` defined once; buckets live in the registry | ✅ |
 | [029](#adr-029--hand-histories-are-parsed-server-side-only) | Hand histories are parsed server-side only | 🔒 |
+| [030](#adr-030--charts-in-poker-ui-are-hand-drawn-svg-not-a-chart-library) | Charts in `poker-ui` are hand-drawn SVG, not a chart library | ✅ |
 
 ---
 
@@ -954,3 +955,31 @@ parsers that must agree on every format quirk GG ships; rejected by the founder.
 **Consequences.** Pasting a hand needs the API; every offline feature (equity, ranges,
 blockers, distribution, trainers) does not. A parse failure returns the parser's error text
 with the offending line, as the spec's §13 requires.
+
+---
+
+## ADR-030 — Charts in `poker-ui` are hand-drawn SVG, not a chart library
+**Status:** ✅ Recommended. Phase F.5, 2026-09-10.
+
+**Context.** Plan F.5 named Chart.js (MIT) for the equity distribution graph and the equity
+buckets. Building them showed what a canvas library costs here: it paints its own colours, so
+dark mode means resolving the theme tokens at mount and redrawing on every theme change; its
+output is a bitmap, so a component test under happy-dom can only assert that a constructor was
+called; and it is one more runtime dependency to audit and keep on the allowlist (ADR-027).
+
+**Decision.** `EquityDistributionChart` and `EquityBucketBars` are plain SVG and CSS inside the
+component, about a hundred lines each: a `viewBox` that scales with its container, strokes and
+fills from the `--pk-*` tokens, the pointer readout handled by the component. The numbers they
+draw come from `poker-core` (`equityCurve`, `equityBuckets`), so the tests assert that the path
+has one step per combo and that the bars have the right widths. No chart dependency was added
+and `LICENSES.md` is unchanged. The same rule holds for phase D's `WinningsChart` (plan D.4)
+unless it needs something SVG makes genuinely hard — zoom, brushing, tens of thousands of
+points — in which case a library is chosen then, from the allowlist, and this ADR is amended.
+
+**Alternatives.** *Chart.js* — axes and tooltips for free, but the theme and testing costs
+above; rejected for two small charts. *A Vue wrapper (vue-chartjs, ECharts)* — the same costs
+plus a second dependency.
+
+**Consequences.** Charts follow the theme automatically and are tested like any other
+component. A chart with real interaction needs (the replayer's timeline, a winnings graph with
+brushing) is a new decision, not an exception taken quietly.

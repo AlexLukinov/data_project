@@ -2,9 +2,9 @@
 // The Range Lab calculator: two ranges, a board, equity, distribution, blockers (spec §14
 // phase 4 — a Flopzilla + Equilab replacement with blockers). Every panel is a @poker/ui
 // component; this page only wires state, undo/redo and keyboard shortcuts.
-import type { Axis, Card, ComboIndex, DistributionGroup, EquityResult, HandClass, WeightedRange } from '@poker/core';
-import { comboCards, comboIndex, createRange, filterByPredicate, parseCards, parseRange } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EquityCalculator, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
+import type { Axis, Card, ComboIndex, DistributionGroup, EquityResult, HandClass, RakeConfig, WeightedRange } from '@poker/core';
+import { NO_RAKE, comboCards, comboIndex, createRange, filterByPredicate, parseCards, parseRange } from '@poker/core';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityCalculator, MDFPanel, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
 definePageMeta({ public: true }); // spec §17: pure calculation works without a backend
@@ -34,6 +34,11 @@ const continueAt = ref(40);
 const valueAt = ref(60);
 const pot = ref(100);
 const bet = ref(66);
+const call = ref<number | null>(null);
+const impliedExtra = ref(0);
+const rake = ref<RakeConfig>(NO_RAKE);
+const ev = ref<number | null>(null);
+const highlightSide = ref<'hero' | 'villain'>('hero');
 const exported = ref<string | null>(null);
 const heroHand = ref<Card[]>([]);
 const selectedCombo = computed<ComboIndex | null>(() => (heroHand.value.length === 2 ? comboIndex(heroHand.value[0]!, heroHand.value[1]!) : null));
@@ -47,6 +52,13 @@ function toggleHeroCard(card: Card): void {
 function selectCombo(combo: ComboIndex): void {
   heroHand.value = [...comboCards(combo)];
   highlight.value = [combo];
+  highlightSide.value = 'hero';
+}
+
+/** The MDF panel names villain's defending set; ring it on villain's matrix. */
+function onDefend(combos: ComboIndex[]): void {
+  highlight.value = combos;
+  highlightSide.value = 'villain';
 }
 
 const blockedCards = computed(() => [...board.value, ...dead.value]);
@@ -75,6 +87,7 @@ const isValue = (combo: ComboIndex): boolean => (result.value?.perComboEquity[co
 
 function onGroup(group: DistributionGroup): void {
   highlight.value = [...group.comboList];
+  highlightSide.value = 'hero';
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -109,15 +122,22 @@ const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain)
     <section class="grid gap-6 lg:grid-cols-2">
       <div class="space-y-3">
         <h2 class="font-medium">Hero <span class="text-sm text-zinc-500">· drag to paint, shift-drag to erase</span></h2>
-        <RangeMatrix :range="hero.state.value" :brush="brush" :heatmap="heroHeat" heatmap-label="equity" :blocked-cards="blockedCards" :highlight-combos="highlight" :selected-class="selected?.side === 'hero' ? selected.cls : null" @update:range="setHero" @cell-click="selected = { side: 'hero', cls: $event }" />
+        <RangeMatrix :range="hero.state.value" :brush="brush" :heatmap="heroHeat" heatmap-label="equity" :blocked-cards="blockedCards" :highlight-combos="highlightSide === 'hero' ? highlight : null" :selected-class="selected?.side === 'hero' ? selected.cls : null" @update:range="setHero" @cell-click="selected = { side: 'hero', cls: $event }" />
         <RangeTextIO :range="hero.state.value" @update:range="setHero" />
       </div>
       <div class="space-y-3">
         <h2 class="font-medium">Villain</h2>
-        <RangeMatrix :range="villain.state.value" :brush="brush" :heatmap="villainHeat" heatmap-label="equity" :blocked-cards="blockedCards" :selected-class="selected?.side === 'villain' ? selected.cls : null" @update:range="setVillain" @cell-click="selected = { side: 'villain', cls: $event }" />
+        <RangeMatrix :range="villain.state.value" :brush="brush" :heatmap="villainHeat" heatmap-label="equity" :blocked-cards="blockedCards" :highlight-combos="highlightSide === 'villain' ? highlight : null" :selected-class="selected?.side === 'villain' ? selected.cls : null" @update:range="setVillain" @cell-click="selected = { side: 'villain', cls: $event }" />
         <RangeTextIO :range="villain.state.value" @update:range="setVillain" />
       </div>
     </section>
+
+    <details class="text-sm">
+      <summary class="cursor-pointer font-medium">Hero against villain, cell by cell</summary>
+      <div class="mt-3 max-w-md">
+        <RangeDiffView :ranges="[{ label: 'Hero', range: hero.state.value }, { label: 'Villain', range: villain.state.value }]" @cell-click="selected = { side: 'hero', cls: $event }" />
+      </div>
+    </details>
 
     <section class="grid gap-6 lg:grid-cols-[1fr_1fr]">
       <div class="space-y-3">
@@ -129,6 +149,27 @@ const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain)
         <EquityCalculator :ranges="[hero.state.value, villain.state.value]" :board="board" :dead-cards="dead" :service="service" @result="result = $event" />
         <h3 class="pt-2 text-sm font-medium">Selected cell</h3>
         <ComboDrilldown :hand-class="selected?.cls ?? null" :range="selected?.side === 'villain' ? villain.state.value : hero.state.value" :board="board" @update:range="selected?.side === 'villain' ? setVillain($event) : setHero($event)" />
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="font-medium">Range against range <span class="text-sm text-zinc-500">· who has the equity, who has the nuts, and the distribution graph</span></h2>
+      <RangeComparisonPanel :hero="hero.state.value" :villain="villain.state.value" :hero-equities="result?.perComboEquity ?? null" :villain-equities="result?.perComboEquityVillain ?? null" :exact="result?.exact ?? null" />
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-3">
+      <div class="space-y-3">
+        <h2 class="font-medium">Pot odds <span class="text-sm text-zinc-500">· hero bets; raw and after rake</span></h2>
+        <PotOddsPanel v-model:pot="pot" v-model:bet="bet" v-model:call="call" v-model:implied-extra="impliedExtra" v-model:rake-config="rake" />
+      </div>
+      <div class="space-y-3">
+        <h2 class="font-medium">Villain's defence <span class="text-sm text-zinc-500">· MDF against hero's bet</span></h2>
+        <MDFPanel v-model:pot="pot" v-model:bet="bet" :rake-config="rake" :range="villain.state.value" :equities="result?.perComboEquityVillain ?? null" @defend-click="onDefend" />
+      </div>
+      <div class="space-y-3">
+        <h2 class="font-medium">Equity realization <span class="text-sm text-zinc-500">· hero's range</span></h2>
+        <EQRPanel v-if="result" v-model:ev="ev" :equity="result.heroEquity" :pot="pot" />
+        <p v-else class="text-sm text-zinc-500">Waiting for the equity calculation.</p>
       </div>
     </section>
 
