@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI) and F.2 (equity engine + Worker service) committed; F.3 (metrics, blockers, distribution) and F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`) verified and uncommitted; CI run pending a push**
-**Last updated:** 2026-09-10 (session 7, Range Lab F.0 → F.4)
+**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI), F.2 (equity engine + Worker service), F.3 (metrics, blockers, distribution) and F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`) committed; D.2 (sign-in with the token in memory and silent refresh) verified and uncommitted; CI run pending a push**
+**Last updated:** 2026-09-10 (session 7, Range Lab F.0 → F.4, D.2)
 
 ---
 
@@ -15,7 +15,7 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **D / F**, next step **D.2** (auth in the SPA), then **F.5**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.5** (metrics and visualization UI), then **F.6**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…029) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
@@ -31,9 +31,22 @@ integration surface are [POKER_RANGE_LAB.md](POKER_RANGE_LAB.md); the decisions 
 the work is plan phase **F**, interleaved with phase D in the order the report's §9 gives
 (F.1–F.3 are headless TypeScript, then D.1 = F.4's app shell). Branch `feat/range-lab`.
 
+**Where D.2 stands (2026-09-10):** sign-in works in the SPA and is **verified, uncommitted**.
+`apps/web/app/auth/{api,session,paths}.ts` hold the logic framework-free (the access token in
+memory only, the refresh token in the API's HttpOnly cookie; `fetch` adds the bearer header and on
+a 401 refreshes once and retries; concurrent 401s share one refresh because refresh tokens
+rotate; `bootstrap` resumes from the cookie once) with 17 Vitest tests against a fake `$fetch`.
+`stores/auth.ts` (Pinia) binds it to Nuxt, `composables/useApi.ts` hands the authorized `$fetch`
+to pages, `middleware/auth.global.ts` protects every route unless the page sets
+`definePageMeta({ public: true })` (`/`, `/lab`, `/dev/*`, `/login`, `/register`); pages
+`/login`, `/register`, `/account`. Checked in Chrome with `ACCESS_TOKEN_MINUTES=1`: 15 s after
+expiry, "Reload" on `/account` produced `GET /me` 401 → `POST /refresh` 200 → `GET /me` 200 and
+the page never changed; reload resumes from the cookie; sign-out revokes it (the next load gets
+401 and lands on `/login?next=/account`); `localStorage` holds no token.
+
 **Where F.1–F.4 stand (2026-09-10):** the headless core of the Range Lab is complete and the
-first UI is running. F.1 (`e74c148`) and F.2 (`2216e3e`) are committed; **F.3 and F.4 (= D.1)
-are verified and uncommitted.** F.4: `platform/web/apps/web` (Nuxt 4 SPA; `make web` on :3000;
+first UI is running. F.1 (`e74c148`), F.2 (`2216e3e`), F.3 (`fd11451`) and F.4 = D.1
+(`232e096`) are committed. F.4: `platform/web/apps/web` (Nuxt 4 SPA; `make web` on :3000;
 `/` calls `/health`, `/lab` is the calculator, `/dev/components` the fixture page) and
 `packages/poker-ui` (the nine §12 components, `useUndoRedo`, theme tokens); acceptance 1, 2, 4
 and 5 of the spec's §18 checked in Chrome against the dev server. F.2:
@@ -56,32 +69,41 @@ is green; `make check` is still 310. CI job `web` (Node 24) is in `ci.yml` but h
 dev-only) and the CC-BY-3.0 `spdx-exceptions` data file are flagged there for the founder.
 
 **Do this:**
-1. F.3 and F.4 are done and verified (`make web-check` 173 tests, acceptance checks in
-   Chrome), **uncommitted** — commit them as two commits when the founder says so (F.3 =
-   `packages/poker-core/src/{metrics,blockers,distribution}`, `classify.ts`, `index.ts`, its
-   tests and README; F.4 = everything else). Nothing on `feat/range-lab` is pushed yet; after a
-   push, when the CI `web` job is green, tick **F.1** in the plan.
-2. **D.2 Auth in the SPA** (plan D.2, ADR-024; the API side exists: `POST /v1/auth/{register,
-   login,refresh,logout}`, `GET /v1/auth/me`, bearer access token 30 min, HttpOnly refresh
-   cookie on `/v1/auth`, CORS with credentials for `http://localhost:3000`):
-   - `apps/web/app/stores/auth.ts` (Pinia setup store): `accessToken` in memory only (never
-     `localStorage`), `user`, `login()`, `register()`, `logout()`, `refresh()` (`POST
-     /v1/auth/refresh` with `credentials: 'include'`), `bootstrap()` on app start that tries a
-     refresh so a reload keeps the session.
-   - `apps/web/app/composables/useApi.ts`: `$fetch` wrapper that adds the bearer header, and on
-     401 refreshes once and retries; every API page uses it (`/` health stays public).
-   - `pages/login.vue`, `pages/register.vue` (English, actionable errors from the API's
-     `detail`), `middleware/auth.global.ts` redirecting protected routes to `/login` with a
-     return path; `/lab` and `/dev/components` stay public (spec §17: pure calculation works
-     without a backend).
-   - Tests: the store with a fake `$fetch` (login stores the token, 401 → refresh → retry,
-     failed refresh → logged out); a Playwright smoke test is D.9's.
-3. **Done means** (plan D.2): refresh works after the access token expires without a re-login
-   — verify by setting `ACCESS_TOKEN_MINUTES=1` on the API, logging in, waiting, and calling
-   `/v1/auth/me` from the app; `make web-check` green. Then tick D.2, update the plan's Status
-   and §6 and this block, offer the commit, and start **F.5** (metrics and visualization UI:
-   `PotOddsPanel`, `MDFPanel`, `EQRPanel`, `EquityDistributionChart`, `EquityBucketBars`,
-   `RangeComparisonPanel`, `RangeDiffView`, the glossary; Chart.js is MIT).
+1. D.2 is done and verified (`make web-check` 190 tests; the silent-refresh check in Chrome),
+   **uncommitted** — commit it as one commit when the founder says so (`apps/web/app/{auth,
+   stores,middleware}`, `composables/useApi.ts`, pages `login`/`register`/`account`, `app.vue`,
+   the `definePageMeta` lines, `apps/web/README.md`, `vitest.config.ts`, `eslint.config.js`,
+   docs). Nothing on `feat/range-lab` is pushed yet; after a push, when the CI `web` job is
+   green, tick **F.1** in the plan.
+2. **F.5 Metrics and visualization UI** (plan F.5; spec §8 for the formulas, §12 for the
+   component contracts, §13 for the glossary and "explain the number"). The maths exists in
+   `packages/poker-core/src/metrics/` (`pot.ts`: pot odds, required equity, MDF, alpha, bluff
+   break-even, odds text, implied odds, `RakeConfig` raw vs adjusted; `realization.ts`: EQR;
+   `advantage.ts`: `equityPoints`, `equityBuckets`, `rangeAdvantage`, `nutAdvantage`) — the UI
+   only renders it:
+   - `packages/poker-ui/src/components/PotOddsPanel.vue` (pot, bet, rake → the §8 figures raw
+     and rake-adjusted side by side), `MDFPanel.vue` (MDF and alpha with the "explain the
+     number" sentence), `EQRPanel.vue` (raw equity vs EV → realization), each with a happy-dom
+     test in `packages/poker-ui/test/`.
+   - `EquityDistributionChart.vue` (cumulative equity curve for both ranges from
+     `result.perComboEquity` / `perComboEquityVillain`) and `EquityBucketBars.vue` (the §8
+     buckets) with Chart.js (MIT; `chart.js` becomes a `@poker/ui` dependency next to `vue`,
+     add it to `LICENSES.md`; the §3.2 rule forbids app and workers imports, not a chart
+     library).
+   - `RangeComparisonPanel.vue` (two ranges: mean/median equity, `rangeAdvantage`,
+     `nutAdvantage` in both modes) and `RangeDiffView.vue` (per-class weight deltas on the
+     13×13 grid — reuse `RangeMatrix` in heatmap mode, no second grid).
+   - `packages/poker-ui/src/glossary.ts`: every §13 term with a one-sentence definition and
+     the templates; `MetricLabel.vue` renders a label with its tooltip and every metric label
+     in the new panels goes through it; a test asserts every metric key has a glossary entry.
+   - Wire the panels into `apps/web/app/pages/lab.vue` under the equity result (pot and bet
+     inputs already exist there) and add the fixtures to `/dev/components`.
+3. **Done means** (plan F.5): spec acceptance 3 ("set a board and get exact range-vs-range
+   equity in under 1.5 s, with the equity distribution graph for both players") and 6 ("see
+   pot odds, required equity, MDF, alpha and bluff break-even, raw and rake-adjusted, for any
+   node"); every metric label has a tooltip from the glossary. Verify in Chrome on `/lab` with
+   `make web` (no API needed); `make web-check` green. Then tick F.5, update the plan's Status
+   and §6 and this block, offer the commit, and start **F.6** (range library + importers).
 
 **Time-independent fingerprint** (v2 tables, purged corpus, verified 2026-09-09 after the
 cut-over; `marts.stats_daily` sums reproduce every figure exactly):
@@ -388,6 +410,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-10 (18) | **Plan D.2 done — sign-in in the SPA.** Committed F.3 (`fd11451`) and F.4 + D.1 (`232e096`). Built `apps/web/app/auth/{api,session,paths}.ts` (framework-free; 17 tests with a fake `$fetch`), the Pinia `stores/auth.ts`, `useApi()` (bearer header, 401 → one shared refresh → retry), `middleware/auth.global.ts` (protected by default, `definePageMeta({ public: true })` opts out), pages `/login`, `/register`, `/account`. Verified in Chrome with `ACCESS_TOKEN_MINUTES=1`: an expired token refreshes silently on the next call (`/me` 401 → `/refresh` 200 → `/me` 200) with the page unchanged; reload resumes from the cookie; sign-out revokes it; no token in `localStorage`. `make web-check` 190 tests. Uncommitted. | **Commit D.2, then F.5** (metrics and visualization UI). |
 | 2026-09-10 (17) | **F.4 done, plan D.1 done — the Range Lab has a UI.** `apps/web`: Nuxt 4.5 in SPA mode with Tailwind 4 and Pinia; `/` calls `GET /health` (showed `ok / ok / ok` against the live API in Chrome), `/lab` is the calculator (two matrices with undo/redo and a weight brush, text I/O in both notations, board and dead cards, equity with Monte Carlo first then exact, hero-vs-villain distribution with group-click highlighting, blockers with hero's hand and the bluff arithmetic, the 52-card removal heatmap), `/dev/components` shows every component with fixtures. `packages/poker-ui`: `RangeMatrix` (partial fill, drag/shift-drag, brush, heatmap overlay, blocked shading, highlight ring, arrow keys + Enter/Space), `RangeTextIO`, `CardPicker`, `BoardSelector`, `CardRemovalPanel`, `EquityCalculator` (service through a prop — poker-ui imports poker-core only, enforced by ESLint), `ComboDistributionPanel`, `BlockerPanel` (sortable; class breakdown for the selected hand), `CardBlockerHeatmap`, `ComboDrilldown`, `useUndoRedo`, own theme tokens. Acceptance 1, 2, 4, 5 verified in Chrome by script (byte-identical 10,618-char round trip; QQ 75% / AKo 50%; Overpair → AA ringed; A♥5♠ → "overpair 6 → 3, ace high 144 → 105…" + ranked bluffs). Two browser-only defects found and fixed: the WASM package initialised on import (now a dynamic import in `WasmEvaluator.ready()`), and Vue reactive arrays cannot cross `postMessage` (plain copies). `make web-check` 173 tests, licence audit clean (`caniuse-lite` CC-BY data excluded by name, `node-forge` dual BSD/GPL under BSD, both recorded). Uncommitted. | Commit F.3 + F.4 → **D.2** auth in the SPA → **F.5** |
 | 2026-09-10 (16) | **F.2 committed** (`2216e3e`; founder: "commit and continue"). **F.3 done — the headless core is complete.** `metrics/`: MDF, alpha, required equity (both forms), bluff break-even, odds text, implied odds, `RakeConfig` (pct + cap) with `potOdds()` giving raw and rake-adjusted figures side by side, EQR both ways, weighted mean/median, equity buckets, `rangeAdvantage`, `nutThreshold` on the combined distribution and `nutAdvantage` in cutoff and top-percent modes with the nut-share split. `blockers/`: §6.1 scores from per-card weight sums (dead cards removed first), 52-card removal heatmap overall and per made-hand class, class-removal breakdown for a hero combo across made and draw classes ("flush draws 5 → 2"), board effects card by card, bluff candidates ranked by `bluffScore` and sized to the bet with shortfall, unblockers, value candidates. `distribution/`: six axes (made, draw, strategic with visible thresholds, equity bucket, structure, nut), nested tree with raw / weighted / share at every level and multi-membership on the draw axis, compare (hero vs villain or before vs after), CSV and text export. **Spec deviation recorded in the plan:** balanced bluffs-per-value is `bet/(pot+bet)` (= alpha); the spec's `alpha/(1−alpha)` contradicts its own 1 : 2 example. 31 hand-worked tests (two of my hand counts were wrong, the code was right: 7d6d's backdoor flush with the Kd, and a wheel backdoor). `make web-check` 144 tests green. Uncommitted. | Commit F.3 → **F.4** app shell (= D.1) + `poker-ui` |
 | 2026-09-10 (15) | **F.0 + F.1 committed** (`af4626c` docs, `e74c148` code; founder: "commit and continue"). **F.2 equity engine done.** Measured the three evaluators first: WASM binding 465 ns per `rank7` (embind objects), reference 152 ns, so built `evaluator/fast.ts` — table-driven (49,205-entry rank-count hash + 8,192-entry flush table, filled from the reference at first use), 76 ns, three-way agreement on 200k hands. `equity/`: exact heads-up by enumerating every runout, each side ranked once, weights bucketed by rank with prefix sums and indexed by card so card removal is exact in two binary searches per combo; Monte Carlo for preflop and 2–10 players (whole-matchup draws with tuple rejection, `confidence95`); `AbortSignal` cancellation, progress, `equityKey`. `packages/poker-workers`: `EquityService` (cache, cancel by id, supersede) + Comlink worker and client. Fixture `equity_spots.json`: 35 spots enumerated by brute force in Python with treys (independent evaluator), all exact spots within 0.01 pp incl. per-combo equities, preflop within 0.5 pp. Bench: flop 181 ms (full vs full 413), turn 8, river 1, preflop MC 100k 74 ms — every §5.3 target met with room. ESLint now enforces 40-line functions / 300-line files. `make web-check` 113 tests. Uncommitted. | Commit F.2 → **F.3** blockers, distribution, metrics |

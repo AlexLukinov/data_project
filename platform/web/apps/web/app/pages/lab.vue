@@ -7,6 +7,8 @@ import { comboCards, comboIndex, createRange, filterByPredicate, parseCards, par
 import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EquityCalculator, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
+definePageMeta({ public: true }); // spec §17: pure calculation works without a backend
+
 const HERO_DEFAULT = '22+,A2s+,K5s+,Q8s+,J8s+,T8s+,97s+,86s+,75s+,65s,A8o+,KTo+,QTo+,JTo';
 const VILLAIN_DEFAULT = '22+,A2s+,K2s+,Q4s+,J6s+,T6s+,96s+,85s+,74s+,64s+,53s+,A2o+,K7o+,Q8o+,J8o+,T8o+,98o';
 const BRUSHES = [1, 0.75, 0.5, 0.25];

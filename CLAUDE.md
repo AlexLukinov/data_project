@@ -197,7 +197,7 @@ Redis 6380 · MinIO 9010/9011**.
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
 | `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` and the rollup, definitions seed and law test from `stats/registry/` / fail if any is stale |
 | `make size-check` / `make size-baseline` | functions ≤40 lines, files ≤300, against the burn-down list `scripts/size_baseline.txt` (an entry that stops violating fails too) / rewrite that list |
-| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures); `make api` alongside for the API pages |
+| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures, `/login` · `/register` · `/account` — every other route is behind sign-in unless its page sets `definePageMeta({ public: true })`); `make api` alongside for the API pages |
 | `make web-install` / `make web-check` / `make web-test` / `make web-license` | the JavaScript workspace in `platform/web/` (ADR-027): `npm ci` / typecheck (incl. `nuxt typecheck`) + ESLint + Vitest + the licence audit (what the CI `web` job runs) / tests only / the licence allowlist alone. Every dependency must be MIT/Apache/BSD-class — no GPL/AGPL/LGPL, ever; `platform/web/LICENSES.md` lists why each one is acceptable |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 

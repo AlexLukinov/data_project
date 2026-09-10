@@ -7,6 +7,8 @@ interface Health {
   clickhouse?: string;
 }
 
+definePageMeta({ public: true });
+
 const config = useRuntimeConfig();
 const url = `${config.public.apiBase}/health`;
 const { data, error, status, refresh } = await useFetch<Health>(url, { server: false, lazy: true });

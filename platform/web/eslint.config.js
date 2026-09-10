@@ -66,11 +66,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/test/**', '**/bench/**'],
+    files: ['**/test/**', '**/bench/**', '**/*.test.ts'],
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
   {
-    files: ['**/*.config.ts', '**/*.config.js', 'apps/web/nuxt.config.ts', '**/*.d.ts'],
+    // Configs, type shims and Nuxt's file-based conventions (middleware, plugins) require a default export.
+    files: ['**/*.config.ts', '**/*.config.js', 'apps/web/nuxt.config.ts', '**/*.d.ts', 'apps/*/app/middleware/**', 'apps/*/app/plugins/**'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );

@@ -5,6 +5,8 @@ import { parseCards, parseCombo, parseRange } from '@poker/core';
 import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EquityCalculator, RangeMatrix, RangeTextIO } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
+definePageMeta({ public: true });
+
 const { service } = useEquityService();
 const range = ref<WeightedRange>({ ...parseRange('AA,KK,QQ:0.75,JJ,AKs,AKo:0.5,AQs+,A5s-A2s,JTs+,KQo,76s').range, label: 'Fixture' });
 const villain = ref<WeightedRange>({ ...parseRange('TT-22,AJs-A2s,KTs+,QTs+,JTs,T9s,98s,AJo-ATo,KQo').range, label: 'Villain' });
