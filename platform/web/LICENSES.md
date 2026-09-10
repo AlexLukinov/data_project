@@ -33,7 +33,8 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 
 | Package | Licence | Used for | Why acceptable |
 |---|---|---|---|
-| `poker-hand-evaluator-wasm` | Apache-2.0 | WebAssembly build of PokerHandEvaluator (7-card ranks) | Permissive; attribution kept in `node_modules` and here. Upstream: HenryRLee/PokerHandEvaluator, Apache-2.0 |
+| `poker-hand-evaluator-wasm` | Apache-2.0 | WebAssembly build of PokerHandEvaluator (7-card ranks); used as an agreement check, the engine runs on our own table-driven evaluator | Permissive; attribution kept in `node_modules` and here. Upstream: HenryRLee/PokerHandEvaluator, Apache-2.0 |
+| `comlink` | Apache-2.0 | Worker RPC for the equity service | permissive |
 
 ## Development dependencies
 
@@ -44,6 +45,7 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 | `eslint`, `@eslint/js` | MIT | lint | permissive |
 | `typescript-eslint` | MIT | TypeScript lint rules | permissive |
 | `@types/node` | MIT | Node typings for tests | permissive |
+| `tsx` | MIT | runs the benchmark scripts (`npm run bench`) | permissive (bundles esbuild, MIT) |
 | `license-checker-rseidelsohn` | BSD-3-Clause | the licence audit itself | permissive (declares `node >= 24`; runs on 23 with a warning) |
 
 ## Explicitly not used

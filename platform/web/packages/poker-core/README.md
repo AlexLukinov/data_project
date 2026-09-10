@@ -17,10 +17,24 @@ classifyHand(parseCards('Ah Kh') as [number, number], parseCards('Kc 9h 2d')); /
 | `cards.ts` | card = `rank·4 + suit`, combo = `b(b−1)/2 + a`, the 169 classes, canonical spelling | §4.1 |
 | `range.ts` | `WeightedRange` and its operations (remove cards, intersect/union/subtract, scale, normalize, filter, matrix, diff) | §4.2 |
 | `formats/` | combo notation (byte-identical round trip), class notation (`AQs+`, `A5s-A2s`, `:0.5`), auto-detect, actionable errors | §4.3 |
-| `evaluator/` | `HandEvaluator` — PokerHandEvaluator via WASM, and a pure-TS reference with the same Cactus-Kev ranks | §5.1 |
+| `evaluator/` | `HandEvaluator` — `fast.ts` (table-driven, ~75 ns per 7-card rank, what the engine uses), `ts.ts` (the readable reference the tables are built from), `wasm.ts` (PokerHandEvaluator, kept as an agreement check); all three share Cactus Kev's numbering | §5.1 |
+| `equity/` | `computeEquity()`: exact heads-up enumeration on flop/turn/river with exact card removal, Monte Carlo for preflop and 3–10 players, cancellation, progress, `equityKey()` for caches | §5.2–5.4 |
 | `classify.ts` | made-hand and draw classes of two cards on a board, relative to the board | §7.1, §8 |
 
-Coming in later plan steps: `equity/` (F.2), `blockers/`, `distribution/`, `metrics/` (F.3), `node.ts` (F.8).
+```ts
+const result = await computeEquity({ ranges: [hero, villain], board: parseCards('Kh 7d 2c') });
+result.heroEquity;            // 0.56
+result.perComboEquity;        // Float32Array(1326), NaN where the combo is out of range or blocked
+result.exact;                 // true on a flop, turn or river with two ranges
+await computeEquity({ ranges: [a, b, c], board: [] }, { iterations: 100_000, seed: 1 }); // Monte Carlo, ±confidence95
+```
+
+Measured on an M-series Mac (`npm run bench`): flop exact 181 ms (full range vs full range
+413 ms), turn 8 ms, river 1 ms, preflop Monte Carlo 100k 74 ms. Expected values in
+`fixtures/equity_spots.json` come from an independent brute-force enumeration with the treys
+evaluator (`fixtures/gen_equity_spots.py`).
+
+Coming in later plan steps: `blockers/`, `distribution/`, `metrics/` (F.3), `node.ts` (F.8).
 
 Conventions worth knowing:
 

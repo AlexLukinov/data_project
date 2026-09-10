@@ -1,0 +1,20 @@
+{
+  "name": "@poker/workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web Worker wrappers around @poker/core: the equity service (cache, cancellation, progress) behind Comlink.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts",
+    "./equity.worker": "./src/equity.worker.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@poker/core": "*",
+    "comlink": "^4.4.2"
+  }
+}

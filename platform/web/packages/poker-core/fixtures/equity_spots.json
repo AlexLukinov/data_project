@@ -1,0 +1,514 @@
+{
+ "source": "treys 0.1.8, brute-force enumeration (gen_equity_spots.py)",
+ "spots": [
+  {
+   "name": "river: AA vs KK, no help",
+   "hero": "AA",
+   "villain": "KK",
+   "board": "Qs Jd 7h 3c 2d",
+   "dead": "",
+   "heroEquity": 1.0,
+   "perCombo": {
+    "AdAc": 1.0,
+    "AhAc": 1.0,
+    "AsAc": 1.0,
+    "AhAd": 1.0,
+    "AsAd": 1.0,
+    "AsAh": 1.0
+   }
+  },
+  {
+   "name": "river: nuts vs air",
+   "hero": "AsKs",
+   "villain": "2c3d",
+   "board": "Qs Js Ts 4h 5h",
+   "dead": "",
+   "heroEquity": 1.0,
+   "perCombo": {
+    "AsKs": 1.0
+   }
+  },
+  {
+   "name": "river: mirror AA vs AA is a tie",
+   "hero": "AA",
+   "villain": "AA",
+   "board": "Kh 9d 7c 4s 2h",
+   "dead": "",
+   "heroEquity": 0.5,
+   "perCombo": {
+    "AdAc": 0.5,
+    "AhAc": 0.5,
+    "AsAc": 0.5,
+    "AhAd": 0.5,
+    "AsAd": 0.5,
+    "AsAh": 0.5
+   }
+  },
+  {
+   "name": "river: AK vs AK, blockers and ties",
+   "hero": "AK",
+   "villain": "AK",
+   "board": "Qh 7d 2c 9s 3h",
+   "dead": "",
+   "heroEquity": 0.5,
+   "perCombo": {
+    "AcKc": 0.5,
+    "AcKd": 0.5,
+    "AcKh": 0.5,
+    "AcKs": 0.5,
+    "AdKc": 0.5,
+    "AdKd": 0.5,
+    "AdKh": 0.5,
+    "AdKs": 0.5,
+    "AhKc": 0.5,
+    "AhKd": 0.5,
+    "AhKh": 0.5,
+    "AhKs": 0.5,
+    "AsKc": 0.5,
+    "AsKd": 0.5,
+    "AsKh": 0.5,
+    "AsKs": 0.5
+   }
+  },
+  {
+   "name": "river: range vs range",
+   "hero": "AA,KK,QQ,AKs,AKo",
+   "villain": "JJ,TT,99,AQs",
+   "board": "Qd 8c 4s 2h 2c",
+   "dead": "",
+   "heroEquity": 0.4807692308
+  },
+  {
+   "name": "river: weighted value vs bluff-catchers",
+   "hero": "AA:0.5,KK,76s:0.25",
+   "villain": "QQ,JJ,ATs",
+   "board": "Kd 9c 5s 3h 2c",
+   "dead": "",
+   "heroEquity": 0.8490566038,
+   "perCombo": {
+    "AdAc": 1.0,
+    "AhAc": 1.0,
+    "AsAc": 1.0,
+    "AhAd": 1.0,
+    "AsAd": 1.0,
+    "AsAh": 1.0,
+    "KhKc": 1.0,
+    "KsKc": 1.0,
+    "KsKh": 1.0,
+    "7c6c": 0.0,
+    "7d6d": 0.0,
+    "7h6h": 0.0,
+    "7s6s": 0.0
+   }
+  },
+  {
+   "name": "river: board plays, chopped",
+   "hero": "2c3d",
+   "villain": "4h5s",
+   "board": "As Ks Qs Js Ts",
+   "dead": "",
+   "heroEquity": 0.5,
+   "perCombo": {
+    "3d2c": 0.5
+   }
+  },
+  {
+   "name": "river: flush over straight",
+   "hero": "Ah2h",
+   "villain": "JcTd",
+   "board": "Kh Qh 9h 3c 2d",
+   "dead": "",
+   "heroEquity": 1.0,
+   "perCombo": {
+    "Ah2h": 1.0
+   }
+  },
+  {
+   "name": "turn: set vs overpair",
+   "hero": "7c7d",
+   "villain": "AhAd",
+   "board": "Kh 7h 2c 4s",
+   "dead": "",
+   "heroEquity": 0.9545454545,
+   "perCombo": {
+    "7d7c": 0.9545454545
+   }
+  },
+  {
+   "name": "turn: flush draw vs top pair",
+   "hero": "Ah5h",
+   "villain": "KcQd",
+   "board": "Kh 9h 2c 4s",
+   "dead": "",
+   "heroEquity": 0.3409090909,
+   "perCombo": {
+    "Ah5h": 0.3409090909
+   }
+  },
+  {
+   "name": "turn: open-ender vs two pair",
+   "hero": "JcTd",
+   "villain": "9h8s",
+   "board": "9d 8c 2h Kh",
+   "dead": "",
+   "heroEquity": 0.1818181818,
+   "perCombo": {
+    "JcTd": 0.1818181818
+   }
+  },
+  {
+   "name": "turn: range vs range",
+   "hero": "QQ,JJ,AKs",
+   "villain": "TT,99,KQs,AJs",
+   "board": "Th 6d 2c 9s",
+   "dead": "",
+   "heroEquity": 0.4573863636,
+   "perCombo": {
+    "QdQc": 0.4734848485,
+    "QhQc": 0.4734848485,
+    "QsQc": 0.4734848485,
+    "QhQd": 0.4734848485,
+    "QsQd": 0.4734848485,
+    "QsQh": 0.4734848485,
+    "JdJc": 0.4507575758,
+    "JhJc": 0.4507575758,
+    "JsJc": 0.4507575758,
+    "JhJd": 0.4507575758,
+    "JsJd": 0.4507575758,
+    "JsJh": 0.4507575758,
+    "AcKc": 0.4431818182,
+    "AdKd": 0.4431818182,
+    "AhKh": 0.4431818182,
+    "AsKs": 0.4431818182
+   }
+  },
+  {
+   "name": "turn: weighted range vs pair",
+   "hero": "QQ:0.5,AKs",
+   "villain": "JJ",
+   "board": "Th 6d 2c 9s",
+   "dead": "",
+   "heroEquity": 0.487012987,
+   "perCombo": {
+    "QdQc": 0.9545454545,
+    "QhQc": 0.9545454545,
+    "QsQc": 0.9545454545,
+    "QhQd": 0.9545454545,
+    "QsQd": 0.9545454545,
+    "QsQh": 0.9545454545,
+    "AcKc": 0.1363636364,
+    "AdKd": 0.1363636364,
+    "AhKh": 0.1363636364,
+    "AsKs": 0.1363636364
+   }
+  },
+  {
+   "name": "turn: dead cards remove outs",
+   "hero": "Ah5h",
+   "villain": "KcQd",
+   "board": "Kh 9h 2c 4s",
+   "dead": "Qh Jh",
+   "heroEquity": 0.3095238095,
+   "perCombo": {
+    "Ah5h": 0.3095238095
+   }
+  },
+  {
+   "name": "turn: combo draw vs set",
+   "hero": "Jh9h",
+   "villain": "8c8d",
+   "board": "Th 8h 2c 3s",
+   "dead": "",
+   "heroEquity": 0.2954545455,
+   "perCombo": {
+    "Jh9h": 0.2954545455
+   }
+  },
+  {
+   "name": "turn: underpair vs overcards",
+   "hero": "5c5d",
+   "villain": "AhKd",
+   "board": "Qs 9h 4c 2d",
+   "dead": "",
+   "heroEquity": 0.8636363636,
+   "perCombo": {
+    "5d5c": 0.8636363636
+   }
+  },
+  {
+   "name": "flop: AKs vs QQ, king high",
+   "hero": "AsKs",
+   "villain": "QhQd",
+   "board": "Kh 7d 2c",
+   "dead": "",
+   "heroEquity": 0.9121212121,
+   "perCombo": {
+    "AsKs": 0.9121212121
+   }
+  },
+  {
+   "name": "flop: AKs vs QQ, queen high",
+   "hero": "AsKs",
+   "villain": "QhQd",
+   "board": "Qc 7d 2h",
+   "dead": "",
+   "heroEquity": 0.0161616162,
+   "perCombo": {
+    "AsKs": 0.0161616162
+   }
+  },
+  {
+   "name": "flop: flush draw vs top pair",
+   "hero": "Ah5h",
+   "villain": "KcQd",
+   "board": "Kh 9h 2c",
+   "dead": "",
+   "heroEquity": 0.4585858586,
+   "perCombo": {
+    "Ah5h": 0.4585858586
+   }
+  },
+  {
+   "name": "flop: open-ender vs overcards",
+   "hero": "9c8d",
+   "villain": "AhKh",
+   "board": "7h 6s 2c",
+   "dead": "",
+   "heroEquity": 0.4636363636,
+   "perCombo": {
+    "9c8d": 0.4636363636
+   }
+  },
+  {
+   "name": "flop: mirror AA vs AA is a tie",
+   "hero": "AA",
+   "villain": "AA",
+   "board": "Kh 9d 7c",
+   "dead": "",
+   "heroEquity": 0.5,
+   "perCombo": {
+    "AdAc": 0.5,
+    "AhAc": 0.5,
+    "AsAc": 0.5,
+    "AhAd": 0.5,
+    "AsAd": 0.5,
+    "AsAh": 0.5
+   }
+  },
+  {
+   "name": "flop: AK vs AK, blockers and ties",
+   "hero": "AK",
+   "villain": "AK",
+   "board": "Qh 7d 2c",
+   "dead": "",
+   "heroEquity": 0.5,
+   "perCombo": {
+    "AcKc": 0.5176767677,
+    "AcKd": 0.4974747475,
+    "AcKh": 0.4974747475,
+    "AcKs": 0.4949494949,
+    "AdKc": 0.4974747475,
+    "AdKd": 0.5176767677,
+    "AdKh": 0.4974747475,
+    "AdKs": 0.4949494949,
+    "AhKc": 0.4974747475,
+    "AhKd": 0.4974747475,
+    "AhKh": 0.5176767677,
+    "AhKs": 0.4949494949,
+    "AsKc": 0.4949494949,
+    "AsKd": 0.4949494949,
+    "AsKh": 0.4949494949,
+    "AsKs": 0.4924242424
+   }
+  },
+  {
+   "name": "flop: range vs range",
+   "hero": "AA,KK,QQ,AKs",
+   "villain": "JJ,TT,AQs",
+   "board": "Jh 7d 2c",
+   "dead": "",
+   "heroEquity": 0.6212356119,
+   "perCombo": {
+    "AdAc": 0.6886134068,
+    "AhAc": 0.6886134068,
+    "AsAc": 0.6845730028,
+    "AhAd": 0.6886134068,
+    "AsAd": 0.6845730028,
+    "AsAh": 0.6845730028,
+    "KdKc": 0.6923853924,
+    "KhKc": 0.6923853924,
+    "KsKc": 0.6919191919,
+    "KhKd": 0.6923853924,
+    "KsKd": 0.6919191919,
+    "KsKh": 0.6919191919,
+    "QdQc": 0.6660238751,
+    "QhQc": 0.6660238751,
+    "QsQc": 0.6619834711,
+    "QhQd": 0.6660238751,
+    "QsQd": 0.6619834711,
+    "QsQh": 0.6619834711,
+    "AcKc": 0.3654040404,
+    "AdKd": 0.3654040404,
+    "AhKh": 0.3654040404,
+    "AsKs": 0.3330808081
+   }
+  },
+  {
+   "name": "flop: weighted range vs pair",
+   "hero": "QQ:0.5,AKs",
+   "villain": "JJ",
+   "board": "Th 6d 2c",
+   "dead": "",
+   "heroEquity": 0.5509379509,
+   "perCombo": {
+    "QdQc": 0.9161616162,
+    "QhQc": 0.9161616162,
+    "QsQc": 0.9161616162,
+    "QhQd": 0.9161616162,
+    "QsQd": 0.9161616162,
+    "QsQh": 0.9161616162,
+    "AcKc": 0.2868686869,
+    "AdKd": 0.2868686869,
+    "AhKh": 0.2868686869,
+    "AsKs": 0.2474747475
+   }
+  },
+  {
+   "name": "flop: monotone, flush vs set",
+   "hero": "QhJd",
+   "villain": "AcAd",
+   "board": "Ah Kh 5h",
+   "dead": "",
+   "heroEquity": 0.3525252525,
+   "perCombo": {
+    "QhJd": 0.3525252525
+   }
+  },
+  {
+   "name": "flop: straight vs flush draw",
+   "hero": "Jc7c",
+   "villain": "Ah2h",
+   "board": "Th 9h 8h",
+   "dead": "",
+   "heroEquity": 0.0015151515,
+   "perCombo": {
+    "Jc7c": 0.0015151515
+   }
+  },
+  {
+   "name": "flop: paired board, overcards vs trips draw",
+   "hero": "AcKc",
+   "villain": "7h6h",
+   "board": "7d 7c 2s",
+   "dead": "",
+   "heroEquity": 0.0343434343,
+   "perCombo": {
+    "AcKc": 0.0343434343
+   }
+  },
+  {
+   "name": "flop: dead cards remove outs",
+   "hero": "Ah5h",
+   "villain": "KcQd",
+   "board": "Kh 9h 2c",
+   "dead": "Qh Jh",
+   "heroEquity": 0.4108527132,
+   "perCombo": {
+    "Ah5h": 0.4108527132
+   }
+  },
+  {
+   "name": "flop: small pairs vs broadway",
+   "hero": "22,33",
+   "villain": "AKo",
+   "board": "Jh 7d 4c",
+   "dead": "",
+   "heroEquity": 0.7171717172,
+   "perCombo": {
+    "2d2c": 0.7171717172,
+    "2h2c": 0.7171717172,
+    "2s2c": 0.7171717172,
+    "2h2d": 0.7171717172,
+    "2s2d": 0.7171717172,
+    "2s2h": 0.7171717172,
+    "3d3c": 0.7171717172,
+    "3h3c": 0.7171717172,
+    "3s3c": 0.7171717172,
+    "3h3d": 0.7171717172,
+    "3s3d": 0.7171717172,
+    "3s3h": 0.7171717172
+   }
+  },
+  {
+   "name": "flop: wheel draw vs top pair",
+   "hero": "Ac4d",
+   "villain": "KhQs",
+   "board": "Kd 5c 2h",
+   "dead": "",
+   "heroEquity": 0.2777777778,
+   "perCombo": {
+    "Ac4d": 0.2777777778
+   }
+  },
+  {
+   "name": "flop: overpair vs set-and-draws",
+   "hero": "KsKd",
+   "villain": "77,98s",
+   "board": "7h 8d 2c",
+   "dead": "",
+   "heroEquity": 0.4144781145,
+   "perCombo": {
+    "KsKd": 0.4144781145
+   }
+  },
+  {
+   "name": "flop: same class both sides",
+   "hero": "QQ",
+   "villain": "QQ,AKs",
+   "board": "Js 6d 3c",
+   "dead": "",
+   "heroEquity": 0.6783838384,
+   "perCombo": {
+    "QdQc": 0.678989899,
+    "QhQc": 0.6777777778,
+    "QsQc": 0.678989899,
+    "QhQd": 0.6777777778,
+    "QsQd": 0.678989899,
+    "QsQh": 0.6777777778
+   }
+  },
+  {
+   "name": "preflop: AA vs KK",
+   "hero": "AhAd",
+   "villain": "KsKc",
+   "board": "",
+   "dead": "",
+   "heroEquity": 0.8125548968,
+   "perCombo": {
+    "AhAd": 0.8125548968
+   }
+  },
+  {
+   "name": "preflop: AKs vs QQ",
+   "hero": "AsKs",
+   "villain": "QhQd",
+   "board": "",
+   "dead": "",
+   "heroEquity": 0.4621445725,
+   "perCombo": {
+    "AsKs": 0.4621445725
+   }
+  },
+  {
+   "name": "preflop: JTs vs AKo",
+   "hero": "JhTh",
+   "villain": "AcKd",
+   "board": "",
+   "dead": "",
+   "heroEquity": 0.4117986643,
+   "perCombo": {
+    "JhTh": 0.4117986643
+   }
+  }
+ ]
+}

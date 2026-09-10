@@ -134,63 +134,65 @@ function topRanks(mask: number, count: number, out: number[], exclude1 = -1, exc
 
 const kickers: number[] = [];
 
-/**
- * Rank of the best 5-card hand among 5 to 7 cards. Duplicated cards are undefined behaviour,
- * as in every evaluator; callers guarantee distinct cards.
- */
-export function evaluateCards(cards: readonly Card[]): number {
-  if (cards.length < 5 || cards.length > 7) {
-    throw new RangeError(`evaluate needs 5 to 7 cards, got ${cards.length}`);
-  }
+/** Scratch results of `scan()`: the rank bitmask and the flush rank (or -1). */
+let scanRankMask = 0;
+let scanFlushRank = -1;
+
+/** Count ranks and suits; return a straight-flush rank when there is one, else 0. */
+function scan(cards: readonly Card[]): number {
   rankCounts.fill(0);
   suitCounts.fill(0);
   suitMasks.fill(0);
-  let rankMask = 0;
+  scanRankMask = 0;
+  scanFlushRank = -1;
   for (const card of cards) {
     const r = rankOf(card);
     const s = suitOf(card);
     rankCounts[r]!++;
     suitCounts[s]!++;
     suitMasks[s]! |= 1 << r;
-    rankMask |= 1 << r;
+    scanRankMask |= 1 << r;
   }
-
-  let flushRank = -1;
   for (let s = 0; s < 4; s++) {
     if (suitCounts[s]! >= 5) {
       const high = straightHigh(suitMasks[s]!);
       if (high !== NO_STRAIGHT) return RANK_BASE.straightFlush + (ACE - high);
-      flushRank = RANK_BASE.flush + DISTINCT5_OFFSET[top5(suitMasks[s]!)]!;
+      scanFlushRank = RANK_BASE.flush + DISTINCT5_OFFSET[top5(suitMasks[s]!)]!;
       break;
     }
   }
+  return 0;
+}
 
-  let quads = -1;
-  let trips = -1;
-  let secondTrips = -1;
-  let highPair = -1;
-  let lowPair = -1;
+/** Highest ranks holding four, three (twice) and two (twice) cards, -1 when absent. */
+const groups = { quads: -1, trips: -1, secondTrips: -1, highPair: -1, lowPair: -1 };
+
+function groupRanks(): void {
+  groups.quads = groups.trips = groups.secondTrips = groups.highPair = groups.lowPair = -1;
   for (let r = ACE; r >= 0; r--) {
     const n = rankCounts[r]!;
-    if (n === 4) quads = r;
+    if (n === 4) groups.quads = r;
     else if (n === 3) {
-      if (trips < 0) trips = r;
-      else if (secondTrips < 0) secondTrips = r;
+      if (groups.trips < 0) groups.trips = r;
+      else if (groups.secondTrips < 0) groups.secondTrips = r;
     } else if (n === 2) {
-      if (highPair < 0) highPair = r;
-      else if (lowPair < 0) lowPair = r;
+      if (groups.highPair < 0) groups.highPair = r;
+      else if (groups.lowPair < 0) groups.lowPair = r;
     }
   }
+}
 
+function rankFromGroups(): number {
+  const { quads, trips, secondTrips, highPair, lowPair } = groups;
+  const rankMask = scanRankMask;
   if (quads >= 0) {
     topRanks(rankMask, 1, kickers, quads);
     return RANK_BASE.quads + TWO_RANK_OFFSET[quads * RANK_COUNT + kickers[0]!]!;
   }
-  if (trips >= 0) {
-    const pair = Math.max(secondTrips, highPair);
-    if (pair >= 0) return RANK_BASE.fullHouse + TWO_RANK_OFFSET[trips * RANK_COUNT + pair]!;
+  if (trips >= 0 && Math.max(secondTrips, highPair) >= 0) {
+    return RANK_BASE.fullHouse + TWO_RANK_OFFSET[trips * RANK_COUNT + Math.max(secondTrips, highPair)]!;
   }
-  if (flushRank >= 0) return flushRank;
+  if (scanFlushRank >= 0) return scanFlushRank;
   const straight = straightHigh(rankMask);
   if (straight !== NO_STRAIGHT) return RANK_BASE.straight + (ACE - straight);
   if (trips >= 0) {
@@ -206,6 +208,20 @@ export function evaluateCards(cards: readonly Card[]): number {
     return RANK_BASE.pair + PAIR_OFFSET[highPair * 2197 + kickers[0]! * 169 + kickers[1]! * RANK_COUNT + kickers[2]!]!;
   }
   return RANK_BASE.highCard + DISTINCT5_OFFSET[top5(rankMask)]!;
+}
+
+/**
+ * Rank of the best 5-card hand among 5 to 7 cards. Duplicated cards are undefined behaviour,
+ * as in every evaluator; callers guarantee distinct cards.
+ */
+export function evaluateCards(cards: readonly Card[]): number {
+  if (cards.length < 5 || cards.length > 7) {
+    throw new RangeError(`evaluate needs 5 to 7 cards, got ${cards.length}`);
+  }
+  const straightFlush = scan(cards);
+  if (straightFlush !== 0) return straightFlush;
+  groupRanks();
+  return rankFromGroups();
 }
 
 /** The pure-TypeScript `HandEvaluator`. */

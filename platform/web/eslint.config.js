@@ -27,7 +27,14 @@ export default tseslint.config(
       'no-restricted-syntax': ['error', { selector: 'ExportDefaultDeclaration', message: 'Use named exports.' }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+      // The same size limits the Python side enforces with scripts/check_sizes.py.
+      'max-lines-per-function': ['error', { max: 40, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
     },
+  },
+  {
+    files: ['**/test/**', '**/bench/**'],
+    rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
   {
     files: ['**/*.config.ts', '**/*.config.js'],

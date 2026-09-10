@@ -10,4 +10,8 @@ export * from './classify';
 export type { HandEvaluator } from './evaluator/types';
 export { CATEGORY_NAMES, Category, RANK_BASE, WORST_RANK, categoryOfRank } from './evaluator/types';
 export { TsEvaluator, evaluateCards, tsEvaluator } from './evaluator/ts';
+export { FastEvaluator, fastEvaluator } from './evaluator/fast';
 export { WasmEvaluator, wasmEvaluator } from './evaluator/wasm';
+export * from './equity/index';
+export { mulberry32, randomSeed } from './random';
+export type { Random } from './random';
