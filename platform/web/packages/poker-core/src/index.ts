@@ -13,5 +13,8 @@ export { TsEvaluator, evaluateCards, tsEvaluator } from './evaluator/ts';
 export { FastEvaluator, fastEvaluator } from './evaluator/fast';
 export { WasmEvaluator, wasmEvaluator } from './evaluator/wasm';
 export * from './equity/index';
+export * from './metrics/index';
+export * from './blockers/index';
+export * from './distribution/index';
 export { mulberry32, randomSeed } from './random';
 export type { Random } from './random';

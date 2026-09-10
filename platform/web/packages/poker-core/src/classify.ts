@@ -12,9 +12,10 @@
  */
 
 import type { Card, Rank } from './cards';
-import { ACE, KING, rankOf, suitOf } from './cards';
+import { ACE, COMBO_COUNT, KING, comboCards, rankOf, suitOf } from './cards';
 import { evaluateCards } from './evaluator/ts';
 import { Category, categoryOfRank } from './evaluator/types';
+import type { WeightedRange } from './range';
 
 export type MadeHandClass =
   | 'straight_flush'
@@ -245,4 +246,25 @@ export function classifyDraws(hole: readonly [Card, Card], board: readonly Card[
 export function classifyHand(hole: readonly [Card, Card], board: readonly Card[]): HandClassification {
   const made = classifyMadeHand(hole, board);
   return { made, draws: classifyDraws(hole, board, made) };
+}
+
+/** A draw that adds outs now (backdoors do not). */
+export function isRealDraw(draw: DrawClass): boolean {
+  return draw === 'flush_draw' || draw === 'open_ended_straight_draw' || draw === 'gutshot' || draw === 'combo_draw';
+}
+
+/**
+ * Classify every live combo of a range on a board; indexed by combo, `undefined` where the
+ * combo has no weight or shares a card with the board.
+ */
+export function classifyCombos(range: WeightedRange, board: readonly Card[]): (HandClassification | undefined)[] {
+  const out = new Array<HandClassification | undefined>(COMBO_COUNT);
+  const onBoard = new Set(board);
+  for (let combo = 0; combo < COMBO_COUNT; combo++) {
+    if (range.weights[combo]! <= 0) continue;
+    const [a, b] = comboCards(combo);
+    if (onBoard.has(a) || onBoard.has(b)) continue;
+    out[combo] = classifyHand([a, b], board);
+  }
+  return out;
 }

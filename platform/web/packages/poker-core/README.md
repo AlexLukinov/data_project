@@ -20,6 +20,9 @@ classifyHand(parseCards('Ah Kh') as [number, number], parseCards('Kc 9h 2d')); /
 | `evaluator/` | `HandEvaluator` — `fast.ts` (table-driven, ~75 ns per 7-card rank, what the engine uses), `ts.ts` (the readable reference the tables are built from), `wasm.ts` (PokerHandEvaluator, kept as an agreement check); all three share Cactus Kev's numbering | §5.1 |
 | `equity/` | `computeEquity()`: exact heads-up enumeration on flop/turn/river with exact card removal, Monte Carlo for preflop and 3–10 players, cancellation, progress, `equityKey()` for caches | §5.2–5.4 |
 | `classify.ts` | made-hand and draw classes of two cards on a board, relative to the board | §7.1, §8 |
+| `metrics/` | pot odds and sizing (MDF, alpha, required equity, bluff break-even, odds text, implied odds), rake raw vs adjusted, EQR, range advantage, nut advantage with both threshold modes | §8 |
+| `blockers/` | per-combo blocker scores, 52-card removal heatmap overall and per class, class-removal breakdown, board effects, bluff candidates sized to the bet, unblockers | §6 |
+| `distribution/` | the grouped combo distribution: six axes, nested tree with raw / weighted / share at every level, compare, CSV and text export | §7 |
 
 ```ts
 const result = await computeEquity({ ranges: [hero, villain], board: parseCards('Kh 7d 2c') });
@@ -34,7 +37,11 @@ Measured on an M-series Mac (`npm run bench`): flop exact 181 ms (full range vs 
 `fixtures/equity_spots.json` come from an independent brute-force enumeration with the treys
 evaluator (`fixtures/gen_equity_spots.py`).
 
-Coming in later plan steps: `blockers/`, `distribution/`, `metrics/` (F.3), `node.ts` (F.8).
+Coming in later plan steps: `node.ts` (F.8).
+
+One formula worth knowing: the balanced bluff-to-value ratio for a bet is `bet / (pot + bet)`
+(= alpha), derived from villain's break-even call at `bet / (pot + 2·bet)`; a pot-size bet
+carries one bluff per two value combos.
 
 Conventions worth knowing:
 
