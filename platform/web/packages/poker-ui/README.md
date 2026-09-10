@@ -30,6 +30,8 @@ import '@poker/ui/theme.css';
 | `EquityBucketBars` | `heroBuckets`, `villainBuckets`, `heroLabel`, `villainLabel` | — |
 | `RangeComparisonPanel` | `hero`, `villain`, `heroEquities`, `villainEquities`, `exact` | — |
 | `RangeDiffView` | `ranges: { label, range }[]` (the first is the reference) | `cellClick` |
+| `RangeDisagreementTable` | `a`, `b`, `aLabel`, `bLabel`, `limit` — the hand classes two ranges disagree on most | `cellClick` |
+| `NodeKeyEditor` | `v-model` of a `NodeKey` (spec §10.1): seats, street, stack, stake, texture, the action sequence | `update:modelValue` |
 
 Every metric label goes through `MetricLabel`, which reads `glossary.ts` (spec §13: one sentence
 and the formula per term, in one place); `explain.ts` holds the "explain the number" templates.

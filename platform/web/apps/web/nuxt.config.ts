@@ -18,7 +18,7 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
     // Workspace packages are consumed from source; Vite transpiles their TypeScript.
-    optimizeDeps: { exclude: ['@poker/core', '@poker/ui', '@poker/workers'] },
+    optimizeDeps: { exclude: ['@poker/core', '@poker/ui', '@poker/workers', '@poker/importers'] },
     worker: { format: 'es' },
   },
   app: {

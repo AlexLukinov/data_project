@@ -1,0 +1,1 @@
+AhAd: 1,AhAc: 1,AhAs: 1,AdAc: 1,AdAs: 1,AcAs: 1,KhKd: 1,KhKc: 1,KhKs: 1,KdKc: 1,KdKs: 1,KcKs: 1,AhKh: 1,AdKd: 1,AcKc: 1,AsKs: 1,AhKd: 0.5,AhKc: 0.5,AhKs: 0.5,AdKh: 0.5,AdKc: 0.5,AdKs: 0.5,AcKh: 0.5,AcKd: 0.5,AcKs: 0.5,AsKh: 0.5,AsKd: 0.5,AsKc: 0.5,Tc9d: 1.005

@@ -1,0 +1,18 @@
+{
+  "name": "@poker/importers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Range importers for the library (spec §11.3): Simple Preflop Holdem text, our own JSON, GTO Wizard, PioSOLVER, Equilab, CSV — pure functions from text to ranges with warnings, plus filename-to-situation inference. Depends on @poker/core only.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@poker/core": "*"
+  }
+}

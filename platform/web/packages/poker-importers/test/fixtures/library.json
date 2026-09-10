@@ -1,0 +1,26 @@
+{
+  "format": "poker-ranges/1",
+  "exported_at": "2026-09-10T12:00:00Z",
+  "ranges": [
+    {
+      "id": "6d0b7a1e-0000-4000-8000-000000000001",
+      "name": "UTG RFI",
+      "node_key": { "stake": "", "table_size": 6, "eff_stack_bb": 100, "hero_position": "UTG", "villain_position": null, "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5, "size_pct": null }], "street": "preflop", "board_texture": [] },
+      "source": "own",
+      "source_tool": "Simple Preflop Holdem",
+      "format": "combo",
+      "tags": ["rfi", "6max"],
+      "version": 3,
+      "weights": "AhAd: 1,AhAc: 1,AhAs: 1,AdAc: 1,AdAs: 1,AcAs: 1",
+      "note": "revert to v1",
+      "created_at": "2026-09-10T11:00:00Z",
+      "updated_at": "2026-09-10T12:00:00Z"
+    },
+    {
+      "name": "BTN 3bet vs UTG",
+      "node_key": { "hero_position": "BTN", "villain_position": "UTG", "action_sequence": [{ "position": "UTG", "action": "raise" }, { "position": "BTN", "action": "raise" }] },
+      "source": "solver",
+      "weights": "AhAd: 1,KhKd: 0.5"
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "_comment": "NodeKey fixture parsed by both test suites (ADR-028): tests/test_nodes.py and web/packages/poker-core/test/node.test.ts. `valid` entries must validate to exactly `canonical`; `invalid` entries must be rejected.",
+  "positions": ["UTG", "UTG1", "UTG2", "MP", "MP1", "HJ", "CO", "BTN", "SB", "BB"],
+  "valid": [
+    {
+      "name": "UTG RFI 100bb",
+      "label": "UTG RFI · 100bb",
+      "input": {
+        "hero_position": "UTG",
+        "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5 }]
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "UTG",
+        "villain_position": null,
+        "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5, "size_pct": null }],
+        "street": "preflop",
+        "board_texture": []
+      }
+    },
+    {
+      "name": "BTN 3-bet vs UTG",
+      "label": "BTN 3-bet vs UTG · 100bb",
+      "input": {
+        "hero_position": "BTN",
+        "villain_position": "UTG",
+        "action_sequence": [
+          { "position": "UTG", "action": "raise" },
+          { "position": "BTN", "action": "raise" }
+        ]
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "BTN",
+        "villain_position": "UTG",
+        "action_sequence": [
+          { "position": "UTG", "action": "raise", "size_bb": null, "size_pct": null },
+          { "position": "BTN", "action": "raise", "size_bb": null, "size_pct": null }
+        ],
+        "street": "preflop",
+        "board_texture": []
+      }
+    },
+    {
+      "name": "BB call vs CO 2.5x, 40bb NL5",
+      "label": "BB call vs CO 2.5bb · 40bb · NL5",
+      "input": {
+        "stake": "NL5",
+        "eff_stack_bb": 40,
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "action_sequence": [
+          { "position": "CO", "action": "raise", "size_bb": 2.5 },
+          { "position": "BB", "action": "call" }
+        ]
+      },
+      "canonical": {
+        "stake": "NL5",
+        "table_size": 6,
+        "eff_stack_bb": 40,
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "action_sequence": [
+          { "position": "CO", "action": "raise", "size_bb": 2.5, "size_pct": null },
+          { "position": "BB", "action": "call", "size_bb": null, "size_pct": null }
+        ],
+        "street": "preflop",
+        "board_texture": []
+      }
+    },
+    {
+      "name": "BB flop check-raise vs a third-pot c-bet",
+      "label": "BB raise vs CO 33% · flop · 100bb",
+      "input": {
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "street": "flop",
+        "action_sequence": [
+          { "position": "CO", "action": "raise", "size_bb": 2.5 },
+          { "position": "BB", "action": "call" },
+          { "position": "BB", "action": "check" },
+          { "position": "CO", "action": "bet", "size_pct": 0.33 },
+          { "position": "BB", "action": "raise", "size_pct": 3 }
+        ],
+        "board_texture": ["rainbow", "unpaired"]
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "action_sequence": [
+          { "position": "CO", "action": "raise", "size_bb": 2.5, "size_pct": null },
+          { "position": "BB", "action": "call", "size_bb": null, "size_pct": null },
+          { "position": "BB", "action": "check", "size_bb": null, "size_pct": null },
+          { "position": "CO", "action": "bet", "size_bb": null, "size_pct": 0.33 },
+          { "position": "BB", "action": "raise", "size_bb": null, "size_pct": 3.0 }
+        ],
+        "street": "flop",
+        "board_texture": ["rainbow", "unpaired"]
+      }
+    },
+    {
+      "name": "the canonical form validates to itself",
+      "label": "SB RFI · 100bb",
+      "input": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "SB",
+        "villain_position": null,
+        "action_sequence": [{ "position": "SB", "action": "raise", "size_bb": null, "size_pct": null }],
+        "street": "preflop",
+        "board_texture": []
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "SB",
+        "villain_position": null,
+        "action_sequence": [{ "position": "SB", "action": "raise", "size_bb": null, "size_pct": null }],
+        "street": "preflop",
+        "board_texture": []
+      }
+    }
+  ],
+  "invalid": [
+    { "reason": "hero position missing", "input": { "street": "preflop" } },
+    { "reason": "position outside the vocabulary", "input": { "hero_position": "LJ" } },
+    { "reason": "the spec draft's camelCase field", "input": { "hero_position": "UTG", "heroPosition": "UTG" } },
+    { "reason": "action outside the vocabulary", "input": { "hero_position": "UTG", "action_sequence": [{ "position": "UTG", "action": "open" }] } },
+    { "reason": "a step without a position", "input": { "hero_position": "UTG", "action_sequence": [{ "action": "raise" }] } },
+    { "reason": "a non-positive raise size", "input": { "hero_position": "UTG", "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 0 }] } },
+    { "reason": "street outside the vocabulary", "input": { "hero_position": "UTG", "street": "showdown" } },
+    { "reason": "table size out of range", "input": { "hero_position": "UTG", "table_size": 1 } },
+    { "reason": "stack must be a positive integer", "input": { "hero_position": "UTG", "eff_stack_bb": 0 } },
+    { "reason": "a texture tag must be a string", "input": { "hero_position": "UTG", "board_texture": [1] } },
+    { "reason": "not an object", "input": "UTG RFI" }
+  ]
+}

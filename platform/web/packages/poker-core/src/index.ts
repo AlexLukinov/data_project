@@ -16,5 +16,6 @@ export * from './equity/index';
 export * from './metrics/index';
 export * from './blockers/index';
 export * from './distribution/index';
+export * from './node';
 export { mulberry32, randomSeed } from './random';
 export type { Random } from './random';

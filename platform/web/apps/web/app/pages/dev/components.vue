@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
-import type { Card, ComboIndex, EquityResult, HandClass, RakeConfig, WeightedRange } from '@poker/core';
-import { equityBuckets, parseCards, parseCombo, parseRange } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, MDFPanel, MetricLabel, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO } from '@poker/ui';
+import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
+import { equityBuckets, nodeKey, parseCards, parseCombo, parseRange, step } from '@poker/core';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, MDFPanel, MetricLabel, NodeKeyEditor, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
 definePageMeta({ public: true });
@@ -24,6 +24,7 @@ const call = ref<number | null>(null);
 const extra = ref(0);
 const rake = ref<RakeConfig>({ rakePct: 0.05, rakeCapBB: 3 });
 const ev = ref<number | null>(38);
+const situation = ref<NodeKey>(nodeKey('BB', { villain_position: 'CO', action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call')] }));
 </script>
 
 <template>
@@ -124,9 +125,20 @@ const ev = ref<number | null>(38);
       </div>
     </section>
 
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">RangeDiffView</h2>
+        <div class="max-w-md"><RangeDiffView :ranges="[{ label: 'Fixture', range }, { label: 'Villain', range: villain }]" @cell-click="(c) => (lastEvent = `diff cellClick ${c}`)" /></div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">RangeDisagreementTable</h2>
+        <RangeDisagreementTable :a="range" :b="villain" a-label="Fixture" b-label="Villain" @cell-click="(c) => (lastEvent = `disagree cellClick ${c}`)" />
+      </div>
+    </section>
+
     <section class="space-y-2">
-      <h2 class="font-medium">RangeDiffView</h2>
-      <div class="max-w-md"><RangeDiffView :ranges="[{ label: 'Fixture', range }, { label: 'Villain', range: villain }]" @cell-click="(c) => (lastEvent = `diff cellClick ${c}`)" /></div>
+      <h2 class="font-medium">NodeKeyEditor</h2>
+      <div class="max-w-2xl rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><NodeKeyEditor v-model="situation" /></div>
     </section>
   </div>
 </template>

@@ -142,7 +142,7 @@ working code and a stale status file has lost the work, because the next session
 - **Poker platform docs** (the product; separate from the lab): `docs/POKER_STATUS.md` (live
   progress — read first), **`POKER_PLAN.md` (the v2 plan being implemented — read second)**,
   `POKER_AUDIT.md` (2026-09-09 audit: what is sound, what is broken, why v2), `POKER_DECISIONS.md`
-  (ADRs 001–030), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
+  (ADRs 001–031), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
   `POKER_DATA_MODEL.md`, `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md` (the last five are
   2026-09-06 planning snapshots; where they disagree with AUDIT/PLAN, AUDIT/PLAN win). Prefixed
   because `docs/ARCHITECTURE.md` is the lab's. The product gets its own docker-compose stack; the
@@ -197,7 +197,7 @@ Redis 6380 · MinIO 9010/9011**.
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
 | `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` and the rollup, definitions seed and law test from `stats/registry/` / fail if any is stale |
 | `make size-check` / `make size-baseline` | functions ≤40 lines, files ≤300, against the burn-down list `scripts/size_baseline.txt` (an entry that stops violating fails too) / rewrite that list |
-| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures, `/login` · `/register` · `/account` — every other route is behind sign-in unless its page sets `definePageMeta({ public: true })`); `make api` alongside for the API pages |
+| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures, `/login` · `/register` · `/account`, `/ranges` the range library with `/ranges/import` (folder import + review) and `/ranges/compare` (my chart · solver · pool) — every other route is behind sign-in unless its page sets `definePageMeta({ public: true })`); `make api` alongside for the API pages |
 | `make web-install` / `make web-check` / `make web-test` / `make web-license` | the JavaScript workspace in `platform/web/` (ADR-027): `npm ci` / typecheck (incl. `nuxt typecheck`) + ESLint + Vitest + the licence audit (what the CI `web` job runs) / tests only / the licence allowlist alone. Every dependency must be MIT/Apache/BSD-class — no GPL/AGPL/LGPL, ever; `platform/web/LICENSES.md` lists why each one is acceptable |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 
@@ -217,7 +217,11 @@ Redis 6380 · MinIO 9010/9011**.
   notations, evaluator, equity engine, metrics, blockers, distribution; `packages/poker-workers`
   — the equity Worker service; `packages/poker-ui` — the Vue components, which import
   `@poker/core` only (ESLint enforces it; services arrive through props); `apps/web` — the one
-  Nuxt 4 SPA: the dashboard and the Range Lab; `packages/poker-importers` comes in F.6. The
+  Nuxt 4 SPA: the dashboard, the Range Lab and the range library; `packages/poker-importers` —
+  range files in, ranges out (SPH text, our own JSON, GTO Wizard, PioSOLVER, Equilab, CSV) plus
+  the filename-to-situation inference, depends on `poker-core` only. `NodeKey` (a situation) is
+  defined once in `analysis/pool/nodes.py` with its TypeScript twin in `poker-core/src/node.ts`
+  and one fixture both suites parse (ADR-028, ADR-031). The
   Range Lab spec is `docs/POKER_RANGE_LAB_SPEC.md`, its exploration report
   `docs/POKER_RANGE_LAB.md`).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,

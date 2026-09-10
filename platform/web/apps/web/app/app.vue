@@ -6,6 +6,7 @@ import { useAuthStore } from '~/stores/auth';
 const links = [
   { to: '/', label: 'Home' },
   { to: '/lab', label: 'Range Lab' },
+  { to: '/ranges', label: 'Ranges' },
   { to: '/dev/components', label: 'Components' },
 ];
 

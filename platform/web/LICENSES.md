@@ -41,6 +41,7 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 | `vue`, `vue-router` | MIT | the component framework and router (Nuxt's) | permissive |
 | `pinia`, `@pinia/nuxt` | MIT | app state | permissive |
 | `tailwindcss`, `@tailwindcss/vite` | MIT | the app's utility CSS (poker-ui components use plain scoped CSS) | permissive |
+| `dexie` | Apache-2.0 | the range library's offline copy in IndexedDB (spec §11.1) | permissive; upstream dexie/Dexie.js |
 
 ## Development dependencies
 
@@ -57,6 +58,7 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 | `eslint-plugin-vue`, `vue-eslint-parser` | MIT | lint for `.vue` files | permissive |
 | `vue-tsc` | MIT | typecheck of `.vue` files (`nuxt typecheck` uses it too) | permissive |
 | `license-checker-rseidelsohn` | BSD-3-Clause | the licence audit itself | permissive (declares `node >= 24`; runs on 23 with a warning) |
+| `fake-indexeddb` | Apache-2.0 | an in-memory IndexedDB so the Dexie cache is tested in Node | permissive |
 
 ## Explicitly not used
 

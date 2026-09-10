@@ -40,6 +40,7 @@ not a change I've made.
 | [028](#adr-028--a-node-is-a-predicate-over-decisions-nodekey-is-defined-once-and-buckets-live-in-the-registry) | A node is a predicate over `decisions`; `NodeKey` defined once; buckets live in the registry | ✅ |
 | [029](#adr-029--hand-histories-are-parsed-server-side-only) | Hand histories are parsed server-side only | 🔒 |
 | [030](#adr-030--charts-in-poker-ui-are-hand-drawn-svg-not-a-chart-library) | Charts in `poker-ui` are hand-drawn SVG, not a chart library | ✅ |
+| [031](#adr-031--the-range-library-the-server-is-the-record-versions-are-append-only-nodekey-lands-with-it-importers-are-pure-functions) | The range library: server is the record, versions append-only, `NodeKey` lands with it, importers are pure functions | ✅ |
 
 ---
 
@@ -983,3 +984,50 @@ plus a second dependency.
 **Consequences.** Charts follow the theme automatically and are tested like any other
 component. A chart with real interaction needs (the replayer's timeline, a winnings graph with
 brushing) is a new decision, not an exception taken quietly.
+
+---
+
+## ADR-031 — The range library: the server is the record, versions are append-only, `NodeKey` lands with it, importers are pure functions
+**Status:** ✅ Recommended. Phase F.6, 2026-09-10.
+
+**Context.** Spec §11 wants stored ranges keyed by situation, versioned with revert, cached for
+offline use, imported in bulk from a folder with a review step, and compared three ways (my
+chart | solver | pool). ADR-028 defines `NodeKey` once, in `analysis/pool/nodes.py`, and had
+scheduled it for F.8; the library cannot store a situation without it.
+
+**Decision.**
+- **`NodeKey` is delivered in F.6**, exactly as ADR-028 describes it: the Pydantic model in
+  `analysis/pool/nodes.py` is the definition, `packages/poker-core/src/node.ts` its twin with the
+  same wire names, and `tests/fixtures/nodes.json` is parsed by both suites. `node_filter()`
+  (key → filter AST) stays F.8's. **The action sequence ends with hero's own action:** a range
+  stored at a key is "the combos that take the last step" (`UTG RFI` = `[UTG raise]`, `BB defend
+  vs CO 2.5x` = `[CO raise 2.5, BB call]`); the pool reads the same key with the last step
+  removed and the last step as the action it reports. Lookup compares the canonical JSON
+  (every field present, defaults filled), so two spellings of one situation match.
+- **Postgres is the system of record**; `ranges` carries what is browsed (name, key, source,
+  tool, tags) and the number of the current version; `range_versions` is append-only — an edit
+  of the body inserts, a revert inserts an old body as a new version, nothing is ever updated,
+  so the history is complete by construction. Metadata edits do not make versions.
+- **The body travels as `poker-core`'s canonical combo text** (`AsKh: 1,…`), never as parsed
+  weights: the maths stays in TypeScript, and the server refuses anything else with the entry
+  number so a broken client cannot store what every later page fails to parse.
+- **The Dexie copy is a cache, not a store:** it keeps the last list and the bodies of the
+  ranges that were opened, drops a body when its version no longer matches, and answers only
+  when the API does not. It receives the server's plain objects — a Vue reactive proxy cannot
+  be structured-cloned into IndexedDB, which the browser check found the hard way.
+- **Importers are pure functions in `packages/poker-importers`**, `(text, name) → { ranges,
+  warnings }` or an `ImportError` that says what to do instead, depending on `poker-core` only.
+  Filename inference returns a key *and* a confidence with notes; the review table shows every
+  row before anything is saved (spec §11.2's "never import silently"). `.bin` is refused with a
+  pointer to SPH's text export; nothing of Appendix A is decoded and no fixture is committed.
+- **Node endpoints take the typed `NodeKey` as a POST body** (`POST /v1/ranges/lookup`), the
+  convention ADR-028 sets for the pool endpoints, rather than a key serialized into a query string.
+
+**Alternatives.** *Store versions in place with an audit log* — simpler rows, but revert
+becomes a copy that can drift from the log. *Parse ranges server-side and store 1326 floats* —
+duplicates `poker-core` in Python for no reader. *Make the cache the primary store and sync* —
+the founder works from more than one machine; the server must win.
+
+**Consequences.** F.7 and F.9 can offer "the stored range at this node" with one lookup as
+soon as they know the key. F.8's pool column drops into the comparison page where the stub sits.
+A range's history grows one row per save; a purge policy is a later decision if it ever matters.

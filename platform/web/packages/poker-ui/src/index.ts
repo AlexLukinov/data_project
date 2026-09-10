@@ -23,6 +23,8 @@ export { default as EquityDistributionChart } from './components/EquityDistribut
 export { default as EquityBucketBars } from './components/EquityBucketBars.vue';
 export { default as RangeComparisonPanel } from './components/RangeComparisonPanel.vue';
 export { default as RangeDiffView } from './components/RangeDiffView.vue';
+export { default as RangeDisagreementTable } from './components/RangeDisagreementTable.vue';
+export { default as NodeKeyEditor } from './components/NodeKeyEditor.vue';
 export { useUndoRedo } from './composables/useUndoRedo';
 export type { UndoRedo } from './composables/useUndoRedo';
 export type { EquityServiceLike, EquityServiceOptions } from './service';
