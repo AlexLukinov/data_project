@@ -62,6 +62,6 @@ function clear(): void {
 
     <p v-if="problem" role="alert" data-testid="paste-error" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">{{ problem }}</p>
 
-    <HandStudy v-if="hand" :hand="hand" :watch-seat="null" />
+    <HandStudy v-if="hand" :hand="hand" :watch-seat="null" :hand-text="text" />
   </section>
 </template>

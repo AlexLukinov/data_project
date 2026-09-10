@@ -43,6 +43,7 @@ not a change I've made.
 | [031](#adr-031--the-range-library-the-server-is-the-record-versions-are-append-only-nodekey-lands-with-it-importers-are-pure-functions) | The range library: server is the record, versions append-only, `NodeKey` lands with it, importers are pure functions | ✅ |
 | [032](#adr-032--the-replayer-one-hand-shape-from-three-sources-states-are-derived-the-node-is-the-decision-just-made) | The replayer: one hand shape from three sources, states are derived, the node is the decision just made | ✅ |
 | [033](#adr-033--what-the-pool-may-say-a-node-is-only-as-good-as-its-columns-and-a-range-is-only-the-hands-that-were-shown) | What the pool may say: a node is only as good as its columns, and a range is only the hands that were shown | ✅ |
+| [034](#adr-034--the-analyzer-the-answer-is-fetched-after-the-commit-a-save-is-a-merge-and-a-reveal-names-its-own-authority) | The analyzer: the answer is fetched after the commit, a save is a merge, and a reveal names its own authority | ✅ |
 
 ---
 
@@ -1134,3 +1135,60 @@ offsuit hands by a factor of two, which is a wrong range, not a rough one.
 **Consequences.** Tier 3 (F.10) inherits the gate, the badge and the per-combo construction. A
 node that mentions a caller is deliberately wider than the words suggest; if that ever matters,
 the answer is a column on `decisions` (a `caller_position`), not a looser filter.
+
+---
+
+## ADR-034 — The analyzer: the answer is fetched after the commit, a save is a merge, and a reveal names its own authority
+**Status:** ✅ Recommended. Phase F.9, 2026-09-10.
+
+**Context.** Spec §15 makes the nine steps the spine of the product: *context → do the work →
+commit a prediction → reveal → write a takeaway*. Everything the platform already has (the
+replayer, the range library, the equity engine, the pool's tiered answers) is an input to it.
+Building it settled four questions the spec left open: where the truth may live before it is
+revealed, what a save is allowed to overwrite, whose frequency a step is actually asking about,
+and how much authority a reveal is allowed to claim.
+
+**Decision.**
+
+- **The truth is fetched after the commit, not merely hidden.** `PredictionGate` takes `actual`
+  as a prop and the step supplies it as `null` until a prediction exists; the page's pool query
+  fires on the first committed prediction. A user who opens the devtools before answering finds
+  nothing to find, because nothing has been asked for yet. `unavailable` is a separate prop, so
+  "the pool has played this 87 times, too few" reads differently from "still working it out" —
+  the gate never waits for ever on an answer that is not coming.
+- **A save is a merge by step number.** `PUT /v1/analyses/{id}` replaces the step numbers in the
+  body and leaves the rest alone; the client autosaves the step being worked on, over and over.
+  A partial save can therefore never wipe the steps before it, and a retry after a dropped
+  connection is harmless. The nine steps are one JSONB document because they are always read and
+  written together and never queried across.
+- **Dexie holds the newer copy while the server is away.** Every change is written to the
+  browser immediately and marked `unsaved`; the server save is debounced. A refused save keeps
+  the work queued, says `offline` on screen, and retries on the next change. Reopening prefers
+  an `unsaved` local copy over the server's older one.
+- **A step asks the node whose seat can answer it.** Step 9 wants "how often does my pool fold
+  to this bet" — a question about the seat *facing* the bet, not the seat making it. A `NodeKey`
+  always ends with hero's own action, so hero's own node answers "folds 0%". `facingNode()`
+  swaps the two seats and appends villain's answer as the last step. Verified on a real NL10
+  turn: hero's node says the field bets 30%, the facing node says it folds 43.2% (n = 3,988).
+- **A reveal says where it comes from.** The pool's numbers carry `PoolDataBadge`. The ones
+  computed here from `poker-core` are computed here, and where a rule of thumb is involved the
+  screen prints the rule and the words "no solver was asked" — step 7 places a hand by
+  **made-hand class order** within its own range, not by equity, because it is instant, it is how
+  a player reads a board, and it does not pretend to be a solve.
+- **The heuristic is a column, not the ninth takeaway.** It outlives the analysis: F.11's
+  heuristic log with its 14-day review prompt is a query over `analyses.heuristic`.
+
+**Alternatives.** *Fetch the pool answer when the page opens* — simpler, and the answer sits in
+the browser before the question is asked; the gate would be a curtain, not a gate. *Send the
+whole analysis on every save* — one dropped step patch would silently roll back everything after
+it. *Nine typed step payloads* — nine models, nine migrations and nine branches at every read,
+for a shape that is a flat union of eleven optional fields.
+
+**Consequences.** F.11's training modes reuse `PredictionGate`, `scorePrediction` and the step
+definitions in `analyze/steps.ts` (the questions, tolerances and units are data, in one list).
+Two things the browser found are now invariants: `classifyCombos` throws on a board that is not
+three to five cards, so every board-reading reveal checks `isDealt` first — a board is dealt one
+card at a time and the partial states are real; and the process-wide ClickHouse client now runs
+with `autogenerate_session_id` off, because ClickHouse refuses a second query inside a session
+while the first runs, which made two concurrent reads (a hand and the pool's frequencies) fail
+outright. Nothing in the platform uses session state.

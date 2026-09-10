@@ -8,6 +8,7 @@ const links = [
   { to: '/lab', label: 'Range Lab' },
   { to: '/ranges', label: 'Ranges' },
   { to: '/hands', label: 'Hands' },
+  { to: '/analyze', label: 'Analyze' },
   { to: '/dev/components', label: 'Components' },
 ];
 

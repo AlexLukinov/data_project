@@ -2,10 +2,11 @@
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
 import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
 import { equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, tableSeats } from '@poker/ui';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PoolDataBadge, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
 import { GG_HAND as SAMPLE_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
+import { STEP_LABELS } from '~/analyze/steps';
 
 definePageMeta({ public: true });
 
@@ -31,6 +32,9 @@ const situation = ref<NodeKey>(nodeKey('BB', { villain_position: 'CO', action_se
 // cannot show different behaviour for the same hand.
 const sampleStates = replayStates(SAMPLE_HAND);
 const replayStep = ref(0);
+// The gate is only handed the truth once an answer is committed — the page mimics the analyzer.
+const guess = ref<string | null>(null);
+const analysisStep = ref(3);
 </script>
 
 <template>
@@ -155,6 +159,27 @@ const replayStep = ref(0);
     <section class="space-y-2">
       <h2 class="font-medium">HandReplayer</h2>
       <HandReplayer v-model="replayStep" :hand="SAMPLE_HAND" @node-change="(n) => (lastEvent = `nodeChange ${n ? nodeKeyLabel(n) : 'none'}`)" />
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">PredictionGate</h2>
+        <PredictionGate
+          question="What percentage of the time does your pool fold to this bet?"
+          answer-type="percent"
+          :tolerance="5"
+          hint="MDF is the baseline against a balanced opponent. Your pool is not one."
+          :committed="guess"
+          :actual="guess === null ? null : '62'"
+          @submit="(a) => { guess = a; lastEvent = `gate submit ${a}`; }"
+          @reveal="(o) => (lastEvent = `gate reveal ${o.withinTolerance ? 'right' : 'off'}`)"
+        />
+        <PoolDataBadge :tier="1" :sample-size="8786" :enough="true" :min-n="100" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">StepperNav</h2>
+        <div class="max-w-xs"><StepperNav :steps="STEP_LABELS" :current="analysisStep" :completed="[1, 2]" @navigate="(s) => (analysisStep = s)" /></div>
+      </div>
     </section>
   </div>
 </template>

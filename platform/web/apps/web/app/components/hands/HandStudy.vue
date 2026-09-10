@@ -7,18 +7,20 @@ import { canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/c
 import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel, PoolDataBadge, PotOddsPanel, RangeMatrix } from '@poker/ui';
 import { computed, ref } from 'vue';
 
+import { createAnalysesApi } from '~/analyze/api';
 import type { NodeRanges } from '~/hands/panels';
 import { NO_RANGES, createNodeRangeReader } from '~/hands/panels';
 import type { NodeFrequencies } from '~/pool/api';
 import { createPoolApi } from '~/pool/api';
 import { useRangesStore } from '~/stores/ranges';
 
-const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null }>();
+const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null; handText?: string }>();
 
 const store = useRangesStore();
 const { service } = useEquityService();
 const reader = createNodeRangeReader((key) => store.lookup(key));
 const poolApi = createPoolApi(useApi());
+const analysesApi = createAnalysesApi(useApi());
 
 const step = ref(0);
 const node = ref<NodeKey | null>(null);
@@ -65,6 +67,32 @@ const mine = computed(() => body(ranges.value.mine));
 const villain = computed(() => body(ranges.value.villain));
 const both = computed<WeightedRange[]>(() => (mine.value !== null && villain.value !== null ? [mine.value, villain.value] : []));
 const watched = computed(() => props.hand.seats.find((s) => s.seat === props.watchSeat) ?? props.hand.seats.find((s) => s.isHero) ?? null);
+
+/**
+ * Take this exact situation into the 9-step analyzer (spec §15). A pasted hand carries its own
+ * text, because nothing on the server has stored it (ADR-029) and the analysis must reopen.
+ */
+const starting = ref(false);
+
+async function analyzeThisNode(): Promise<void> {
+  const key = node.value;
+  if (key === null || starting.value) return;
+  starting.value = true;
+  try {
+    const stored = props.hand.handUid !== '';
+    const created = await analysesApi.create({
+      title: `${nodeKeyLabel(key)} · ${props.hand.playedAt.slice(0, 10)}`,
+      source: stored ? 'stored' : 'pasted',
+      hand_uid: stored ? props.hand.handUid : '',
+      hand_text: stored ? '' : (props.handText ?? ''),
+      node_key: key,
+      action_index: state.value?.index ?? 0,
+    });
+    await navigateTo(`/analyze/${created.id}`);
+  } finally {
+    starting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -77,6 +105,7 @@ const watched = computed(() => props.hand.seats.find((s) => s.seat === props.wat
           <h2 class="font-medium">Situation</h2>
           <span class="text-sm text-zinc-500" data-testid="study-node">{{ node ? nodeKeyLabel(node) : 'before the first decision' }}</span>
           <NuxtLink v-if="node" :to="`/ranges/compare?hero=${node.hero_position}&street=${node.street}`" class="ml-auto text-sm underline">Compare here</NuxtLink>
+          <button v-if="node" type="button" class="rounded border border-zinc-300 px-2 py-0.5 text-sm dark:border-zinc-700" data-testid="study-analyze" :disabled="starting" @click="analyzeThisNode">Analyze this node</button>
         </div>
         <p v-if="watched" class="text-sm text-zinc-500" data-testid="study-watching">Watching {{ watched.position }} {{ watched.name }}<span v-if="watched.cards.length"> with {{ watched.cards.join(' ') }}</span></p>
 

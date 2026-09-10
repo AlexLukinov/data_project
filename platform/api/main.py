@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.db import clickhouse
 from api.routers import (
+    analyses,
     auth,
     definitions,
     hands,
@@ -89,6 +90,7 @@ app.include_router(saved.router)
 app.include_router(hero.router)
 app.include_router(pool.router)
 app.include_router(ranges.router)
+app.include_router(analyses.router)
 
 
 @app.exception_handler(Exception)

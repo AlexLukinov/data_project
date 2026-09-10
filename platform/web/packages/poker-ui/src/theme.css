@@ -26,6 +26,8 @@
   --pk-villain: #c2410c;
   --pk-diff-more: 160 60% 38%;
   --pk-diff-less: 330 70% 48%;
+  --pk-good: #15803d;
+  --pk-bad: #b91c1c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,5 +53,7 @@
     --pk-villain: #fb923c;
     --pk-diff-more: 160 60% 55%;
     --pk-diff-less: 330 80% 65%;
+    --pk-good: #4ade80;
+    --pk-bad: #f87171;
   }
 }
