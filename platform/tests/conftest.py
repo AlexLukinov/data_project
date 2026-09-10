@@ -34,3 +34,14 @@ def stars_edge_text() -> str:
 def gg_text() -> str:
     """GGPoker Rush & Cash hands with anonymized opponents."""
     return _read("ggpoker", "rush_nl50.txt")
+
+
+@pytest.fixture(scope="session")
+def gg_observed_text() -> str:
+    """A GGPoker hand from an OBSERVED table, in the shape the pool corpus is exported in.
+
+    Written by hand in the real format rather than copied from the corpus: the real files are
+    third-party personal data. What matters is the shape — `Dealt to <name>` with no cards for
+    every seat, and the revealed cards printed only in the per-seat SUMMARY lines.
+    """
+    return _read("ggpoker", "observed_nl25.txt")

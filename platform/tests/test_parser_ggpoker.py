@@ -228,3 +228,32 @@ def test_cash_drop_is_not_confused_with_rake_side_drops() -> None:
     assert hand.cash_drop == Decimal("2.50")
     assert hand.jackpot_drop == Decimal("0")
     assert hand.rake == Decimal("0.25")
+
+
+def test_observed_table_cards_come_from_the_summary(gg_observed_text: str) -> None:
+    """On an observed table the SUMMARY is the only place a player's cards are printed.
+
+    Skipping the summary block cost the pool 1.84M of 2.23M showdown seats their hole cards
+    (docs/POKER_PLAN.md §6, F.8) — 100% of the cardless showdown seats in a 371-hand sample had
+    their cards sitting in this block.
+    """
+    hand = _hands(gg_observed_text)[0]
+    by_seat = {p.seat: p for p in hand.players}
+
+    assert by_seat[3].hole_cards == ("Qd", "Js")
+    assert by_seat[4].hole_cards == ("Qs", "Kd")
+    assert by_seat[3].went_to_showdown and by_seat[4].went_to_showdown
+    # `Dealt to <name>` with no cards must not become a hand, and a folder gets nothing.
+    assert all(by_seat[s].hole_cards == () for s in (1, 2, 5, 6))
+    assert not any(by_seat[s].went_to_showdown for s in (1, 2, 5, 6))
+    assert hand.unparsed_lines == ()
+    assert validate(hand).ok
+
+
+def test_summary_cards_never_override_what_the_hand_already_showed(gg_text: str) -> None:
+    """A self-export already has hero's cards from `Dealt to`; the summary must not touch them."""
+    hand = _hands(gg_text)[0]
+    hero = hand.hero
+    assert hero is not None and hero.hole_cards == ("Qh", "Qs")
+    # Nobody else showed in that hand, so nobody else gains cards from the summary.
+    assert all(p.hole_cards == () for p in hand.players if not p.is_hero)

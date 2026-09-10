@@ -36,7 +36,7 @@ from core.enums import Site
 from core.models import CanonicalHand
 from parser.base import SNIFF_WINDOW_CHARS
 from parser.errors import HandParseError
-from parser.sites.pokerstars import lines
+from parser.sites.pokerstars import actions, lines
 from parser.sites.pokerstars.finalize import finalize
 from parser.sites.pokerstars.grammar import HEADER
 from parser.sites.pokerstars.header import parse_header
@@ -140,8 +140,11 @@ class PokerStarsParser:
                 return
         if state.in_summary:
             state.note_kind("summary")
-            return  # per-seat summary lines add nothing we haven't already captured
-        if not lines.action_line(line, state):
+            # Per-seat summary lines carry the revealed cards on an observed table, and
+            # nothing else this parser has not already captured.
+            lines.summary_seat_line(line, state)
+            return
+        if not actions.action_line(line, state):
             # A line inside the action block that matched no known pattern. This is exactly
             # what a format change looks like on its first day.
             state.unparsed.append(line)

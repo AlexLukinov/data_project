@@ -61,13 +61,22 @@ function round(value: number, places: number): number {
 }
 
 interface Line {
+  /** The decisions on the node's own street — what the key's sequence carries. */
   readonly steps: readonly ActionStep[];
+  /** Every decision of the hand so far, which is where the opponent is still visible. */
+  readonly all: readonly ActionStep[];
   readonly street: Street;
 }
 
-/** The decisions taken before state `index`, as steps, with sizes and the street they ended on. */
+/**
+ * The decisions taken before state `index`, as steps, and the street they ended on.
+ *
+ * Only the **last street's** decisions are kept: a `NodeKey` has one `street` and a flat
+ * sequence, so a turn node whose sequence still carried the preflop and flop actions would
+ * describe a line no seat ever took, and the pool would answer "never seen" (ADR-028).
+ */
 function lineBefore(hand: ReplayHand, index: number, seats: Map<number, Position>): Line | null {
-  const steps: ActionStep[] = [];
+  const taken: { step: ActionStep; on: Street }[] = [];
   let raises = 0;
   let street: Street = 'preflop';
   for (const action of hand.actions.slice(0, index)) {
@@ -81,9 +90,15 @@ function lineBefore(hand: ReplayHand, index: number, seats: Map<number, Position
     if (position === undefined) return null;
     const verb = nodeAction(action, raises);
     if (AGGRESSIVE.has(verb)) raises += 1;
-    steps.push({ position, action: verb, ...sizes(action, verb, hand.bigBlind) });
+    taken.push({ step: { position, action: verb, ...sizes(action, verb, hand.bigBlind) }, on });
   }
-  return steps.length === 0 ? null : { steps, street };
+  const last = taken.at(-1);
+  if (last === undefined) return null;
+  return {
+    steps: taken.filter((t) => t.on === last.on).map((t) => t.step),
+    all: taken.map((t) => t.step),
+    street: last.on,
+  };
 }
 
 /**
@@ -123,7 +138,9 @@ export function nodeKeyAt(hand: ReplayHand, index: number): NodeKey | null {
   const last = line?.steps.at(-1);
   if (line === null || last === undefined) return null;
   const hero = last.position;
-  const villain = villainOf(line.steps, hero);
+  // The opponent is looked for across the whole hand, not only this street: on the turn the
+  // seat hero is playing against may last have acted preflop, and it is still that seat.
+  const villain = villainOf(line.all, hero);
   const pair = new Set<Position>(villain === null ? [hero] : [hero, villain]);
   return nodeKey(hero, {
     stake: hand.stake.slice(0, MAX_STAKE_CHARS),

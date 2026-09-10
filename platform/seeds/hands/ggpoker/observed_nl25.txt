@@ -1,0 +1,45 @@
+Poker Hand #RC9000000001: Hold'em No Limit ($0.10/$0.25) - 2025/05/13 16:32:29
+Table 'RushAndCash19175497' 6-max Seat #1 is the button
+Seat 1: Watcher1 ($63.21 in chips)
+Seat 2: Watcher2 ($22.47 in chips)
+Seat 3: Watcher3 ($19.29 in chips)
+Seat 4: Watcher4 ($25.35 in chips)
+Seat 5: Watcher5 ($35.56 in chips)
+Seat 6: Watcher6 ($33.55 in chips)
+Watcher2: posts small blind $0.10
+Watcher3: posts big blind $0.25
+*** HOLE CARDS ***
+Dealt to Watcher1
+Dealt to Watcher2
+Dealt to Watcher3
+Dealt to Watcher4
+Dealt to Watcher5
+Dealt to Watcher6
+Watcher4: raises $0.50 to $0.75
+Watcher5: folds
+Watcher6: folds
+Watcher1: folds
+Watcher2: folds
+Watcher3: calls $0.50
+*** FLOP *** [5c 4c Jd]
+Watcher3: checks
+Watcher4: bets $0.53
+Watcher3: calls $0.53
+*** TURN *** [5c 4c Jd] [4d]
+Watcher3: checks
+Watcher4: bets $1.87
+Watcher3: calls $1.87
+*** RIVER *** [5c 4c Jd 4d] [6h]
+Watcher3: checks
+Watcher4: checks
+*** SHOWDOWN ***
+Watcher3 collected $6.08 from pot
+*** SUMMARY ***
+Total pot $6.40 | Rake $0.32 | Jackpot $0.00 | Bingo $0 | Fortune $0 | Tax $0
+Board [5c 4c Jd 4d 6h]
+Seat 1: Watcher1 (button) folded before Flop (didn't bet)
+Seat 2: Watcher2 (small blind) folded before Flop
+Seat 3: Watcher3 (big blind) showed [Qd Js] and won ($6.08)
+Seat 4: Watcher4 showed [Qs Kd] and lost
+Seat 5: Watcher5 folded before Flop (didn't bet)
+Seat 6: Watcher6 folded before Flop (didn't bet)

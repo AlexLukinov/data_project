@@ -142,7 +142,7 @@ working code and a stale status file has lost the work, because the next session
 - **Poker platform docs** (the product; separate from the lab): `docs/POKER_STATUS.md` (live
   progress — read first), **`POKER_PLAN.md` (the v2 plan being implemented — read second)**,
   `POKER_AUDIT.md` (2026-09-09 audit: what is sound, what is broken, why v2), `POKER_DECISIONS.md`
-  (ADRs 001–032), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
+  (ADRs 001–033), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
   `POKER_DATA_MODEL.md`, `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md` (the last five are
   2026-09-06 planning snapshots; where they disagree with AUDIT/PLAN, AUDIT/PLAN win). Prefixed
   because `docs/ARCHITECTURE.md` is the lab's. The product gets its own docker-compose stack; the

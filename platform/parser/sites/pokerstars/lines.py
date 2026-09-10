@@ -13,26 +13,20 @@ from core.ids import player_key
 from core.models import HandPlayer, PotWinner
 from parser.base import parse_money
 from parser.sites.pokerstars.grammar import (
-    ACT_CASHOUT,
-    ACT_POST,
-    ACT_RAISE,
-    ACT_SHOW,
-    ACT_SIMPLE,
     BOARD,
     CARDS_IN_BRACKETS,
     CASH_DROP,
     COLLECTED,
     DEALT,
     DROPS,
-    POST_TO_ACTION,
     RAKE,
     SEAT,
+    SEAT_SUMMARY,
     STREET_BY_MARK,
     STREET_MARK,
     TABLE,
     TOTAL_POT,
     UNCALLED,
-    VERB_TO_ACTION,
 )
 from parser.sites.pokerstars.state import HandState
 
@@ -114,6 +108,31 @@ def dealt_line(line: str, state: HandState) -> None:
         state.dealt_first = name
 
 
+def summary_seat_line(line: str, state: HandState) -> bool:
+    """`Seat 3: name (big blind) showed [Qd Js] and won ($6.08)` — cards, from the summary.
+
+    On an observed table this is the ONLY place a villain's revealed cards appear, so skipping
+    the summary block costs the pool its showdown ranges (docs/POKER_PLAN.md §6, F.8). On a
+    self-exported hand the same cards already arrived from `Dealt to` or `: shows [..]`, and
+    `setdefault` leaves those alone.
+
+    The seat number identifies the player, not the printed name: the name is followed by an
+    optional position parenthetical, and matching it loosely would attach cards to the wrong
+    seat on a table with lookalike names.
+    """
+    match = SEAT_SUMMARY.match(line)
+    if not match:
+        return False
+    seat = int(match.group("seat"))
+    player = next((p for p in state.hand.players if p.seat == seat), None)
+    if player is None:
+        return True
+    state.dealt_cards.setdefault(player.screen_name, tuple(match.group("cards").split()))
+    # Both verbs mean the hand was shown down: cards are only printed here when they were.
+    state.showdown_seats.add(seat)
+    return True
+
+
 def uncalled_line(line: str, state: HandState) -> None:
     """`Uncalled bet ($5.50) returned to Hero`."""
     match = UNCALLED.match(line)
@@ -171,110 +190,3 @@ def board_line(line: str, state: HandState) -> None:
     match = BOARD.match(line)
     if match:
         state.hand.board = tuple(match.group("cards").split())
-
-
-def action_line(line: str, state: HandState) -> bool:
-    """Apply an action line. Returns False when nothing matched."""
-    if ":" not in line:
-        return False
-    return (
-        _raise(line, state)
-        or _post(line, state)
-        or _simple(line, state)
-        or (_cashout(line, state) or _show(line, state))
-    )
-
-
-def _raise(line: str, state: HandState) -> bool:
-    match = ACT_RAISE.match(line)
-    if not match:
-        return False
-    state.note_kind("raise")
-    seat = state.seat_of(match.group("name"))
-    if seat is None:
-        return True
-    to_total = parse_money(match.group("to"))
-    # `raises X to Y`: Y is the player's total for the street, so the chips actually
-    # added now are Y minus whatever they already had in on this street. Getting this
-    # wrong is the classic parser bug, and pot-math validation catches it.
-    state.add_action(
-        seat,
-        ActionType.RAISE,
-        amount=to_total - state.invested_this_street(seat),
-        amount_to=to_total,
-        is_allin=bool(match.group("allin")),
-    )
-    return True
-
-
-def _post(line: str, state: HandState) -> bool:
-    match = ACT_POST.match(line)
-    if not match:
-        return False
-    state.note_kind("post")
-    seat = state.seat_of(match.group("name"))
-    if seat is None:
-        return True
-    action_type = POST_TO_ACTION.get(match.group("what"), ActionType.POST_DEAD)
-    amount = parse_money(match.group("amt") or "")
-    state.add_action(seat, action_type, amount=amount, amount_to=amount)
-    if action_type is ActionType.POST_ANTE:
-        state.hand.ante = max(state.hand.ante, amount)
-    elif action_type is ActionType.POST_STRADDLE:
-        state.hand.straddle = max(state.hand.straddle, amount)
-    return True
-
-
-def _simple(line: str, state: HandState) -> bool:
-    match = ACT_SIMPLE.match(line)
-    if not match:
-        return False
-    state.note_kind("action")
-    seat = state.seat_of(match.group("name"))
-    if seat is None:
-        return True
-    amount = parse_money(match.group("amt") or "")
-    state.add_action(
-        seat,
-        VERB_TO_ACTION[match.group("verb")],
-        amount=amount,
-        amount_to=state.invested_this_street(seat) + amount,
-        is_allin=bool(match.group("allin")),
-    )
-    return True
-
-
-def _cashout(line: str, state: HandState) -> bool:
-    match = ACT_CASHOUT.match(line)
-    if not match:
-        return False
-    state.note_kind("cashout")
-    seat = state.seat_of(match.group("name"))
-    if seat is not None and match.group("amt"):
-        # Recorded on the player, not as a pot contribution: the cashout fee leaves the
-        # player's stack without entering the pot, so adding it to `contributed` would
-        # break the pot-math reconciliation it is not part of.
-        player = state.hand.player_at(seat)
-        if player is not None:
-            player.extra["cashout_risk"] = match.group("amt")
-    return True
-
-
-def _show(line: str, state: HandState) -> bool:
-    match = ACT_SHOW.match(line)
-    if not match:
-        return False
-    state.note_kind("show")
-    seat = state.seat_of(match.group("name"))
-    if seat is None:
-        return True
-    cards = match.group("cards")
-    if cards:
-        state.dealt_cards.setdefault(match.group("name").strip(), tuple(cards.split()))
-    is_show = match.group("verb") == "shows"
-    state.add_action(seat, ActionType.SHOW if is_show else ActionType.MUCK)
-    # Declining to show after everyone folded is NOT a showdown. Counting it as one
-    # would inflate WTSD on every hand won without a call.
-    if is_show or match.group("verb") == "mucks":
-        state.showdown_seats.add(seat)
-    return True

@@ -5,7 +5,7 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI), F.2 (equity engine + Worker service), F.3 (metrics, blockers, distribution), F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`), D.2 (sign-in with the token in memory and silent refresh) and F.5 (metrics panels, the equity graph, glossary tooltips) and F.6 (the range library with versions, `packages/poker-importers`, folder import with review, the three-way comparison) committed; F.7 (the hand replayer: visual table, replay engine, `nodeKeyAt`, paste and situation search, every panel bound to the current node) verified and uncommitted; CI run pending a push**
+**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI), F.2 (equity engine + Worker service), F.3 (metrics, blockers, distribution), F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`), D.2 (sign-in with the token in memory and silent refresh) and F.5 (metrics panels, the equity graph, glossary tooltips) and F.6 (the range library with versions, `packages/poker-importers`, folder import with review, the three-way comparison) committed; F.7 (the hand replayer: visual table, replay engine, `nodeKeyAt`, paste and situation search, every panel bound to the current node) committed; CI run pending a push**
 **Last updated:** 2026-09-10 (session 7, Range Lab F.0 → F.6, D.2)
 
 ---
@@ -15,7 +15,7 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.8** (pool integration, tiers 1 and 2), then **F.9**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.9** (the 9-step analyzer), then **F.10**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…031) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
@@ -59,7 +59,39 @@ the five cached ranges under the offline banner; no console errors. Two defects 
 browser and fixed with tests (reactive proxies handed to IndexedDB; the `3-bet_v2` tokenizer).
 `make check` 338 unit tests, 5 new integration tests; `make web-check` 277 tests.
 
-**Where F.7 stands (2026-09-10):** done and **verified, uncommitted** (ADR-032). The replay
+**Where F.8 stands (2026-09-10):** done and **verified, uncommitted** (ADR-033). It began with
+the question the plan put first, and the answer changed the step: **the pool's missing showdown
+cards were a parser gap, not missing data.** Observed GGPoker tables print a card-less
+`Dealt to <name>` line for every seat and the revealed cards **only** in the per-seat SUMMARY
+(`Seat 3: name (big blind) showed [Qd Js] and won ($6.08)`), and the parser skipped the summary
+block. Of 752 cardless showdown seats sampled from 371 real pool hands, 752 had their cards
+there. `grammar.SEAT_SUMMARY` + `lines.summary_seat_line` fix it — keyed on the seat number, and
+`setdefault` so a self-export's own cards are never overwritten — taking a whole real pool file
+from **168 of 907 showdown seats with cards (18.5%) to 923 of 923 (100%)**. Nothing changes in
+the database until the corpus is re-parsed: that plan is [POKER_PLAN.md](POKER_PLAN.md) §5b and
+is the founder's to schedule. `parser/sites/pokerstars/lines.py` hit the 300-line limit on the
+way and its action handlers now live in `actions.py`.
+
+The engine: `raise_to_bb` gains buckets; `analysis/pool/node_filter.py` turns a `NodeKey` into
+the filter over `decisions` (position, street, `facing`, the seat's own line, table size, the
+effective-stack **bucket**, stake, texture tags looked up in the flop dimensions), naming the
+villain only through a column that means it (`last_raiser_position`, `opener_position`, else
+`is_ip`); `analysis/pool/node_service.py` answers tier 1 and tier 2 as `run_report` calls and
+refuses to print a figure under `MIN_N = 100`. `POST /v1/pool/node/{frequencies,showdown-range}`
+take the typed key. UI: `PoolDataBadge`, the pool column of `/ranges/compare` built from the
+field's own showdown counts (per **combo**, so a 12-combo class is not double-counted), and the
+replayer's situation panel. **Verified in Chrome against the real pool, read-only** (the API on
+the real ClickHouse, auth on the test Postgres, nothing written): one of the founder's own NL10
+hands replayed node by node — `HJ fold · 100bb · NL10` fold 78.8% / raise 20.7% / call 0.5%
+(n = 1,443,908); `BB call vs CO 2.5bb · 40bb` 61.4 / 32.3 / 6.3 (n = 32,239); `BB bet vs CO ·
+turn` check 68.8% / bet 31.2% (n = 8,786) — and `/ranges/compare` drew the pool's UTG-RFI
+showdown range (AA 100%, AKs 64%, AQs 35%; n = 27,867; "0.5% of the decisions here were shown
+down"), while a trips flop said **"insufficient data — 35 of the 100 needed"** — **acceptance
+10**. One defect found in the browser and fixed on both sides: `nodeKeyAt` carried every street's
+decisions into the sequence, so every postflop node asked for a line nobody ever took.
+`make check` 377, `make test-all` 410 (33 integration), `make web-check` 323.
+
+**Where F.7 stands (2026-09-10):** committed as `317fab4` (ADR-032). The replay
 engine is in `poker-core/src/hand/`: `types.ts` (one hand shape for all three sources),
 `replay.ts` (`replayStates` — one state per step; chips are tracked as *committed in front* plus
 the *settled pot*, and the street's bets are collected exactly when the next card is dealt), and
@@ -125,43 +157,37 @@ is green; `make check` was 310 then (338 after F.6). CI job `web` (Node 24) is i
 dev-only) and the CC-BY-3.0 `spdx-exceptions` data file are flagged there for the founder.
 
 **Do this:**
-1. F.7 is done and verified (`make check` 354, `make test-all` 385, `make web-check` 317;
-   acceptance 8 checked in Chrome on the test databases), **uncommitted** — commit it as one
-   commit when the founder says so: `stats/{hands.py,request.py}`, `tests/test_hand_search.py`,
-   `api/{hand_parse,hand_query,schemas_hands,schemas}.py`, `api/routers/{hands,pool}.py`,
-   `tests/{test_hand_parse,test_hands_rows}.py`, `tests/integration/test_hands.py`,
-   `Makefile` and `.github/workflows/ci.yml` (the auth rate limit raised for the suite, which
-   signs in from one address many times a minute; the limiter itself is unit-tested);
-   `web/packages/poker-core/src/hand/` + `src/{index,node}.ts` +
-   `test/{replay,hand-node}.test.ts` + `test/fixtures/hand.ts`;
-   `web/packages/poker-ui/src/{table.ts,index.ts}` +
-   `src/components/{PokerTable,HandActionLog,HandReplayer}.vue` + `test/replayer.test.ts`;
-   `web/apps/web/app/hands/` (whole directory), `composables/useHands.ts`,
-   `components/hands/HandStudy.vue`, `pages/hands/`, `pages/dev/components.vue`, `app.vue`,
-   `auth/api.ts` and `ranges/library.ts` (`describeApiError` extracted, the library delegates);
-   docs (plan, this file, ADR-032, `CLAUDE.md`). Nothing on `feat/range-lab` is pushed yet;
-   after a push, when the CI `web` job is green, tick **F.1** in the plan.
-2. **F.8 Pool integration, tiers 1 and 2** (plan F.8; spec §10; ADR-028; acceptance 10).
-   Concretely, and **in this order**:
-   - **First, the open question.** Read the raw text of pool showdown hands and explain why only
-     387,740 of 2,227,803 pool showdown seats carry hole cards (report §7). Query
-     `core.hands.raw_text` for hands whose `hand_players.went_to_showdown = 1` and
-     `hole_cards = ''`, and compare with ones that do carry cards. Write the answer into
-     `POKER_PLAN.md` §6; if it is a parser gap, write a re-parse plan rather than a fix on the
-     spot.
-   - `analysis/pool/nodes.py`: `node_filter(key) -> Node` turning a `NodeKey` into the filter AST
-     over `decisions` (ADR-028: hero position, the action sequence as `preflop_line`/`street_line`
-     prefixes, street, facing, effective stack and board texture buckets). Add the `raise_to_bb`
-     buckets to `stats/registry/dimensions.yaml` and regenerate (`make gen`).
-   - `POST /v1/pool/node/frequencies` (tier 1: `group_by: action` over the node's filter, with
-     `n` per row) and `POST /v1/pool/node/showdown-range` (tier 2: `group_by: hand_class` with
-     `hole_cards != ''`), both refusing to answer under `min_n` — never a fabricated number.
-   - `poker-ui`: `PoolDataBadge` (tier, sample size, confidence), and the pool column of
-     `/ranges/compare` plus the replayer's situation panel bound to it.
-   - **Done means** acceptance 10 for tiers 1 and 2: at any node the pool's actual frequencies
-     appear with tier and sample size, and a node under `min_n` says "insufficient data".
-   - `make check`, `make test-all` and `make web-check` green; then tick F.8, update the plan's
-     Status and §6 and this block, and offer the commit.
+1. F.8 is done and verified (`make check` 377, `make test-all` 410, `make web-check` 323;
+   acceptance 10 checked in Chrome against the real pool, read-only), **uncommitted** — commit
+   it as one commit when the founder says so: `parser/sites/pokerstars/{grammar,lines,parser}.py`
+   + the new `actions.py`, `seeds/hands/ggpoker/observed_nl25.txt`, `tests/conftest.py`,
+   `tests/test_parser_ggpoker.py`; `stats/registry/dimensions.yaml` (`raise_to_bb` buckets);
+   `analysis/pool/{node_filter,node_service}.py`, `tests/test_node_filter.py`,
+   `tests/test_node_service.py`; `api/routers/pool.py`, `tests/integration/test_hands.py`;
+   `web/packages/poker-core/src/hand/node.ts`, `web/packages/poker-ui/src/components/
+   PoolDataBadge.vue` + `src/index.ts`, `web/apps/web/app/pool/` (whole directory),
+   `web/apps/web/app/pages/ranges/compare.vue`, `web/apps/web/app/components/hands/
+   HandStudy.vue`; docs (plan incl. §5b, this file, ADR-033, `CLAUDE.md`). Nothing on
+   `feat/range-lab` is pushed yet; after a push, when the CI `web` job is green, tick **F.1**.
+2. **Decide on the re-parse** ([POKER_PLAN.md](POKER_PLAN.md) §5b). The parser fix is in, but
+   the 9.1M-hand corpus still carries the old parse: pool showdown cards stay at 17.4% until it
+   is re-parsed, and tier 2 is answering from that. It is hours of compute and it moves pool
+   WTSD/W$SD slightly, so it is the founder's call — the plan lists the four steps and what to
+   verify afterwards.
+3. **F.9 The 9-step analyzer** (plan F.9; spec §15; acceptance 9). Concretely:
+   - `poker-ui`: `PredictionGate` (`question`, `answerType`, `tolerance`; emits `submit`,
+     `reveal` — the answer is committed **before** the tool shows its own) and `StepperNav`
+     (`steps`, `current`, `completed`; emits `navigate`).
+   - `apps/web`: `/analyze/[handUid]` (and a paste route) walking the spec's nine steps, each
+     step reading what F.2–F.8 already provide at the replayer's current node: hands and board,
+     my chart, the pool's frequencies with their badge, equity, blockers, distribution, pot odds
+     and MDF.
+   - State: a Pinia store with Dexie autosave, so a half-finished analysis survives a reload;
+     `POST /v1/analyses` + `GET /v1/analyses` to keep them server-side (the same shape as the
+     range library: the server is the record).
+   - **Done means** acceptance 9: all nine steps run on one hand, a prediction committed at each,
+     ending with a saved heuristic. Then tick F.9, update the plan's Status and §6 and this
+     block, and offer the commit.
 
 **Small things noticed, not fixed:** on a machine whose locale uses a comma decimal separator,
 `PotOddsPanel`'s number inputs display `2,5` for 2.5 (a browser rendering of `<input
@@ -473,6 +499,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-10 (22) | **Plan F.8 done — the pool at a node, and the parser gap behind it.** Committed F.7 (`317fab4`). Answered the plan's first question: the pool's missing showdown cards were a **parser gap** — observed GG tables print revealed cards only in the per-seat SUMMARY, which the parser skipped (752 of 752 sampled cardless showdown seats had them there). Fixed with `SEAT_SUMMARY` + `summary_seat_line`; a whole real pool file goes from 18.5% to 100% card coverage on re-parse, and §5b holds the re-parse plan for the founder to schedule. Then the step itself: `raise_to_bb` buckets, `node_filter` (a `NodeKey` as a predicate over `decisions`, the villain named only through a column that means it, the stack by registry bucket), `node_service` tiers 1 and 2 as `run_report` calls, `POST /v1/pool/node/{frequencies,showdown-range}` with `MIN_N = 100` and no numbers below it, `PoolDataBadge`, the pool column of `/ranges/compare` (per-combo weights) and the replayer's frequencies panel. Verified in Chrome against the **real** pool read-only: real nodes answered with n in the millions, the UTG-RFI showdown range drawn with its coverage caveat, a thin node gated — **acceptance 10**. Fixed `nodeKeyAt` carrying every street into the sequence. `make check` 377, `make test-all` 410, `make web-check` 323. ADR-033. Uncommitted. | **Commit F.8, decide on the re-parse, then F.9** (the 9-step analyzer). |
 | 2026-09-10 (21) | **Plan F.7 done — the hand replayer.** Committed F.6 (`951107a`). Replay engine in `poker-core/src/hand/`: one hand shape for all three sources, `replayStates` (chips as *committed in front* plus the *settled pot*; the street's bets collected exactly when the next card is dealt; the engine's pot and to-call checked against the parser's own figures for every action of a real hand), and `nodeKeyAt` (the situation **ending with the decision just made**, so stepping walks the node tree). `poker-ui`: `PokerTable` (6-max oval, stacks in bb, chips in front, board, pot, button, the seat to act, the last action as a bubble, the winner named at the end), `HandActionLog`, `HandReplayer` (step, seek, play, `←`/`→`/space/`1`–`4`). Backend: `POST /v1/hands/parse` (ADR-029 — nothing stored; two hands or a hand that does not reconcile are refused in words), `POST /v1/hands/search` (the report filter asked backwards, answering with decisions so the seat comes too), `GET /v1/pool/hands`, `seat` on `HandSummary`. App: `/hands` (my hands · pool, situation filter), `/hands/[id]`, `/hands/paste`, `HandStudy` binding my stored chart, pot odds, MDF, distribution and equity to the current node. Verified in Chrome on the test databases — **acceptance 8** (the two stored ranges at the node gave 64.2% / 35.8%), a pasted hand replayed, junk refused, pool hands listed on their showdown seat. Found and fixed the `FixedString(16)` hand id in the decision mart (the search was silently empty). `make check` 354, `make test-all` 385, `make web-check` 317. ADR-032. Uncommitted. | **Commit F.7, then F.8** (pool integration, tiers 1 and 2). |
 | 2026-09-10 (20) | **Plan F.6 done — range library and importers.** Committed F.5 (`021f7ae`). `NodeKey` defined once (`analysis/pool/nodes.py`; twin `poker-core/src/node.ts`; `tests/fixtures/nodes.json` parsed by both suites; the sequence ends with hero's action). Postgres `ranges` + append-only `range_versions` (migration `c4d5e6f7a8b9`), `/v1/ranges` (list with filters, bulk with skip-or-version, lookup by the typed key, export, versions, revert as a new version; the body is canonical combo text, validated with the entry number). `packages/poker-importers` (SPH, own JSON, GTO Wizard, Pio, Equilab, CSV, plain text; detection; folder report; filename inference with confidence; `.bin` refused, nothing decoded). App: `/ranges` (browse, filters, backup), `/ranges/[id]` (matrix, `NodeKeyEditor`, history, revert), `/ranges/import` (drop or pick, review table, per-row situation editing, batch source/tool/tags, report), `/ranges/compare` (my chart · solver · pool stub, `RangeDiffView`, `RangeDisagreementTable`); Dexie copy with offline fallback. Verified in Chrome against the API on the `test_` databases: import → review → compare (acceptance 7), versions and revert, offline list. Two browser-found defects fixed with tests. `make check` 338, `make web-check` 277, 5 integration tests. ADR-031. Uncommitted. | **Commit F.6, then F.7** (hand replayer). |
 | 2026-09-10 (19) | **Plan F.5 done — metrics and visualization UI.** Committed D.2 (`3e5cabe`). `packages/poker-ui`: `glossary.ts` (25 terms, one sentence + formula) behind `MetricLabel` (typed `GlossaryKey`; a test scans the components for static labels), `explain.ts` (the "explain the number" templates), `PotOddsPanel` (raw and after-rake, implied odds as an estimate, rake behind Advanced), `MDFPanel` (MDF/alpha, the defending set → villain's matrix), `EQRPanel`, `EquityDistributionChart` + `EquityBucketBars` (plain SVG — ADR-030, no Chart.js, no new dependency), `RangeComparisonPanel` (mean/median, nut split bar, buckets, graph), `RangeDiffView` (signed heatmap on `RangeMatrix`); `poker-core/metrics`: `equityCurve`, `equityAtShare`, `defendingSet`. Wired into `/lab` and `/dev/components`. Found and fixed an F.4 defect: `EquityCalculator` restarted on every parent re-render (fresh `ranges` array) and, once the panels consumed the result, cancelled the exact job forever while Monte Carlo looped — it now watches `equityKey` (regression test). Verified in Chrome without the API: acceptance 3 (exact in 177 ms after a board change, both curves drawn), acceptance 6 (pot 100 / bet 66: 2.5 : 1, 28.4%, MDF 60.2%, alpha 39.8%; after a 5% rake capped at 3: 59.5% / 40.5% / 28.8%), tooltips on all 24 labels. `make web-check` 217 tests. Uncommitted. | **Commit F.5, then F.6** (range library + importers). |

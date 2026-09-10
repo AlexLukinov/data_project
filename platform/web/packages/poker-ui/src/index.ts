@@ -26,6 +26,7 @@ export { default as RangeDiffView } from './components/RangeDiffView.vue';
 export { default as RangeDisagreementTable } from './components/RangeDisagreementTable.vue';
 export { default as NodeKeyEditor } from './components/NodeKeyEditor.vue';
 export { default as PokerTable } from './components/PokerTable.vue';
+export { default as PoolDataBadge } from './components/PoolDataBadge.vue';
 export { default as HandActionLog } from './components/HandActionLog.vue';
 export { default as HandReplayer } from './components/HandReplayer.vue';
 export { actionText, shownCard, shownCards, tableSeats } from './table';

@@ -19,6 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from analysis.pool import cohorts as cohort_service
+from analysis.pool.node_service import NodeFrequencies, NodeShowdownRange
+from analysis.pool.node_service import frequencies as node_frequencies
+from analysis.pool.node_service import showdown_range as node_showdown_range
+from analysis.pool.nodes import NodeKey
 from analysis.pool.service import players as player_lookup
 from analysis.pool.service import pool_report, presets
 from api import cache, hand_query
@@ -168,6 +172,42 @@ async def pool_stats(
 def find_players(user: CurrentUserDep, prefix: Prefix, limit: Limit = 50) -> ReportResult:
     """Pool players whose screen name starts with `prefix`, with headline stats."""
     return player_lookup(prefix, user.tenant_id, limit=limit, cache=report_cache())
+
+
+@router.post("/node/frequencies", response_model=NodeFrequencies)
+async def node_frequencies_at(
+    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
+) -> NodeFrequencies:
+    """Tier 1: what the field does at this situation (spec §10.2).
+
+    The key's last step is not part of the question — it is one of the answers. Under `min_n`
+    observations the answer carries the count and nothing else: no number here may be invented.
+    """
+    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    try:
+        return await run_in_threadpool(
+            node_frequencies, body, user.tenant_id, cohort=cohort, cache=report_cache()
+        )
+    except (ReportError, RegistryError) as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/node/showdown-range", response_model=NodeShowdownRange)
+async def node_showdown_range_at(
+    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
+) -> NodeShowdownRange:
+    """Tier 2: the hands the field turned over at this situation (spec §10.3).
+
+    `covers` says what share of the node's decisions were ever revealed, so the caller can
+    show the range for what it is: the hands shown here, not the hands played here.
+    """
+    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    try:
+        return await run_in_threadpool(
+            node_showdown_range, body, user.tenant_id, cohort=cohort, cache=report_cache()
+        )
+    except (ReportError, RegistryError) as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.get("/hands", response_model=list[HandSummary])

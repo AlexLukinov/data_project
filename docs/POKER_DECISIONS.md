@@ -42,6 +42,7 @@ not a change I've made.
 | [030](#adr-030--charts-in-poker-ui-are-hand-drawn-svg-not-a-chart-library) | Charts in `poker-ui` are hand-drawn SVG, not a chart library | ✅ |
 | [031](#adr-031--the-range-library-the-server-is-the-record-versions-are-append-only-nodekey-lands-with-it-importers-are-pure-functions) | The range library: server is the record, versions append-only, `NodeKey` lands with it, importers are pure functions | ✅ |
 | [032](#adr-032--the-replayer-one-hand-shape-from-three-sources-states-are-derived-the-node-is-the-decision-just-made) | The replayer: one hand shape from three sources, states are derived, the node is the decision just made | ✅ |
+| [033](#adr-033--what-the-pool-may-say-a-node-is-only-as-good-as-its-columns-and-a-range-is-only-the-hands-that-were-shown) | What the pool may say: a node is only as good as its columns, and a range is only the hands that were shown | ✅ |
 
 ---
 
@@ -1083,3 +1084,53 @@ its own escaping and length limit, for no gain.
 and F.9's analyzer opens from the replayer's current state. A hand from any table can be
 replayed by pasting it, at the cost of needing the API for that one feature. The pot shown at
 the end of a hand is the pot before rake and the award, which is what the summary line says.
+
+---
+
+## ADR-033 — What the pool may say: a node is only as good as its columns, and a range is only the hands that were shown
+**Status:** ✅ Recommended. Phase F.8, 2026-09-10.
+
+**Context.** ADR-028 settled that a node *is* a filter over `marts.decisions`. Building
+`node_filter()` and the two tiered answers turned up three things that decision did not
+settle: what to do when a `NodeKey` names something the decision fact has no column for, what a
+"pool range" actually is when it is built from showdowns, and when the product is allowed to
+show a number at all.
+
+**Decision.**
+
+- **Only ever filter on what a column means.** The seat hero is facing becomes
+  `last_raiser_position` when it is the seat that bet or raised, and preflop `opener_position`
+  when it opened. Anywhere else — a caller on the turn — the position is **not** named, because
+  neither column means "the seat that called", and naming it returns nothing. What is kept
+  instead is `is_ip`, which is a column and is the part of "who am I against" that changes the
+  decision. A `NodeKey` is a description; the filter says only the part of it the fact can
+  answer, and says it exactly.
+- **The sequence is one street's.** A `NodeKey` has a single `street` and a flat sequence, so
+  `nodeKeyAt` (the replayer) emits only the decisions on the node's own street; the opponent is
+  still taken from the whole hand. Carrying every street's actions in the sequence made the
+  filter ask for a line no seat ever took, and every postflop node in the replayer came back
+  "never seen" — found in the browser, fixed with tests on both sides.
+- **`eff_stack_bb` matches a registry bucket, never a float.** The column is a `Float32`; an
+  equality on 100 would match almost nothing. `node_filter` looks the value up in
+  `dimensions.yaml`'s own buckets and emits a `between`, so the boundary is written once.
+- **A showdown range is the hands that were shown, and says so.** Tier 2 answers with `covers`
+  — the share of the node's decisions whose cards were ever revealed — because a range built
+  from showdowns is biased towards hands that get to showdown, and the reader must be able to
+  see how bad the bias is. On the current corpus that figure is around half a percent, which is
+  itself the argument for the re-parse in `POKER_PLAN.md` §5b.
+- **Counts become a range per combo, not per class.** A class with twelve combos is shown twice
+  as often as one with six at equal per-combo likelihood, so the weight of a class is its count
+  *divided by its combos*, scaled so the most frequent class is 1. Built by rendering class
+  notation and parsing it, so the one tested path into a `WeightedRange` stays the only one.
+- **`MIN_N = 100`, and under it there are no numbers at all** — not greyed-out ones. The answer
+  carries the count and `enough: false`; `PoolDataBadge` prints "insufficient data — 57 of the
+  100 needed". Every number the pool shows arrives with its tier and its sample size beside it.
+
+**Alternatives.** *Name the villain's position on every node* — silently empty answers, which is
+worse than a wider node. *Show a percentage with a warning under `min_n`* — the number gets
+quoted and the warning does not travel with it. *Weight classes by raw count* — over-weights
+offsuit hands by a factor of two, which is a wrong range, not a rough one.
+
+**Consequences.** Tier 3 (F.10) inherits the gate, the badge and the per-combo construction. A
+node that mentions a caller is deliberately wider than the words suggest; if that ever matters,
+the answer is a column on `decisions` (a `caller_position`), not a looser filter.

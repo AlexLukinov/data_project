@@ -209,3 +209,46 @@ async def test_my_hand_list_says_which_seat_to_open_on() -> None:
         detail = (await c.get(f"/v1/hands/{listing[0]['hand_uid']}", headers=_auth(token))).json()
         seat = next(p for p in detail["players"] if p["seat"] == listing[0]["seat"])
         assert seat["is_hero"] is True
+
+
+async def test_a_node_the_pool_has_never_played_says_so_rather_than_guessing() -> None:
+    """The `min_n` gate, end to end: no numbers, only the count that fell short (spec §10.5)."""
+    async with AsyncClient(transport=TRANSPORT, base_url="http://test") as c:
+        token = await _new_user(c)
+        node = {
+            "hero_position": "BTN",
+            "villain_position": "UTG",
+            "action_sequence": [
+                {"position": "UTG", "action": "raise", "size_bb": 3},
+                {"position": "BTN", "action": "raise", "size_bb": 9},
+            ],
+        }
+        res = await c.post("/v1/pool/node/frequencies", json=node, headers=_auth(token))
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body == {
+            "tier": 1,
+            "sample_size": 0,
+            "enough": False,
+            "min_n": body["min_n"],
+            "actions": {},
+            "frequencies": {},
+        }
+
+        shown = await c.post("/v1/pool/node/showdown-range", json=node, headers=_auth(token))
+        assert shown.status_code == 200, shown.text
+        assert shown.json()["enough"] is False
+        assert shown.json()["weights"] == {}
+
+
+async def test_a_node_the_registry_cannot_express_is_refused() -> None:
+    async with AsyncClient(transport=TRANSPORT, base_url="http://test") as c:
+        token = await _new_user(c)
+        bad = {"hero_position": "BTN", "street": "flop", "board_texture": ["soggy"]}
+        res = await c.post("/v1/pool/node/frequencies", json=bad, headers=_auth(token))
+        assert res.status_code == 400 and "unknown board texture" in res.json()["detail"]
+
+        camel = {"heroPosition": "BTN"}
+        assert (
+            await c.post("/v1/pool/node/frequencies", json=camel, headers=_auth(token))
+        ).status_code == 422

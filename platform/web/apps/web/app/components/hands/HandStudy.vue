@@ -3,12 +3,14 @@
 // (spec §9.3). The panels ask the range library what is written down for this situation and for
 // what the other seat just did, so stepping forward walks both the hand and my own charts.
 import type { HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
-import { nodeKeyLabel, parseCards, parseRange } from '@poker/core';
-import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel, PotOddsPanel, RangeMatrix } from '@poker/ui';
+import { canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/core';
+import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel, PoolDataBadge, PotOddsPanel, RangeMatrix } from '@poker/ui';
 import { computed, ref } from 'vue';
 
 import type { NodeRanges } from '~/hands/panels';
 import { NO_RANGES, createNodeRangeReader } from '~/hands/panels';
+import type { NodeFrequencies } from '~/pool/api';
+import { createPoolApi } from '~/pool/api';
 import { useRangesStore } from '~/stores/ranges';
 
 const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null }>();
@@ -16,17 +18,40 @@ const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null }>();
 const store = useRangesStore();
 const { service } = useEquityService();
 const reader = createNodeRangeReader((key) => store.lookup(key));
+const poolApi = createPoolApi(useApi());
 
 const step = ref(0);
 const node = ref<NodeKey | null>(null);
 const state = ref<HandState | null>(null);
 const ranges = ref<NodeRanges>(NO_RANGES);
+const pool = ref<NodeFrequencies | null>(null);
 
 async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
   node.value = next;
   state.value = at;
-  ranges.value = await reader.at(props.hand, at.index);
+  pool.value = null;
+  const [found] = await Promise.all([reader.at(props.hand, at.index), askThePool(next)]);
+  ranges.value = found;
 }
+
+/**
+ * What the field does here (tier 1). A silent API leaves the panel empty, never wrong.
+ *
+ * The answer is kept only while it is still the answer to the question on screen — compared by
+ * the situation itself, not by object identity, because `node.value` hands back a reactive
+ * proxy that never equals the key that was asked about.
+ */
+let asked = '';
+
+async function askThePool(key: NodeKey | null): Promise<void> {
+  if (key === null) return;
+  const id = canonicalNodeKey(key);
+  asked = id;
+  const answer = await poolApi.frequencies(key).catch(() => null);
+  if (asked === id) pool.value = answer;
+}
+
+const poolActions = computed(() => Object.entries(pool.value?.frequencies ?? {}).sort((a, b) => b[1] - a[1]));
 
 const board = computed(() => parseCards((state.value?.board ?? []).join(' ')));
 const toCall = computed(() => state.value?.toCall ?? 0);
@@ -54,6 +79,16 @@ const watched = computed(() => props.hand.seats.find((s) => s.seat === props.wat
           <NuxtLink v-if="node" :to="`/ranges/compare?hero=${node.hero_position}&street=${node.street}`" class="ml-auto text-sm underline">Compare here</NuxtLink>
         </div>
         <p v-if="watched" class="text-sm text-zinc-500" data-testid="study-watching">Watching {{ watched.position }} {{ watched.name }}<span v-if="watched.cards.length"> with {{ watched.cards.join(' ') }}</span></p>
+
+        <div v-if="pool" class="space-y-1" data-testid="study-pool">
+          <p v-if="pool.enough" class="flex flex-wrap gap-x-3 text-sm">
+            <span v-for="[action, share] in poolActions" :key="action" class="tabular-nums" :data-testid="`study-pool-${action}`">
+              <span class="text-zinc-500">{{ action }}</span> {{ (share * 100).toFixed(1) }}%
+            </span>
+          </p>
+          <p v-else class="text-sm text-zinc-500">The pool has not played this situation often enough to show frequencies.</p>
+          <PoolDataBadge :tier="1" :sample-size="pool.sample_size" :enough="pool.enough" :min-n="pool.min_n" />
+        </div>
 
         <div v-if="mine">
           <p class="mb-1 text-sm">My chart here: <span class="font-medium" data-testid="study-my-range">{{ ranges.mine?.name }}</span></p>

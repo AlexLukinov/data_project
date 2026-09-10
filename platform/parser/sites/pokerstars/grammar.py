@@ -38,6 +38,16 @@ TABLE = re.compile(
 SEAT = re.compile(
     r"^Seat\s+(?P<seat>\d+):\s+(?P<name>.+?)\s+\((?:[^\d]*)(?P<stack>[\d,.]+)\s+in\s+chips"
 )
+# `Seat 3: name (big blind) showed [Qd Js] and won ($6.08)` in the SUMMARY block. On an
+# OBSERVED table -- which is what the pool corpus is -- this is the only place a villain's
+# revealed cards are printed: the `Dealt to` line carries no cards for anyone, and there is
+# no `: shows [..]` action line. Anchored on the seat number rather than the name, because
+# the name is followed by an optional position parenthetical that is not part of it.
+SEAT_SUMMARY = re.compile(
+    r"^Seat\s+(?P<seat>\d+):\s+(?P<name>.+?)"
+    r"(?:\s+\((?:button|small\s+blind|big\s+blind)\))?"
+    r"\s+(?P<verb>showed|mucked)\s+\[(?P<cards>[^\[\]]+)\]"
+)
 # `.+` (greedy) and an end anchor, not `.+?`: screen names may contain brackets -- there is a
 # in the corpus have names shaped like "Zorb[7]q", and a lazy match reads one as "Zorb" with
 # with hole cards "4". GG also prints `Dealt to <name>` with NO cards for every seat.
