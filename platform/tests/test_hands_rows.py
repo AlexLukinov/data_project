@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from api.routers.hands import action_from_row, detail_from_rows, summary_from_row
+from api.hand_query import action_from_row, detail_from_rows, summary_from_row
 
 HAND = {
     "hand_uid": "abc",
@@ -85,6 +85,7 @@ def test_summary_collapses_board_whitespace() -> None:
         "site": "ggpoker",
         "played_at_utc": datetime(2026, 1, 1, tzinfo=UTC),
         "stake_level": "NL10",
+        "seat": 3,
         "position": "CO",
         "hole_cards": "",
         "board": "Ah Td 7c  ",

@@ -5,7 +5,7 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI), F.2 (equity engine + Worker service), F.3 (metrics, blockers, distribution), F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`), D.2 (sign-in with the token in memory and silent refresh) and F.5 (metrics panels, the equity graph, glossary tooltips) committed; F.6 (the range library with versions, `packages/poker-importers`, folder import with review, the three-way comparison) verified and uncommitted; CI run pending a push**
+**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1 (`poker-core` foundation + licence CI), F.2 (equity engine + Worker service), F.3 (metrics, blockers, distribution), F.4 = D.1 (Nuxt app shell + `poker-ui`, the calculator at `/lab`), D.2 (sign-in with the token in memory and silent refresh) and F.5 (metrics panels, the equity graph, glossary tooltips) and F.6 (the range library with versions, `packages/poker-importers`, folder import with review, the three-way comparison) committed; F.7 (the hand replayer: visual table, replay engine, `nodeKeyAt`, paste and situation search, every panel bound to the current node) verified and uncommitted; CI run pending a push**
 **Last updated:** 2026-09-10 (session 7, Range Lab F.0 → F.6, D.2)
 
 ---
@@ -15,7 +15,7 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.7** (the hand replayer), then **F.8**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.8** (pool integration, tiers 1 and 2), then **F.9**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…031) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
@@ -31,7 +31,7 @@ integration surface are [POKER_RANGE_LAB.md](POKER_RANGE_LAB.md); the decisions 
 the work is plan phase **F**, interleaved with phase D in the order the report's §9 gives
 (F.1–F.3 are headless TypeScript, then D.1 = F.4's app shell). Branch `feat/range-lab`.
 
-**Where F.6 stands (2026-09-10):** done and **verified, uncommitted** (ADR-031). **`NodeKey`
+**Where F.6 stands (2026-09-10):** committed as `951107a` (ADR-031). **`NodeKey`
 now exists** — it was scheduled for F.8 but the library stores it: `analysis/pool/nodes.py`
 (the one definition, ADR-028), `packages/poker-core/src/node.ts` (its twin: `parseNodeKey`,
 canonical JSON, `nodeKeyLabel`), `tests/fixtures/nodes.json` parsed by both suites. The
@@ -58,6 +58,36 @@ Solver: 88 (60.5 weighted)", 12 disagreements — **acceptance 7**; API stopped 
 the five cached ranges under the offline banner; no console errors. Two defects found in the
 browser and fixed with tests (reactive proxies handed to IndexedDB; the `3-bet_v2` tokenizer).
 `make check` 338 unit tests, 5 new integration tests; `make web-check` 277 tests.
+
+**Where F.7 stands (2026-09-10):** done and **verified, uncommitted** (ADR-032). The replay
+engine is in `poker-core/src/hand/`: `types.ts` (one hand shape for all three sources),
+`replay.ts` (`replayStates` — one state per step; chips are tracked as *committed in front* plus
+the *settled pot*, and the street's bets are collected exactly when the next card is dealt), and
+`node.ts` (`nodeKeyAt` — the situation the hand is in, **ending with the decision just made**, so
+stepping walks the node tree and every stored range is one lookup). `poker-ui` gains
+`PokerTable.vue` (6-max oval in CSS: seats with stacks in bb, chips in front, the board, the pot,
+the dealer button, the seat to act, the last action as a bubble, the winner named at the end),
+`HandActionLog.vue` and `HandReplayer.vue` (step, seek, play with speed, `←`/`→`/space/`1`–`4`,
+`nodeChange` on every move). Backend: `api/hand_parse.py` (paste → one hand, or a sentence
+saying why not — two hands are refused rather than truncated, and a hand that does not reconcile
+is refused as the ingest loop refuses to store one), `api/hand_query.py` (the reads both routers
+share), `stats/hands.py` + `HandSearch` (the report filter asked backwards, answering with the
+matching **decisions** so the seat comes too); `POST /v1/hands/parse` (ADR-029),
+`POST /v1/hands/search`, `GET /v1/pool/hands`, and `seat` on `HandSummary`. App: `/hands` (my
+hands · pool, with street/position/facing/action as a situation filter), `/hands/[id]`,
+`/hands/paste`, and `components/hands/HandStudy.vue`, which binds my stored chart, pot odds, MDF,
+the distribution and the equity of my node's range against the villain node's to the current
+step. **Verified in Chrome** against the API on the `test_` databases (`make seed`, the demo
+account): the corpus lists with the seat to open on; hand `38dcad35` steps from the deal to the
+muck with the chips, the flop, the log and the keyboard all behaving; the situation reads
+`BTN RFI · 105bb · NL50` at step 6 and `SB 3-bet vs BTN 3bb · 100bb · NL50` at step 7, where the
+two stored ranges gave **64.2% / 35.8%** and pot odds "calling 5.5 to win 8 is 1.5 : 1, 40.7%" —
+**acceptance 8**; a pasted PokerStars hand replayed and junk text was refused in the parser's own
+words; the Pool tab listed two pool hands, each opening on the seat that showed cards. One defect
+found in the browser and fixed with a test: `marts.decisions.hand_uid` is `FixedString(16)` while
+`core.*` and every URL use the hex form, so the search returned ids matching no hand and the list
+was silently empty. `make check` 354, `make test-all` 385 (8 new integration tests),
+`make web-check` 317.
 
 **Where F.5 stands (2026-09-10):** committed as `021f7ae`.
 
@@ -95,45 +125,48 @@ is green; `make check` was 310 then (338 after F.6). CI job `web` (Node 24) is i
 dev-only) and the CC-BY-3.0 `spdx-exceptions` data file are flagged there for the founder.
 
 **Do this:**
-1. F.6 is done and verified (`make check` 338, `make web-check` 277, 5 integration tests;
-   acceptance 7 checked in Chrome on the test databases), **uncommitted** — commit it as one
-   commit when the founder says so: `analysis/pool/nodes.py`, `tests/fixtures/nodes.json`,
-   `tests/test_nodes.py`, `api/{models_ranges,schemas_ranges,range_library}.py`,
-   `api/routers/ranges.py`, `api/main.py`, `migrations/env.py`,
-   `migrations/versions/c4d5e6f7a8b9_ranges.py`, `tests/test_ranges_schemas.py`,
-   `tests/integration/test_ranges.py`; `web/packages/poker-core/src/{node,index}.ts` +
-   `test/node.test.ts`; `web/packages/poker-importers/` (whole package); `web/packages/poker-ui/
-   src/components/{NodeKeyEditor,RangeDisagreementTable}.vue`, `src/index.ts`, `test/
-   library.test.ts`, `README.md`; `web/apps/web/app/ranges/` (whole directory), `stores/
-   {ranges,auth}.ts` (auth: the typed-`$fetch` cast), `components/ranges/ImportReviewTable.vue`,
-   `pages/ranges/`, `pages/dev/components.vue`, `app.vue`, `nuxt.config.ts`, `package.json`;
-   `web/{package.json,package-lock.json,LICENSES.md}`; docs (plan, this file, ADR-031,
-   `CLAUDE.md`). Nothing on `feat/range-lab` is pushed yet; after a push, when the CI `web`
-   job is green, tick **F.1** in the plan.
-2. **F.7 Hand replayer** (plan F.7 = plan D.7; spec §9; ADR-029; acceptance 8). Concretely:
-   - `packages/poker-ui`: `PokerTable.vue` (SVG/CSS 6-max: seats with stacks and bets, the
-     board, the pot, the dealer button, the active seat, the last action; props `seats`,
-     `board`, `pot`, `activeSeat`, `lastAction`; emits `seatClick`) and `HandReplayer.vue`
-     (step, seek, play, keyboard ← → space; the action log; props `hand`,
-     `currentActionIndex`; emits `update:currentActionIndex` and `nodeChange` carrying the
-     current `NodeKey` from `poker-core/src/node.ts`, the street and the board so far); both
-     on `/dev/components` with a fixture hand.
-   - API (ADR-029, server-side parsing only): `POST /v1/hands/parse` — raw hand text in, the
-     existing `HandDetail` shape out, nothing stored; the parser is reached through the
-     registry (`parser.sites` is forbidden to `api/` by import-linter), hero resolved from the
-     user's poker accounts; `GET /v1/pool/hands` (population hands by filter, same shape as
-     `/v1/hands`); a `filter` parameter on `GET /v1/hands`. Tests: unit with the ASGI transport
-     and a fake runner (`tests/test_api_v2.py` style), integration in the `test_` environment.
-   - App: `/hands` (the list bound to a filter, hero or pool) → `/hands/[id]` with the replayer,
-     plus a "paste a hand" box that calls `/v1/hands/parse`; every panel of the lab (equity,
-     distribution, blockers, pot odds, the library lookup at the current `NodeKey`) rebinds to
-     the node the replayer is on.
-   - `make web-check` and `make check` green.
-3. **Done means** (plan F.7): acceptance 8 — load one of the founder's real hands from the
-   database, step through it on the table, watch every analysis panel rebind to the current
-   node; the same on a pasted hand. Then tick F.7, update the plan's Status and §6 and this
-   block, offer the commit, and start **F.8** (pool integration, tiers 1 and 2 — and first read
-   the raw text of pool showdown hands to explain why only 17% of showdown seats carry cards).
+1. F.7 is done and verified (`make check` 354, `make test-all` 385, `make web-check` 317;
+   acceptance 8 checked in Chrome on the test databases), **uncommitted** — commit it as one
+   commit when the founder says so: `stats/{hands.py,request.py}`, `tests/test_hand_search.py`,
+   `api/{hand_parse,hand_query,schemas_hands,schemas}.py`, `api/routers/{hands,pool}.py`,
+   `tests/{test_hand_parse,test_hands_rows}.py`, `tests/integration/test_hands.py`,
+   `Makefile` and `.github/workflows/ci.yml` (the auth rate limit raised for the suite, which
+   signs in from one address many times a minute; the limiter itself is unit-tested);
+   `web/packages/poker-core/src/hand/` + `src/{index,node}.ts` +
+   `test/{replay,hand-node}.test.ts` + `test/fixtures/hand.ts`;
+   `web/packages/poker-ui/src/{table.ts,index.ts}` +
+   `src/components/{PokerTable,HandActionLog,HandReplayer}.vue` + `test/replayer.test.ts`;
+   `web/apps/web/app/hands/` (whole directory), `composables/useHands.ts`,
+   `components/hands/HandStudy.vue`, `pages/hands/`, `pages/dev/components.vue`, `app.vue`,
+   `auth/api.ts` and `ranges/library.ts` (`describeApiError` extracted, the library delegates);
+   docs (plan, this file, ADR-032, `CLAUDE.md`). Nothing on `feat/range-lab` is pushed yet;
+   after a push, when the CI `web` job is green, tick **F.1** in the plan.
+2. **F.8 Pool integration, tiers 1 and 2** (plan F.8; spec §10; ADR-028; acceptance 10).
+   Concretely, and **in this order**:
+   - **First, the open question.** Read the raw text of pool showdown hands and explain why only
+     387,740 of 2,227,803 pool showdown seats carry hole cards (report §7). Query
+     `core.hands.raw_text` for hands whose `hand_players.went_to_showdown = 1` and
+     `hole_cards = ''`, and compare with ones that do carry cards. Write the answer into
+     `POKER_PLAN.md` §6; if it is a parser gap, write a re-parse plan rather than a fix on the
+     spot.
+   - `analysis/pool/nodes.py`: `node_filter(key) -> Node` turning a `NodeKey` into the filter AST
+     over `decisions` (ADR-028: hero position, the action sequence as `preflop_line`/`street_line`
+     prefixes, street, facing, effective stack and board texture buckets). Add the `raise_to_bb`
+     buckets to `stats/registry/dimensions.yaml` and regenerate (`make gen`).
+   - `POST /v1/pool/node/frequencies` (tier 1: `group_by: action` over the node's filter, with
+     `n` per row) and `POST /v1/pool/node/showdown-range` (tier 2: `group_by: hand_class` with
+     `hole_cards != ''`), both refusing to answer under `min_n` — never a fabricated number.
+   - `poker-ui`: `PoolDataBadge` (tier, sample size, confidence), and the pool column of
+     `/ranges/compare` plus the replayer's situation panel bound to it.
+   - **Done means** acceptance 10 for tiers 1 and 2: at any node the pool's actual frequencies
+     appear with tier and sample size, and a node under `min_n` says "insufficient data".
+   - `make check`, `make test-all` and `make web-check` green; then tick F.8, update the plan's
+     Status and §6 and this block, and offer the commit.
+
+**Small things noticed, not fixed:** on a machine whose locale uses a comma decimal separator,
+`PotOddsPanel`'s number inputs display `2,5` for 2.5 (a browser rendering of `<input
+type="number">`, not a value problem — the figures it computes are right). Worth a look during
+F.12's UX pass.
 
 **Time-independent fingerprint** (v2 tables, purged corpus, verified 2026-09-09 after the
 cut-over; `marts.stats_daily` sums reproduce every figure exactly):
@@ -440,6 +473,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-10 (21) | **Plan F.7 done — the hand replayer.** Committed F.6 (`951107a`). Replay engine in `poker-core/src/hand/`: one hand shape for all three sources, `replayStates` (chips as *committed in front* plus the *settled pot*; the street's bets collected exactly when the next card is dealt; the engine's pot and to-call checked against the parser's own figures for every action of a real hand), and `nodeKeyAt` (the situation **ending with the decision just made**, so stepping walks the node tree). `poker-ui`: `PokerTable` (6-max oval, stacks in bb, chips in front, board, pot, button, the seat to act, the last action as a bubble, the winner named at the end), `HandActionLog`, `HandReplayer` (step, seek, play, `←`/`→`/space/`1`–`4`). Backend: `POST /v1/hands/parse` (ADR-029 — nothing stored; two hands or a hand that does not reconcile are refused in words), `POST /v1/hands/search` (the report filter asked backwards, answering with decisions so the seat comes too), `GET /v1/pool/hands`, `seat` on `HandSummary`. App: `/hands` (my hands · pool, situation filter), `/hands/[id]`, `/hands/paste`, `HandStudy` binding my stored chart, pot odds, MDF, distribution and equity to the current node. Verified in Chrome on the test databases — **acceptance 8** (the two stored ranges at the node gave 64.2% / 35.8%), a pasted hand replayed, junk refused, pool hands listed on their showdown seat. Found and fixed the `FixedString(16)` hand id in the decision mart (the search was silently empty). `make check` 354, `make test-all` 385, `make web-check` 317. ADR-032. Uncommitted. | **Commit F.7, then F.8** (pool integration, tiers 1 and 2). |
 | 2026-09-10 (20) | **Plan F.6 done — range library and importers.** Committed F.5 (`021f7ae`). `NodeKey` defined once (`analysis/pool/nodes.py`; twin `poker-core/src/node.ts`; `tests/fixtures/nodes.json` parsed by both suites; the sequence ends with hero's action). Postgres `ranges` + append-only `range_versions` (migration `c4d5e6f7a8b9`), `/v1/ranges` (list with filters, bulk with skip-or-version, lookup by the typed key, export, versions, revert as a new version; the body is canonical combo text, validated with the entry number). `packages/poker-importers` (SPH, own JSON, GTO Wizard, Pio, Equilab, CSV, plain text; detection; folder report; filename inference with confidence; `.bin` refused, nothing decoded). App: `/ranges` (browse, filters, backup), `/ranges/[id]` (matrix, `NodeKeyEditor`, history, revert), `/ranges/import` (drop or pick, review table, per-row situation editing, batch source/tool/tags, report), `/ranges/compare` (my chart · solver · pool stub, `RangeDiffView`, `RangeDisagreementTable`); Dexie copy with offline fallback. Verified in Chrome against the API on the `test_` databases: import → review → compare (acceptance 7), versions and revert, offline list. Two browser-found defects fixed with tests. `make check` 338, `make web-check` 277, 5 integration tests. ADR-031. Uncommitted. | **Commit F.6, then F.7** (hand replayer). |
 | 2026-09-10 (19) | **Plan F.5 done — metrics and visualization UI.** Committed D.2 (`3e5cabe`). `packages/poker-ui`: `glossary.ts` (25 terms, one sentence + formula) behind `MetricLabel` (typed `GlossaryKey`; a test scans the components for static labels), `explain.ts` (the "explain the number" templates), `PotOddsPanel` (raw and after-rake, implied odds as an estimate, rake behind Advanced), `MDFPanel` (MDF/alpha, the defending set → villain's matrix), `EQRPanel`, `EquityDistributionChart` + `EquityBucketBars` (plain SVG — ADR-030, no Chart.js, no new dependency), `RangeComparisonPanel` (mean/median, nut split bar, buckets, graph), `RangeDiffView` (signed heatmap on `RangeMatrix`); `poker-core/metrics`: `equityCurve`, `equityAtShare`, `defendingSet`. Wired into `/lab` and `/dev/components`. Found and fixed an F.4 defect: `EquityCalculator` restarted on every parent re-render (fresh `ranges` array) and, once the panels consumed the result, cancelled the exact job forever while Monte Carlo looped — it now watches `equityKey` (regression test). Verified in Chrome without the API: acceptance 3 (exact in 177 ms after a board change, both curves drawn), acceptance 6 (pot 100 / bet 66: 2.5 : 1, 28.4%, MDF 60.2%, alpha 39.8%; after a 5% rake capped at 3: 59.5% / 40.5% / 28.8%), tooltips on all 24 labels. `make web-check` 217 tests. Uncommitted. | **Commit F.5, then F.6** (range library + importers). |
 | 2026-09-10 (18) | **Plan D.2 done — sign-in in the SPA.** Committed F.3 (`fd11451`) and F.4 + D.1 (`232e096`). Built `apps/web/app/auth/{api,session,paths}.ts` (framework-free; 17 tests with a fake `$fetch`), the Pinia `stores/auth.ts`, `useApi()` (bearer header, 401 → one shared refresh → retry), `middleware/auth.global.ts` (protected by default, `definePageMeta({ public: true })` opts out), pages `/login`, `/register`, `/account`. Verified in Chrome with `ACCESS_TOKEN_MINUTES=1`: an expired token refreshes silently on the next call (`/me` 401 → `/refresh` 200 → `/me` 200) with the page unchanged; reload resumes from the cookie; sign-out revokes it; no token in `localStorage`. `make web-check` 190 tests. Uncommitted. | **Commit D.2, then F.5** (metrics and visualization UI). |

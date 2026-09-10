@@ -41,6 +41,7 @@ not a change I've made.
 | [029](#adr-029--hand-histories-are-parsed-server-side-only) | Hand histories are parsed server-side only | 🔒 |
 | [030](#adr-030--charts-in-poker-ui-are-hand-drawn-svg-not-a-chart-library) | Charts in `poker-ui` are hand-drawn SVG, not a chart library | ✅ |
 | [031](#adr-031--the-range-library-the-server-is-the-record-versions-are-append-only-nodekey-lands-with-it-importers-are-pure-functions) | The range library: server is the record, versions append-only, `NodeKey` lands with it, importers are pure functions | ✅ |
+| [032](#adr-032--the-replayer-one-hand-shape-from-three-sources-states-are-derived-the-node-is-the-decision-just-made) | The replayer: one hand shape from three sources, states are derived, the node is the decision just made | ✅ |
 
 ---
 
@@ -1031,3 +1032,54 @@ the founder works from more than one machine; the server must win.
 **Consequences.** F.7 and F.9 can offer "the stored range at this node" with one lookup as
 soon as they know the key. F.8's pool column drops into the comparison page where the stub sits.
 A range's history grows one row per save; a purge policy is a later decision if it ever matters.
+
+---
+
+## ADR-032 — The replayer: one hand shape from three sources, states are derived, the node is the decision just made
+**Status:** ✅ Recommended. Phase F.7, 2026-09-10.
+
+**Context.** Spec §9 wants a hand replayed on a visual table with *every analysis panel rebound
+to the current node* as you step. Three sources must feed it — the hero database, the pool
+database, pasted text (ADR-029) — and the panels it feeds are the ones F.2–F.6 already built,
+which take ranges, a board, a pot and a bet.
+
+**Decision.**
+
+- **One shape.** `GET /v1/hands/{uid}` and `POST /v1/hands/parse` both answer `HandDetail`, and
+  the app converts it once (`app/hands/replay.ts`) into `poker-core`'s `ReplayHand`. Nothing
+  below that conversion can tell where a hand came from. An action type the model does not know
+  throws by name rather than being skipped: a parser change must be visible, not silent.
+- **State is derived, never stored.** `replayStates(hand)` returns one state per step — the deal
+  plus one per action. Chips live in two places, *committed in front of a seat* and the *settled
+  pot*, because pot odds are quoted against what is actually in the middle; the street's bets are
+  collected exactly when the next card is dealt, which is what a table does. The engine's pot and
+  amount-to-call are checked against the parser's own `pot_before` and `to_call` for every action
+  of a real hand: two independent computations of the same money.
+- **Awards are not actions.** No parser emits a `win` action — who won which pot is its own table
+  (`core.pot_winners`) — so the replayer leaves the pot in the middle until the hand ends and
+  names the winner from `ReplaySeat.wonHand`. The alternative, inventing an award action during
+  conversion, would put a number in the replayer that no parser produced.
+- **The node is the decision that has just been made.** `nodeKeyAt(hand, step)` builds the
+  `NodeKey` whose sequence *ends with* the seat that just acted — the same convention the range
+  library stores under (ADR-031), so stepping forward walks the node tree and each step is one
+  lookup. A hand whose seats have no derived position yields `null` rather than a key with an
+  invented seat, which would quietly match the wrong stored range. `board_texture` is left empty:
+  the tags are the server's (`int_board_texture`), and a guess here would not match the pool's
+  own bucketing in F.8.
+- **A filter is a document, so it is posted.** The plan said "`filter` on `/v1/hands`";
+  it is `POST /v1/hands/search`, taking `stats.request.HandSearch` — the same filter tree the
+  report engine takes (ADR-022), so a situation built in the Reports workbench opens as a list of
+  hands with no second filter language. The answer is the matching **decisions**, not just the
+  hands: a pool hand has no hero seat, so without the seat the caller would not know whose
+  decision to watch. `HandSummary` gains `seat` for exactly that, and `GET /v1/pool/hands` uses
+  it too — a pool hand opens on a seat that showed cards, else the biggest winner.
+
+**Alternatives.** *A TypeScript hand parser* — rejected in ADR-029 and not reopened. *Storing
+the per-step state server-side* — nothing needs it, and it would make the replayer need the API
+for something the browser already has. *A `filter` query parameter* — a JSON tree in a URL, with
+its own escaping and length limit, for no gain.
+
+**Consequences.** F.8's pool frequencies attach to `nodeKeyAt`'s key with no further plumbing,
+and F.9's analyzer opens from the replayer's current state. A hand from any table can be
+replayed by pasting it, at the cost of needing the API for that one feature. The pot shown at
+the end of a hand is the pot before rake and the award, which is what the summary line says.

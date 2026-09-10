@@ -72,6 +72,9 @@ jobs:
       KAFKA_BULK_TOPIC: test.hands.bulkimport.v1
       KAFKA_CONSUMER_GROUP: test-parser-workers
       REDIS_URL: redis://localhost:6380/1
+      # The suite signs in many times from one address in one minute, which the production
+      # budget exists to stop; the limiter itself is unit-tested in the `check` job.
+      AUTH_RATE_LIMIT_PER_MINUTE: "1000"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

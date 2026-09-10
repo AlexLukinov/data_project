@@ -196,7 +196,8 @@ function facedSize(key: NodeKey, villain: Position): string {
 /** `UTG RFI · 100bb`, `BB call vs CO 2.5bb · 40bb · NL5`, `BB raise vs CO 33% · flop · 100bb`. */
 export function nodeKeyLabel(key: NodeKey): string {
   const last = key.action_sequence.at(-1);
-  const villain = key.villain_position ?? [...key.action_sequence].reverse().find((s) => s.position !== key.hero_position)?.position ?? null;
+  // A seat that folded is not who hero is playing against — it is who got out of the way.
+  const villain = key.villain_position ?? [...key.action_sequence].reverse().find((s) => s.position !== key.hero_position && s.action !== 'fold')?.position ?? null;
   const verb = last !== undefined && last.position === key.hero_position ? heroVerb(key, last) : 'to act';
   const parts = [`${key.hero_position} ${verb}${villain === null ? '' : ` vs ${villain}${facedSize(key, villain)}`}`];
   if (key.street !== 'preflop') parts.push(key.street);

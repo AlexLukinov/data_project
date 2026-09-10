@@ -172,6 +172,9 @@ class HandSummary(BaseModel):
     site: str
     played_at_utc: datetime
     stake_level: str
+    seat: int
+    """Whose row this is: hero's seat in a hero list, the seat that matched in a search. The
+    replayer opens on it, so a pool hand needs no hero to be worth listing."""
     position: str
     hole_cards: str
     board: str

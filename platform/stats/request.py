@@ -29,6 +29,8 @@ MAX_STATS = 40
 MAX_CUSTOM = 20
 MAX_LIMIT = 10_000
 MAX_COHORT_RULES = 10
+MAX_HANDS = 200
+"""Hands one search returns. A replayer list is browsed, not exported."""
 
 CohortOp = Literal["lt", "lte", "gt", "gte"]
 
@@ -121,6 +123,41 @@ class ReportRequest(_Strict):
                 "player_key": None,
                 "compare_to": None,
             }
+        )
+
+
+class HandSearch(_Strict):
+    """Which hands to show, not how often something happens (plan F.7).
+
+    The same filter tree a report uses, asked of the same decision table, but the answer is
+    the matching decisions themselves: the replayer needs to know which seat to watch, not
+    only which hand to open.
+    """
+
+    dataset: Dataset = DATASET_HERO
+    hero_only: bool = True
+    date_from: date | None = None
+    date_to: date | None = None
+    player_key: str | None = None
+    filter: Node = Field(default_factory=lambda: All(all=[]))
+    limit: int = Field(default=100, ge=1, le=MAX_HANDS)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> HandSearch:
+        """The report's rules on the same fields, applied by building one."""
+        self.as_report()
+        return self
+
+    def as_report(self) -> ReportRequest:
+        """The equivalent report request -- so scoping and its rules are written once."""
+        return ReportRequest(
+            dataset=self.dataset,
+            hero_only=self.hero_only,
+            date_from=self.date_from,
+            date_to=self.date_to,
+            player_key=self.player_key,
+            filter=self.filter,
+            limit=self.limit,
         )
 
 

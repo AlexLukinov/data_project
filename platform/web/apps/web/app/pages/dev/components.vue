@@ -1,9 +1,11 @@
 <script setup lang="ts">
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
 import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
-import { equityBuckets, nodeKey, parseCards, parseCombo, parseRange, step } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, MDFPanel, MetricLabel, NodeKeyEditor, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO } from '@poker/ui';
+import { equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, tableSeats } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
+
+import { GG_HAND as SAMPLE_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
 
 definePageMeta({ public: true });
 
@@ -25,6 +27,10 @@ const extra = ref(0);
 const rake = ref<RakeConfig>({ rakePct: 0.05, rakeCapBB: 3 });
 const ev = ref<number | null>(38);
 const situation = ref<NodeKey>(nodeKey('BB', { villain_position: 'CO', action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call')] }));
+// The demo hand is the one the replay engine is tested against, so the page and the tests
+// cannot show different behaviour for the same hand.
+const sampleStates = replayStates(SAMPLE_HAND);
+const replayStep = ref(0);
 </script>
 
 <template>
@@ -139,6 +145,16 @@ const situation = ref<NodeKey>(nodeKey('BB', { villain_position: 'CO', action_se
     <section class="space-y-2">
       <h2 class="font-medium">NodeKeyEditor</h2>
       <div class="max-w-2xl rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><NodeKeyEditor v-model="situation" /></div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">PokerTable</h2>
+      <div class="max-w-3xl"><PokerTable :seats="tableSeats(SAMPLE_HAND, sampleStates[10]!)" :board="sampleStates[10]!.board" :pot="sampleStates[10]!.pot" :active-seat="sampleStates[10]!.actor" last-action="folds" :last-seat="1" :big-blind="SAMPLE_HAND.bigBlind" :button-seat="1" @seat-click="(s) => (lastEvent = `seatClick ${s}`)" /></div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">HandReplayer</h2>
+      <HandReplayer v-model="replayStep" :hand="SAMPLE_HAND" @node-change="(n) => (lastEvent = `nodeChange ${n ? nodeKeyLabel(n) : 'none'}`)" />
     </section>
   </div>
 </template>

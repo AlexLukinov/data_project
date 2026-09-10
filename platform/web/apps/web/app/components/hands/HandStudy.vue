@@ -1,0 +1,83 @@
+<script setup lang="ts">
+// One hand, stepped through, with every panel bound to the node the hand is currently at
+// (spec §9.3). The panels ask the range library what is written down for this situation and for
+// what the other seat just did, so stepping forward walks both the hand and my own charts.
+import type { HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
+import { nodeKeyLabel, parseCards, parseRange } from '@poker/core';
+import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel, PotOddsPanel, RangeMatrix } from '@poker/ui';
+import { computed, ref } from 'vue';
+
+import type { NodeRanges } from '~/hands/panels';
+import { NO_RANGES, createNodeRangeReader } from '~/hands/panels';
+import { useRangesStore } from '~/stores/ranges';
+
+const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null }>();
+
+const store = useRangesStore();
+const { service } = useEquityService();
+const reader = createNodeRangeReader((key) => store.lookup(key));
+
+const step = ref(0);
+const node = ref<NodeKey | null>(null);
+const state = ref<HandState | null>(null);
+const ranges = ref<NodeRanges>(NO_RANGES);
+
+async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
+  node.value = next;
+  state.value = at;
+  ranges.value = await reader.at(props.hand, at.index);
+}
+
+const board = computed(() => parseCards((state.value?.board ?? []).join(' ')));
+const toCall = computed(() => state.value?.toCall ?? 0);
+const potBefore = computed(() => Math.max(0, (state.value?.pot ?? 0) - toCall.value));
+
+function body(range: NodeRanges['mine']): WeightedRange | null {
+  return range === null ? null : { ...parseRange(range.weights).range, label: range.name };
+}
+
+const mine = computed(() => body(ranges.value.mine));
+const villain = computed(() => body(ranges.value.villain));
+const both = computed<WeightedRange[]>(() => (mine.value !== null && villain.value !== null ? [mine.value, villain.value] : []));
+const watched = computed(() => props.hand.seats.find((s) => s.seat === props.watchSeat) ?? props.hand.seats.find((s) => s.isHero) ?? null);
+</script>
+
+<template>
+  <div class="space-y-4">
+    <HandReplayer v-model="step" :hand="hand" @node-change="onNode" />
+
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div class="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+        <div class="flex flex-wrap items-baseline gap-2">
+          <h2 class="font-medium">Situation</h2>
+          <span class="text-sm text-zinc-500" data-testid="study-node">{{ node ? nodeKeyLabel(node) : 'before the first decision' }}</span>
+          <NuxtLink v-if="node" :to="`/ranges/compare?hero=${node.hero_position}&street=${node.street}`" class="ml-auto text-sm underline">Compare here</NuxtLink>
+        </div>
+        <p v-if="watched" class="text-sm text-zinc-500" data-testid="study-watching">Watching {{ watched.position }} {{ watched.name }}<span v-if="watched.cards.length"> with {{ watched.cards.join(' ') }}</span></p>
+
+        <div v-if="mine">
+          <p class="mb-1 text-sm">My chart here: <span class="font-medium" data-testid="study-my-range">{{ ranges.mine?.name }}</span></p>
+          <RangeMatrix :range="mine" mode="view" :blocked-cards="board" />
+        </div>
+        <p v-else class="text-sm text-zinc-500" data-testid="study-no-range">
+          Nothing stored for this situation.
+          <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink> and they will show up here as you step.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <div v-if="toCall > 0" class="space-y-4">
+          <PotOddsPanel :pot="potBefore" :bet="toCall" :call="toCall" data-testid="study-pot-odds" />
+          <MDFPanel :pot="potBefore" :bet="toCall" :range="mine" />
+        </div>
+        <p v-else class="text-sm text-zinc-500" data-testid="study-nothing-faced">Nothing to call at this step — pot odds and MDF appear when there is a bet in front.</p>
+
+        <ComboDistributionPanel v-if="mine" :range="mine" :board="board" :group-by="['made', 'draw']" />
+        <EquityCalculator v-if="both.length === 2" :ranges="both" :board="board" :service="service" />
+        <p v-else-if="mine && ranges.villainNode" class="text-sm text-zinc-500" data-testid="study-no-villain-range">
+          No stored range for {{ nodeKeyLabel(ranges.villainNode) }}, so there is nothing to run the equity against yet.
+        </p>
+      </div>
+    </section>
+  </div>
+</template>

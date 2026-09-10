@@ -98,3 +98,14 @@ export function describeSignInError(error: unknown): string {
   if (status === undefined) return NO_ANSWER;
   return SIGN_IN_MESSAGES[status] ?? errorDetail(error) ?? `The API answered with status ${status}.`;
 }
+
+/**
+ * One sentence for any other failed call: the API's own detail, else its status, else what
+ * threw. `whenSilent` is what to say when nothing answered at all, which differs per screen.
+ */
+export function describeApiError(error: unknown, whenSilent = NO_ANSWER): string {
+  const status = errorStatus(error);
+  if (status !== undefined) return errorDetail(error) ?? `The API answered with status ${status}.`;
+  if (error instanceof Error && error.name !== 'FetchError' && error.name !== 'TypeError') return `${error.name}: ${error.message}`;
+  return whenSilent;
+}

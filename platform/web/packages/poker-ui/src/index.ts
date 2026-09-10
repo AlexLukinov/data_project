@@ -25,6 +25,11 @@ export { default as RangeComparisonPanel } from './components/RangeComparisonPan
 export { default as RangeDiffView } from './components/RangeDiffView.vue';
 export { default as RangeDisagreementTable } from './components/RangeDisagreementTable.vue';
 export { default as NodeKeyEditor } from './components/NodeKeyEditor.vue';
+export { default as PokerTable } from './components/PokerTable.vue';
+export { default as HandActionLog } from './components/HandActionLog.vue';
+export { default as HandReplayer } from './components/HandReplayer.vue';
+export { actionText, shownCard, shownCards, tableSeats } from './table';
+export type { ShownCard, TableSeat } from './table';
 export { useUndoRedo } from './composables/useUndoRedo';
 export type { UndoRedo } from './composables/useUndoRedo';
 export type { EquityServiceLike, EquityServiceOptions } from './service';

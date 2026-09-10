@@ -9,7 +9,7 @@ import { nodeKeyEquals } from '@poker/core';
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
-import { errorDetail, errorStatus } from '../auth/api';
+import { describeApiError } from '../auth/api';
 import type { BulkIn, BulkOut, LibraryExport, ListFilters, RangeIn, RangeSummary, RangeUpdate, RangeVersion, RangesApi, StoredRange } from './api';
 import type { CachedRange, RangeCache } from './cache';
 
@@ -49,12 +49,9 @@ interface State {
 const NO_ANSWER = 'The API did not answer; showing the cached copy. Start it with `make api` in platform/.';
 const CACHE_FAILED = 'The offline copy could not be updated';
 
-/** One sentence for a failed library call: the API's own detail, else its status, else what threw. */
+/** One sentence for a failed library call; a silent API means the cached copy is what is shown. */
 export function describeLibraryError(error: unknown): string {
-  const status = errorStatus(error);
-  if (status !== undefined) return errorDetail(error) ?? `The API answered with status ${status}.`;
-  if (error instanceof Error && error.name !== 'FetchError' && error.name !== 'TypeError') return `${error.name}: ${error.message}`;
-  return NO_ANSWER;
+  return describeApiError(error, NO_ANSWER);
 }
 
 /** The list filters applied to the cached copy, for when the API is away. */

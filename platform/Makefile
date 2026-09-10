@@ -19,9 +19,13 @@ export CLICKHOUSE_PASSWORD ?= poker
 # Every target that loads synthetic hands (seed, test-all) runs under this, so nothing a test
 # does can touch the founder's real hands, raw text, queue or cache (ADR-023). The integration
 # conftest refuses to run unless every one of these is set.
+# The auth rate limit is raised because the whole suite signs in from one address in one
+# minute, which the production budget is meant to stop; the limiter itself is unit-tested
+# (tests/test_security_config.py), so nothing is lost by not throttling the tests.
 TEST_ENV := CLICKHOUSE_DB_PREFIX=test_ POSTGRES_DB=poker_test S3_RAW_BUCKET=poker-raw-test \
   KAFKA_UPLOADS_TOPIC=test.hands.uploads.v1 KAFKA_BULK_TOPIC=test.hands.bulkimport.v1 \
-  KAFKA_CONSUMER_GROUP=test-parser-workers REDIS_URL=redis://localhost:6380/1
+  KAFKA_CONSUMER_GROUP=test-parser-workers REDIS_URL=redis://localhost:6380/1 \
+  AUTH_RATE_LIMIT_PER_MINUTE=1000
 
 .PHONY: help
 help: ## Show this help

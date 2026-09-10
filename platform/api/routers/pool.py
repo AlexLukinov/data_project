@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -20,9 +21,10 @@ from starlette.concurrency import run_in_threadpool
 from analysis.pool import cohorts as cohort_service
 from analysis.pool.service import players as player_lookup
 from analysis.pool.service import pool_report, presets
-from api import cache
+from api import cache, hand_query
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import Cohort
+from api.schemas import HandSummary
 from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
 from stats.request import CohortSpec, ReportRequest, ReportResult
@@ -166,6 +168,31 @@ async def pool_stats(
 def find_players(user: CurrentUserDep, prefix: Prefix, limit: Limit = 50) -> ReportResult:
     """Pool players whose screen name starts with `prefix`, with headline stats."""
     return player_lookup(prefix, user.tenant_id, limit=limit, cache=report_cache())
+
+
+@router.get("/hands", response_model=list[HandSummary])
+async def pool_hands(
+    user: CurrentUserDep,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    stake_level: str | None = None,
+    limit: Limit = 50,
+) -> list[HandSummary]:
+    """Recent hands from the pool, newest first (plan F.7).
+
+    A pool hand has no hero seat, so each row opens on the seat worth watching: one that
+    showed cards if any did, else the biggest winner. For hands where a *situation* happened,
+    `POST /v1/hands/search` with `dataset: population` is the query to use.
+    """
+    refs = await run_in_threadpool(
+        hand_query.pool_hand_refs,
+        user.tenant_id,
+        date_from=date_from,
+        date_to=date_to,
+        stake_level=stake_level,
+        limit=limit,
+    )
+    return await run_in_threadpool(hand_query.summaries_for, user.tenant_id, refs)
 
 
 @router.get("/presets", response_model=PoolPresetsOut)
