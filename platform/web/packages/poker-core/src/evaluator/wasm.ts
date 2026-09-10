@@ -7,22 +7,26 @@
  * `HandRank` is freed after its value is read, because embind objects live on the WASM heap.
  */
 
-import phe from 'poker-hand-evaluator-wasm';
-
 import type { Card } from '../cards';
 import { CARD_COUNT } from '../cards';
 import type { HandEvaluator } from './types';
 
 /**
  * The package's typings describe the module factory, not the pre-initialized wrapper its ESM
- * entry actually exports; this is the shape of what `import` gives us.
+ * entry actually exports; this is the shape of what `import()` gives us. The import is
+ * dynamic on purpose: the package instantiates its WebAssembly the moment it is imported and
+ * fetches the `.wasm` file next to itself, which only works where that file is served. Nothing
+ * pays that cost unless it asks for this evaluator.
  */
 interface PheWrapper {
   ready(): Promise<unknown>;
   getRawModule(): unknown;
 }
 
-const PHEvaluator = phe as unknown as PheWrapper;
+async function loadPhe(): Promise<PheWrapper> {
+  const mod = (await import('poker-hand-evaluator-wasm')) as unknown as { default?: PheWrapper } & PheWrapper;
+  return mod.default ?? mod;
+}
 
 interface PheObject {
   delete?(): void;
@@ -53,8 +57,9 @@ export class WasmEvaluator implements HandEvaluator {
 
   async ready(): Promise<void> {
     if (this.module !== null) return;
-    await PHEvaluator.ready();
-    const module = PHEvaluator.getRawModule() as PheModule;
+    const phe = await loadPhe();
+    await phe.ready();
+    const module = phe.getRawModule() as PheModule;
     this.cards = Array.from({ length: CARD_COUNT }, (_, id) => module.createCardFromId(id));
     this.module = module;
   }

@@ -116,6 +116,10 @@ WEB_DIR := web
 web-install: ## Install the JavaScript workspace (npm ci from the lockfile)
 	cd $(WEB_DIR) && npm ci
 
+.PHONY: web
+web: ## Run the Nuxt app (http://localhost:3000 — the Range Lab; needs `make api` for the API pages)
+	cd $(WEB_DIR) && npm run dev
+
 .PHONY: web-test
 web-test: ## Run the JavaScript unit tests (Vitest)
 	cd $(WEB_DIR) && npm test

@@ -81,6 +81,9 @@ ingestion/   object storage, Kafka, ClickHouse loader, worker
 stats/       the stat registry (YAML), filter AST, compiler, router, report service
 analysis/    hero/ (leaks, sessions) and pool/ (reports, players, cohorts, baselines) + presets
 api/         FastAPI: auth, uploads, reports, hero, pool, saved objects, hands + the demo dashboard
+web/         the JavaScript workspace (ADR-027): packages/poker-core (poker maths, pure TS),
+             poker-workers (the equity Worker), poker-ui (Vue components), apps/web (the Nuxt SPA:
+             dashboard + Range Lab) — `make web`, `make web-check`, LICENSES.md
 ch/          ClickHouse migrations (numbered SQL) + runner
 migrations/  Alembic (Postgres)
 dbt/         the stat layer: staging → intermediate → marts

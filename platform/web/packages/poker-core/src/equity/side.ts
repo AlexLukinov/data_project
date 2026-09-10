@@ -94,8 +94,8 @@ export class Side {
     const { a, b, weight } = this.live;
     cardStart.fill(0);
     for (let k = 0; k < m; k++) {
-      cardStart[a[idx[k]!]! + 1]++;
-      cardStart[b[idx[k]!]! + 1]++;
+      cardStart[a[idx[k]!]! + 1]! += 1;
+      cardStart[b[idx[k]!]! + 1]! += 1;
     }
     for (let c = 0; c < CARD_COUNT; c++) {
       cardStart[c + 1]! += cardStart[c]!;

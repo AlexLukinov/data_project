@@ -28,6 +28,8 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 |---|---|---|---|
 | `spdx-exceptions@2.5.0` | CC-BY-3.0 | `license-checker-rseidelsohn` → `spdx-expression-parse` (dev only) | A JSON list of SPDX exception identifiers, used by the audit tool itself; attribution-only, not copyleft, never shipped. CC-BY-3.0 stays off the general allowlist so a *code* dependency under it would still fail the build. Flagged to the founder 2026-09-10. |
 | `spdx-ranges@2.1.1` | (MIT AND CC-BY-3.0) | `license-checker-rseidelsohn` (dev only) | Same SPDX data family (code MIT, data CC-BY-3.0). The audit tool accepts the compound expression because its MIT half is allowed; listed here so the CC-BY half is on record. |
+| `node-forge` | (BSD-3-Clause OR GPL-2.0) | `nuxt` dev tooling (self-signed dev certificates) | Dual-licensed: we use it under BSD-3-Clause, which the audit accepts from the OR expression. Dev only, never shipped. |
+| `caniuse-lite` | CC-BY-4.0 | `nuxt` → `browserslist` (build tooling) | The browser-support data table; attribution-only, never modified, not shipped as code. Excluded by name (`--excludePackagesStartingWith`), so a CC-BY *code* dependency would still fail the build. Flagged 2026-09-10. |
 
 ## Runtime dependencies
 
@@ -35,6 +37,10 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 |---|---|---|---|
 | `poker-hand-evaluator-wasm` | Apache-2.0 | WebAssembly build of PokerHandEvaluator (7-card ranks); used as an agreement check, the engine runs on our own table-driven evaluator | Permissive; attribution kept in `node_modules` and here. Upstream: HenryRLee/PokerHandEvaluator, Apache-2.0 |
 | `comlink` | Apache-2.0 | Worker RPC for the equity service | permissive |
+| `nuxt` | MIT | the app shell (SPA mode) | permissive |
+| `vue`, `vue-router` | MIT | the component framework and router (Nuxt's) | permissive |
+| `pinia`, `@pinia/nuxt` | MIT | app state | permissive |
+| `tailwindcss`, `@tailwindcss/vite` | MIT | the app's utility CSS (poker-ui components use plain scoped CSS) | permissive |
 
 ## Development dependencies
 
@@ -46,6 +52,10 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 | `typescript-eslint` | MIT | TypeScript lint rules | permissive |
 | `@types/node` | MIT | Node typings for tests | permissive |
 | `tsx` | MIT | runs the benchmark scripts (`npm run bench`) | permissive (bundles esbuild, MIT) |
+| `@vitejs/plugin-vue` | MIT | compiles `.vue` files for Vitest | permissive |
+| `@vue/test-utils`, `happy-dom` | MIT | component tests | permissive |
+| `eslint-plugin-vue`, `vue-eslint-parser` | MIT | lint for `.vue` files | permissive |
+| `vue-tsc` | MIT | typecheck of `.vue` files (`nuxt typecheck` uses it too) | permissive |
 | `license-checker-rseidelsohn` | BSD-3-Clause | the licence audit itself | permissive (declares `node >= 24`; runs on 23 with a warning) |
 
 ## Explicitly not used

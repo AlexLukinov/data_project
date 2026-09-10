@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+
+/* The app's own ground; poker-ui components carry their own theme (see @poker/ui/theme.css). */
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}

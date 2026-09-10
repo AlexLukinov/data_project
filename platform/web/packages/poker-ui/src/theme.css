@@ -1,0 +1,47 @@
+/*
+ * Theme tokens for @poker/ui. Every component reads these with a fallback, so a component
+ * dropped into another app renders without this file; importing it once gives the app a
+ * consistent light/dark look. Override any token on an ancestor to restyle.
+ */
+:root {
+  --pk-bg: #ffffff;
+  --pk-surface: #f4f4f5;
+  --pk-fg: #18181b;
+  --pk-muted: #71717a;
+  --pk-border: #d4d4d8;
+  --pk-accent: #2563eb;
+  --pk-fill: #86efac;
+  --pk-fill-strong: #16a34a;
+  --pk-heat: 220 80% 50%;
+  --pk-highlight: #f59e0b;
+  --pk-blocked: #a1a1aa;
+  --pk-pair: #fde68a;
+  --pk-suited: #bfdbfe;
+  --pk-offsuit: #fecaca;
+  --pk-club: #16a34a;
+  --pk-diamond: #2563eb;
+  --pk-heart: #dc2626;
+  --pk-spade: #18181b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pk-bg: #09090b;
+    --pk-surface: #18181b;
+    --pk-fg: #fafafa;
+    --pk-muted: #a1a1aa;
+    --pk-border: #3f3f46;
+    --pk-accent: #60a5fa;
+    --pk-fill: #166534;
+    --pk-fill-strong: #4ade80;
+    --pk-highlight: #fbbf24;
+    --pk-blocked: #52525b;
+    --pk-pair: #713f12;
+    --pk-suited: #1e3a8a;
+    --pk-offsuit: #7f1d1d;
+    --pk-club: #4ade80;
+    --pk-diamond: #60a5fa;
+    --pk-heart: #f87171;
+    --pk-spade: #e4e4e7;
+  }
+}

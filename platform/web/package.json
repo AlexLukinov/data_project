@@ -17,17 +17,24 @@
     "test:watch": "vitest",
     "bench": "tsx packages/poker-core/bench/equity.ts",
     "bench:evaluators": "tsx packages/poker-core/bench/evaluators.ts",
-    "license-check": "license-checker-rseidelsohn --start . --excludePrivatePackages --excludePackages \"spdx-exceptions@2.5.0\" --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Unlicense;CC0-1.0;0BSD;Zlib;BlueOak-1.0.0;Python-2.0;MPL-2.0\" --summary",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run license-check"
+    "license-check": "license-checker-rseidelsohn --start . --excludePrivatePackages --excludePackagesStartingWith \"spdx-exceptions;caniuse-lite\" --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Unlicense;CC0-1.0;0BSD;Zlib;BlueOak-1.0.0;Python-2.0;MPL-2.0\" --summary",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run license-check",
+    "dev": "npm run dev --workspace=apps/web"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
     "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.5.0",
     "eslint": "^9.39.0",
+    "eslint-plugin-vue": "^10.11.0",
+    "happy-dom": "^20.14.3",
     "license-checker-rseidelsohn": "^5.0.1",
     "tsx": "^4.23.13",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.46.0",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.0",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.11"
   }
 }
