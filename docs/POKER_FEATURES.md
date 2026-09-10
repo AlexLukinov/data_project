@@ -564,6 +564,12 @@ the incumbent that does it best.
 
 ## F-9xx · Ranges, equity & solver
 
+> **2026-09-10:** F-901, F-902, F-903 and F-906 are now delivered by the **Range Lab** — the
+> founder's spec in [POKER_RANGE_LAB_SPEC.md](POKER_RANGE_LAB_SPEC.md), exploration report in
+> [POKER_RANGE_LAB.md](POKER_RANGE_LAB.md), plan phase F in [POKER_PLAN.md](POKER_PLAN.md),
+> ADR-027…029. The equity engine runs in the browser (TypeScript, Worker); F-902's server-side
+> half (all-in EV at parse time) stays plan step E.5.
+
 **F-901 · Range notation parser & editor** — `core` `web` · **M** · **Expansion** · planned
 > `TT+, AJs+, KQo` ↔ a 169-combo grid; visual editor. Also unlocks F-405.
 > **Deps** — F-101 · **Reference** — Flopzilla, Equilab

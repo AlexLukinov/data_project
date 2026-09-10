@@ -32,3 +32,6 @@ kubeconfig
 *_HH_*
 *-HH-*
 hand_histories/
+
+# Proprietary solver/range binaries (e.g. Simple Preflop Holdem exports) — kept locally for importer R&D
+*.bin

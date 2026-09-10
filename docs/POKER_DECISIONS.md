@@ -36,6 +36,9 @@ not a change I've made.
 | [024](#adr-024--nuxt-4-app-in-spa-mode-with-one-shared-filter-model-and-two-entry-points) | Nuxt 4 app in SPA mode, one shared filter model, two entry points | ✅ planned (D) |
 | [025](#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant) | Freshness and scale: MVs generated from the registry, then shard by tenant | ✅ planned (E) |
 | [026](#adr-026--hero-analysis-and-pool-analysis-are-separate-modules-as-in-hand2note) | Hero analysis and pool analysis are separate modules, as in Hand2Note | 🔒 |
+| [027](#adr-027--range-lab-is-a-typescript-workspace-of-framework-free-packages-behind-one-nuxt-app-with-a-licence-allowlist-in-ci) | Range Lab: framework-free TS packages behind one Nuxt app; licence allowlist in CI | 🔒 |
+| [028](#adr-028--a-node-is-a-predicate-over-decisions-nodekey-is-defined-once-and-buckets-live-in-the-registry) | A node is a predicate over `decisions`; `NodeKey` defined once; buckets live in the registry | ✅ |
+| [029](#adr-029--hand-histories-are-parsed-server-side-only) | Hand histories are parsed server-side only | 🔒 |
 
 ---
 
@@ -856,3 +859,98 @@ would read pool tables directly and the two could never be deployed, cached or s
 **Consequences.** Population baselines reach the hero module only through the seam that a solver
 implementation will later use (ADR-011). The UI mirrors the split, which is also how players
 think about the two questions.
+
+---
+
+## ADR-027 — Range Lab is a TypeScript workspace of framework-free packages behind one Nuxt app, with a licence allowlist in CI
+**Status:** 🔒 Locked by the founder, 2026-09-10. Phase F.
+
+**Context.** The founder's Range Lab spec ([POKER_RANGE_LAB_SPEC.md](POKER_RANGE_LAB_SPEC.md))
+asks for a range-thinking learning tool: a weighted equity engine, blocker and distribution
+analysis, a range library, a replayer and a 9-step analyzer, with the engine and the components
+reusable from other tools. Its §3 names Vite + Vue Router; ADR-016/024 already lock Nuxt 4 in
+SPA mode for `platform/web/`. Its §3.1 forbids every copyleft licence, AGPL included, because the
+product is commercial and closed-source.
+
+**Decision.** One npm workspace at `platform/web/`: `packages/poker-core` (pure TypeScript —
+cards, ranges, formats, evaluator, equity, blockers, distribution, metrics, classifier; no Vue, no
+DOM), `packages/poker-workers` (Comlink wrappers, WASM loading), `packages/poker-importers`
+(range-file importers), `packages/poker-ui` (Vue 3 SFCs that depend on `poker-core` only; props
+in, events out, no store or API access), and **one app**, `apps/web`: Nuxt 4 with `ssr: false`,
+hosting both the phase-D dashboard (My game, Pool, Hands, Upload) and the Range Lab routes.
+The spec's `RangeMatrix` and plan D.3's `HandMatrix` are the same component. ESLint forbids
+`poker-ui → apps`. The evaluator is PokerHandEvaluator (Apache-2.0) through
+`poker-hand-evaluator-wasm`, with a pure-TS fallback for tests; nothing is taken from
+wasm-postflop (AGPL). A licence audit (`license-checker-rseidelsohn`, allowlist MIT / Apache-2.0
+/ BSD-2/3 / ISC / Unlicense / CC0 / Zlib / 0BSD; MPL-2.0 only unmodified and flagged) runs in
+`make web-check` and CI from the first commit; `platform/web/LICENSES.md` lists every direct
+dependency, its licence and why it is acceptable. npm workspaces, not pnpm: npm 11 is present,
+corepack's cache is broken on the founder's machine, and a second package manager buys nothing
+at this size.
+
+**Alternatives.** *A separate Vite SPA per the spec's §3.2* — two auth clients, two API clients,
+two builds, for routes that share every component; rejected by the founder. *Port the engine to
+Python and compute equities server-side* — the calculators must work offline (spec §17) and
+must respond while the user drags a range; a Worker on the client is the only place that
+works.
+
+**Consequences.** A JS toolchain in CI alongside Python (already accepted in ADR-016). Poker
+mathematics lives in TypeScript on the client; poker *statistics* stay in ClickHouse behind the
+API — the client never re-derives a pool number. `LICENSES.md` sits at the JS root rather than
+the repository root because the repository root is shared with the minikube lab.
+
+---
+
+## ADR-028 — A node is a predicate over `decisions`; `NodeKey` is defined once; buckets live in the registry
+**Status:** ✅ Recommended. Phase F.8.
+
+**Context.** The spec's §10.1 wants a canonical `NodeKey` (stake, table size, effective stack,
+positions, action sequence, street, texture) shared by ClickHouse queries and the frontend,
+with bet sizes bucketed "in one place". The platform already answers "what happens at a node"
+as a filter over `marts.decisions` (ADR-020): position, opener and last-raiser positions, raise
+count, `facing`, own action lines, effective stack, texture columns, and size-as-fraction-of-pot
+with presentation buckets in `stats/registry/dimensions.yaml`. The founder's spot census
+(`scripts/spot_nodes.py`) derived a node grammar from `core.actions` independently.
+
+**Decision.** A node **is** a filter AST (ADR-022). `NodeKey` is a Pydantic model in
+`analysis/pool/nodes.py` with one compiler `node_filter(key) -> Node`; the TypeScript twin in
+`packages/poker-core/src/node.ts` has the same shape, and one JSON fixture of nodes is parsed by
+both test suites so they cannot drift. Every bucket boundary (`facing_size_pct`, `size_pct`,
+`eff_stack_bb`, `spr`, and a new `raise_to_bb` set for preflop sizes) lives in
+`dimensions.yaml` and reaches the client through `/v1/definitions`; no boundary is written in
+TypeScript. Node endpoints are `POST /v1/pool/node/{frequencies,showdown-range,estimated-range,
+eqr}` with the `NodeKey` as a typed body, implemented as `run_report()` calls (`group_by:
+[action, size_pct]`; `group_by: [hand_class]` with `hole_cards != ''`), so cohorts, dates and
+`min_n` gating come for free. The spot census grammar is reconciled with the `decisions`
+columns, not kept as a second vocabulary.
+
+**Alternatives.** *Store a node string per decision row* — simple to group by, but every
+change of grammar is a 73M-row rebuild and it cannot compose with other filters. *Compute node
+statistics in a separate service* — duplicates the tenancy, caching and gating the engine
+already has.
+
+**Consequences.** Tier 1 and tier 2 need no new SQL. Empirical EQR (spec §10.4) needs one new
+column, `invested_bb` (the seat's chips in before the decision), because `net_won_bb` is the
+whole-hand result; that is F.10's rebuild.
+
+---
+
+## ADR-029 — Hand histories are parsed server-side only
+**Status:** 🔒 Locked by the founder, 2026-09-10. Phase F.7.
+
+**Context.** The spec's §9.4 asks for a GGPoker hand-history parser in TypeScript so a pasted
+hand can be replayed. The platform has a Python GG parser (`parser/sites/ggpoker.py`) validated
+by pot-math reconciliation on 9.1M real hands, and `GET /v1/hands/{uid}` already returns the
+replayer payload (`HandDetail`).
+
+**Decision.** One parser. `POST /v1/hands/parse` takes raw text and returns `HandDetail`
+without storing anything (no upload row, no ClickHouse write; the tenant's registered screen
+names resolve hero as for uploads). The replayer consumes `HandDetail` from three sources — hero
+database, pool database, pasted text — through the same shape.
+
+**Alternatives.** *A TypeScript port* — fully offline paste-to-replay, at the cost of two
+parsers that must agree on every format quirk GG ships; rejected by the founder.
+
+**Consequences.** Pasting a hand needs the API; every offline feature (equity, ranges,
+blockers, distribution, trainers) does not. A parse failure returns the parser's error text
+with the offending line, as the spec's §13 requires.
