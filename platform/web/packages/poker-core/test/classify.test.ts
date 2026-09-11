@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { parseCards } from '../src/cards';
-import { classifyDraws, classifyHand, classifyMadeHand } from '../src/classify';
+import { MADE_HAND_CLASSES, classifyDraws, classifyHand, classifyMadeHand } from '../src/classify';
 
 const made = (hole: string, board: string): string => {
   const [a, b] = parseCards(hole);
@@ -96,5 +98,25 @@ describe('draw classes', () => {
     expect(draws('9c 8d', '7h 6s 2c 3d Ks')).toEqual(['no_draw']);
     const [a, b] = parseCards('Ah 2h');
     expect(classifyDraws([a!, b!], parseCards('Kh 9h 4h'), 'flush')).not.toContain('flush_draw');
+  });
+});
+
+describe('the fixture the Python suite parses too', () => {
+  // `marts.decisions.made_hand` is written at parse time by core/classify.py, and these panels
+  // bucket the same concept here. One file pins both, the way nodes.json pins NodeKey
+  // (ADR-028, ADR-031): regenerate it with fixtures/gen_made_hands.ts, never by hand.
+  const FIXTURE: { cases: { hole: [string, string]; board: string[]; made: string }[] } =
+    JSON.parse(readFileSync(new URL('../../../../tests/fixtures/made_hands.json', import.meta.url), 'utf8'));
+
+  it('classifies every case exactly as the committed file says', () => {
+    const wrong = FIXTURE.cases.filter((c) => {
+      const [a, b] = parseCards(c.hole.join(' '));
+      return classifyMadeHand([a!, b!], parseCards(c.board.join(' '))) !== c.made;
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it('covers all seventeen classes, so no class is silently untested', () => {
+    expect(new Set(FIXTURE.cases.map((c) => c.made)).size).toBe(MADE_HAND_CLASSES.length);
   });
 });

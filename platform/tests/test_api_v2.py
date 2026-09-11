@@ -74,10 +74,15 @@ async def test_definitions_serve_the_registry(client: AsyncClient) -> None:
     res = await client.get("/v1/definitions")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert len(body["stats"]) == 65 and len(body["dimensions"]) == 79
+    assert len(body["stats"]) == 65 and len(body["dimensions"]) == 80
     vpip = next(s for s in body["stats"] if s["code"] == "vpip")
     assert vpip["label"] == "VPIP" and vpip["typical"] == [18.0, 28.0]
     assert vpip["action"] == {"dim": "did_vpip", "op": "eq", "value": 1}
+    # `made_hand` is the evaluator's, filled at parse time (plan E.5, ADR-039); '' is a real
+    # value in it — preflop, and wherever the cards were never shown — not a missing one.
+    made = next(d for d in body["dimensions"] if d["code"] == "made_hand")
+    assert made["tables"] == ["decisions"] and "" in made["values"]
+    assert made["values"][1] == "straight_flush" and made["values"][-1] == "no_pair"
     spr = next(d for d in body["dimensions"] if d["code"] == "spr")
     assert spr["buckets"]["13+"] == [13.0, None] and "between" in spr["allowed_ops"]
 

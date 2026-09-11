@@ -37,6 +37,9 @@ select
     was_eliminated,
     finish_position,
     extra,
+    made_hand_flop,
+    made_hand_turn,
+    made_hand_river,
     toDate(played_at_utc) as played_date,
     parsed_at as src_parsed_at
 from {{ source('core', 'hand_players') }} final

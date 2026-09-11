@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from core.allin import enrich
 from core.models import CanonicalHand
 from core.validation import validate
 from ingestion.loader import DATASET_HERO
@@ -97,6 +98,10 @@ def _outcome(
         )
     hand.raw_object_key = src.object_key
     hand.raw_byte_offset = offset
+    # After validation, never before: enrichment reads the reconciled pot, and a hand whose
+    # money does not add up would produce an EV that does not either. A hand with no all-in
+    # and no shown cards leaves this untouched, which is almost all of them.
+    enrich(hand)
     return hand
 
 

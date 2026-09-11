@@ -106,6 +106,13 @@ class HandPlayer:
     allin_equity: Decimal | None = None
     ev_won: Decimal | None = None
     """All-in-adjusted result. None when no all-in occurred. See ADR-018."""
+    made_hand_flop: str = ""
+    made_hand_turn: str = ""
+    made_hand_river: str = ""
+    """Made-hand class on each street the board reached — `core.classify.MADE_HAND_CLASSES`,
+    empty when the cards or the board are unknown. Three columns rather than one because the
+    class a decision is taken with is the one for the street it is taken on, and a decision
+    knows its street; see `core.allin.made_hand_for_street`."""
     saw_flop: bool = False
     saw_turn: bool = False
     saw_river: bool = False

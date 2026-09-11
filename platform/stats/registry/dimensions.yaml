@@ -109,6 +109,21 @@
   tables: [decisions, player_hands]
   description: Pair, suited or offsuit; '' when the hole cards are unknown.
 
+# Written at parse time by core/classify.py, whose classes are pinned to the Range Lab's own
+# `classifyMadeHand` by tests/fixtures/made_hands.json. Relative to the board, as Flopzilla
+# buckets them: a board that pairs itself does not give everyone a pair. Postflop only — ''
+# preflop, where `hand_class` is the vocabulary, and '' wherever the cards were never shown.
+- code: made_hand
+  label: Made hand
+  type: enum
+  values: ['', straight_flush, quads, full_house, flush, straight, set, trips, two_pair,
+           overpair, top_pair, under_pair, second_pair, third_pair, weak_pair,
+           ace_high, king_high, no_pair]
+  tables: [decisions]
+  description: >-
+    The made-hand class this seat held on this street, relative to the board; '' preflop and
+    wherever the hole cards are unknown.
+
 - code: hole_cards
   label: Hole cards
   type: string

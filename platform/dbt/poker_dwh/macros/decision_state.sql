@@ -32,7 +32,7 @@ select
     turn_rank, turn_completes_flush, turn_pairs_board,
     river_rank, river_completes_flush, river_pairs_board,
     board_paired, board_flush_possible, board_straight_possible,
-    hand_class, hand_shape, hole_cards,
+    hand_class, hand_shape, hole_cards, made_hand,
     action, is_allin, amount_bb, size_pct, raise_to_bb,
     saw_next_street, went_to_showdown, won_hand, net_won_bb, ev_won_bb,
     parser_version, src_parsed_at
@@ -207,6 +207,12 @@ from (
         hb.s_hand_class[si]::LowCardinality(String)                  as hand_class,
         hb.s_hand_shape[si]::LowCardinality(String)                  as hand_shape,
         hb.s_hole_cards[si]                                          as hole_cards,
+        -- The class for THIS street, which is why parse time stores one per street. Preflop
+        -- there is no board and so no made hand: `hand_class` already carries the 169-class
+        -- vocabulary there, and '' keeps "no board yet" distinct from "no pair".
+        multiIf(st = 1, hb.s_made_hand_flop[si],
+                st = 2, hb.s_made_hand_turn[si],
+                st = 3, hb.s_made_hand_river[si], '')::LowCardinality(String) as made_hand,
 
         -- ---- the decision ------------------------------------------------------------
         cast(multiIf(tok = 'f', 'fold', tok = 'x', 'check', tok in ('l', 'c'), 'call',

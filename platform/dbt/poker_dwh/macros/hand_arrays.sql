@@ -89,6 +89,12 @@ seats_raw as (
         went_to_showdown,
         won_hand,
         total_invested,
+        -- Written at parse time by core/classify.py; '' where the cards or the board were not
+        -- known. SQL cannot rank a poker hand, which is why these are columns and not an
+        -- expression here (plan E.5, ADR-018).
+        made_hand_flop,
+        made_hand_turn,
+        made_hand_river,
         -- 'AKs' / 'T9o' / 'QQ' -- the 169-combo vocabulary. Hold'em-shaped hands only.
         splitByChar(' ', hole_cards)                             as cards,
         if(length(cards) = 2, position('{{ ranks }}', substring(cards[1], 1, 1)), 0) as r1,
@@ -116,7 +122,8 @@ seats as (
                                         is_anonymized, stack_bb, hole_cards, hand_class,
                                         hand_shape, net_won_bb, ev_won_bb, saw_flop, saw_turn,
                                         saw_river, went_to_showdown, won_hand,
-                                        total_invested)))                  as seats,
+                                        total_invested, made_hand_flop, made_hand_turn,
+                                        made_hand_river)))                 as seats,
         sum(total_invested)                                                as invested_total
     from seats_raw
     group by user_id, hand_uid
@@ -193,6 +200,9 @@ select
     arrayMap(t -> t.15, s.seats)                                 as s_saw_river,
     arrayMap(t -> t.16, s.seats)                                 as s_went_to_showdown,
     arrayMap(t -> t.17, s.seats)                                 as s_won_hand,
+    arrayMap(t -> t.19, s.seats)                                 as s_made_hand_flop,
+    arrayMap(t -> t.20, s.seats)                                 as s_made_hand_turn,
+    arrayMap(t -> t.21, s.seats)                                 as s_made_hand_river,
     -- Rake attributed by contribution (the "weighted contributed" convention).
     arrayMap(t -> if(s.invested_total > 0,
                      toFloat32(toFloat64(h.rake) * toFloat64(t.18)

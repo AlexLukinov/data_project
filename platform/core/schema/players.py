@@ -70,6 +70,13 @@ PLAYERS = TableSpec(
         ColumnSpec("finish_position", "Nullable(UInt32)", _finish_position),
         # ---- forward compatibility (migration 0004) ---------------------------------------
         ColumnSpec("extra", "Map(String, String)", lambda c: dict(c.require_player().extra)),
+        # ---- made-hand classes (migration 0010, plan E.5) ----------------------------------
+        # One per street, because the class a decision is taken with is the one for its own
+        # street. Empty where the cards or the board are unknown -- never a class name, so
+        # "not shown" stays distinguishable from "no pair".
+        ColumnSpec("made_hand_flop", LC, lambda c: c.require_player().made_hand_flop),
+        ColumnSpec("made_hand_turn", LC, lambda c: c.require_player().made_hand_turn),
+        ColumnSpec("made_hand_river", LC, lambda c: c.require_player().made_hand_river),
     ),
     staging_extras=(
         "toDate(played_at_utc) as played_date",
