@@ -29,6 +29,14 @@
 -- a wrong answer. Without this clause, importing one PLO hand would turn a correct empty value
 -- into a failing assertion.
 
+-- "Has cards" means TWO cards, which is not pedantry: exactly one seat in the 54.5M-row corpus
+-- showed a single card at showdown (`Kh`, an anonymised opponent on a real GGPoker hand). A
+-- one-card holding has no made-hand class — the class is defined for two hole cards against a
+-- board — so `core.classify` returns '' for it, correctly. Counting that as "missing" would
+-- make this assertion permanently red over one genuine row of data.
+
+{% set two_cards = "length(splitByChar(' ', hole_cards)) = 2" %}
+
 select
     hand_uid,
     seat,
@@ -37,12 +45,12 @@ select
     hole_cards,
     made_hand,
     multiIf(
-        street != 'preflop' and hole_cards != '' and made_hand = '', 'missing',
+        street != 'preflop' and {{ two_cards }} and made_hand = '', 'missing',
         (street = 'preflop' or hole_cards = '') and made_hand != '', 'spurious',
         'unknown_class'
     ) as problem
 from {{ ref('decisions') }}
 where game_type = 'holdem'
-  and ((street != 'preflop' and hole_cards != '' and made_hand = '')
+  and ((street != 'preflop' and {{ two_cards }} and made_hand = '')
        or ((street = 'preflop' or hole_cards = '') and made_hand != '')
        or (made_hand != '' and made_hand not in ({{ classes }})))

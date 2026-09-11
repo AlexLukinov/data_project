@@ -30,7 +30,7 @@ seeds/private/
 .DS_Store
 .idea/
 .vscode/
-.equity-cache.pkl
+.equity-cache*.pkl
 
 # Exported ClickHouse backups — contain raw hand text (third-party personal data), never committed
 backups/

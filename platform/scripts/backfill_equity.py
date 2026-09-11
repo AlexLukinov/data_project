@@ -59,7 +59,7 @@ from core.equity import (
     snapshot,
     solve_spot,
 )
-from scripts.equity_store import Hand, days, load, write
+from scripts.equity_store import Hand, days, load, unfinished, write
 
 log = logging.getLogger("backfill_equity")
 
@@ -207,9 +207,13 @@ def save_cache(path: Path) -> None:
     temporary.replace(path)
 
 
-def run(dataset: str | None, month: str | None, workers: int, cache: Path) -> int:
+def run(
+    dataset: str | None, month: str | None, workers: int, cache: Path, resume: bool = False
+) -> int:
     """Enrich every day in scope. Returns the number of seats rewritten."""
     pending = days(dataset, month)
+    if resume:
+        pending = unfinished(dataset, pending)
     log.info("%d day(s) to enrich", len(pending))
     load_cache(cache)
     pool = ProcessPoolExecutor(max_workers=workers) if workers > 1 else None
@@ -231,10 +235,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--month", help="one partition, as YYYY-MM")
     ap.add_argument("--workers", type=int, default=8, help="processes for preflop enumeration")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="solved-spot cache")
+    ap.add_argument(
+        "--resume", action="store_true", help="skip days that already carry made-hand classes"
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     started = time.monotonic()
-    written = run(args.dataset, args.month, max(1, args.workers), args.cache)
+    written = run(args.dataset, args.month, max(1, args.workers), args.cache, args.resume)
     log.info("done — %s seats in %.0fs", f"{written:,}", time.monotonic() - started)
     log.info("now: uv run python -m scripts.backfill --skip-tests --rebuild-from <first day>")
     return 0

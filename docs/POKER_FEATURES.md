@@ -569,13 +569,21 @@ the incumbent that does it best.
 > [POKER_RANGE_LAB.md](POKER_RANGE_LAB.md), plan phase F in [POKER_PLAN.md](POKER_PLAN.md),
 > ADR-027…029. The equity engine runs in the browser (TypeScript, Worker); F-902's server-side
 > half (all-in EV at parse time) stays plan step E.5.
+>
+> **2026-09-11:** that server-side half is **done** — plan E.5, ADR-039. `phevaluator`
+> (Apache-2.0, the same `HenryRLee/PokerHandEvaluator` the browser engine uses through
+> WebAssembly) ranks hands at parse time; `core/equity.py` enumerates every runout exactly
+> and awards each side pot separately; `core/classify.py` is the Python twin of
+> `classify.ts`, pinned to a 1,024-case fixture both suites assert. **F-309 is closed with
+> it**, and `marts.decisions.made_hand` — reserved since ADR-020 — is filled.
 
 **F-901 · Range notation parser & editor** — `core` `web` · **M** · **Expansion** · planned
 > `TT+, AJs+, KQo` ↔ a 169-combo grid; visual editor. Also unlocks F-405.
 > **Deps** — F-101 · **Reference** — Flopzilla, Equilab
 
-**F-902 · Equity calculator** — `core` · **L** · **Expansion** · planned
+**F-902 · Equity calculator** — `core` · **L** · **Expansion** · ✅ done (browser F.2; server E.5)
 > Range vs. range vs. board, Monte-Carlo or exhaustive. Shares the evaluator with F-309.
+> Browser half delivered by F.2; the server half by E.5 (exact enumeration, side-pot aware).
 > **Deps** — F-901 · **Reference** — Equilab, Flopzilla Pro
 
 **F-903 · Range-vs-board analysis** — `core` `web` · **L** · **Expansion** · planned

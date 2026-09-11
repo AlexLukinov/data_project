@@ -1,20 +1,15 @@
 """Reading and writing the seats `scripts.backfill_equity` enriches.
 
-Split out from it for the file-size rule, and the seam is a real one: everything here knows
-about ClickHouse and nothing here knows what a made hand or an equity is. The compute side
-knows the reverse.
-
-The shapes are deliberately thin — a `Hand` is the five things the enrichment reads (the board,
-where betting stopped, whether anyone was all-in, and each seat's cards and money) and the five
-it writes. Reconstructing a full `CanonicalHand` would mean re-deriving it from raw text, which
-is the forty-five minutes this whole path exists to avoid.
+Split out for the file-size rule, but the seam is real: everything here knows about
+ClickHouse and nothing here knows what a made hand or an equity is. A `Hand` carries only
+what the enrichment reads and writes; rebuilding a full `CanonicalHand` would mean
+re-deriving it from raw text, the cost this path exists to avoid.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -62,8 +57,8 @@ class Hand:
     def board_at_all_in(self) -> tuple[str, ...] | None:
         """The board visible when the last chip went in, or None when EV does not apply.
 
-        The judgement itself is `core.allin`'s, so this path and the parse-time one cannot
-        drift; only the inputs are read from storage rather than from a `CanonicalHand`.
+        The judgement is `core.allin`'s, so this path and the parse-time one cannot drift;
+        only the inputs come from storage rather than from a `CanonicalHand`.
         """
         board = runout_board(self.board, self.last_street, self.has_allin)
         if board is None:
@@ -114,10 +109,9 @@ inner join (
 ) as a on a.hand_uid = h.hand_uid
 where h.game_type = 'holdem'
 group by h.hand_uid, h.big_blind, board, a.last_street, a.has_allin
--- Only the hands that can gain something. A hand where nobody's cards were shown and
--- nobody went all-in has no made hand to classify and no EV to adjust, and it cannot be
--- holding a stale value either, since both need cards. On the real corpus that is 14.5%
--- of hands loaded instead of all of them.
+-- Only the hands that can gain something: one where nobody's cards were shown and nobody
+-- went all-in has no class to compute, no EV to adjust and no stale value to clear, since
+-- all three need cards. On the real corpus that is 14.5% of hands loaded, not 100%.
 having max(p.hole_cards != '') = 1 or a.has_allin = 1
 """
 
@@ -125,11 +119,9 @@ having max(p.hole_cards != '') = 1 or a.has_allin = 1
 def days(dataset: str | None, month: str | None) -> list[str]:
     """The days holding hands, oldest first — the unit of work.
 
-    A day, not the monthly partition: 2025-01 alone is 38% of the corpus, and holding one such
-    month as objects reached 3.8 GB of resident memory before it had written a single row. A
-    day is ~150k hands, which is the same reasoning `scripts/backfill.py` applies to dbt.
-    Writing a partition from several day-batches is fine here — this is a ReplacingMergeTree
-    insert, not `insert_overwrite`, so nothing is being swapped wholesale.
+    A day, not the monthly partition: 2025-01 alone is 38% of the corpus and reached 3.8 GB of
+    resident memory as objects before writing a row. Filling a partition from several day
+    batches is fine — a ReplacingMergeTree insert swaps nothing wholesale.
     """
     where = _scope(dataset, month)
     rows = (
@@ -140,6 +132,30 @@ def days(dataset: str | None, month: str | None) -> list[str]:
         .result_rows
     )
     return [str(r[0]) for r in rows]
+
+
+def unfinished(dataset: str | None, candidates: list[str]) -> list[str]:
+    """The days of `candidates` still holding a seat that should have a class and has none.
+
+    Resuming must be decided by what is MISSING, not by what is present. The first version
+    asked whether a day held any class at all and skipped it if so — wrong the moment a run
+    dies midway through a day, since `write()` inserts in batches and a half-written day then
+    looks finished for ever — it left 1,154 seats of 2025-04-30 unenriched. "Should have a
+    class" is two known cards in a hand that saw a flop, the mart assertion's own condition.
+    """
+    where = _scope(dataset)
+    sql = f"""
+        select distinct toDate(p.played_at_utc) as d
+        from (select hand_uid, played_at_utc, hole_cards, made_hand_flop
+              from core.hand_players final where {where}) as p
+        inner join (select hand_uid, board_flop_1 from core.hands final where {where}) as h
+            on h.hand_uid = p.hand_uid
+        where length(splitByChar(' ', p.hole_cards)) = 2
+          and h.board_flop_1 != ''
+          and p.made_hand_flop = ''
+    """
+    pending = {str(r[0]) for r in clickhouse().query(sql).result_rows}
+    return [d for d in candidates if d in pending]
 
 
 def _scope(dataset: str | None, month: str | None = None, day: str | None = None) -> str:
@@ -180,17 +196,45 @@ def load(dataset: str | None, day: str) -> list[Hand]:
     return hands
 
 
-_COLUMNS = (
-    "user_id, dataset, hand_uid, played_at_utc, seat, player_key, screen_name, is_hero, "
-    "is_anonymized, anon_alias, position, position_index, starting_stack, starting_stack_bb, "
-    "hole_cards, total_invested, net_won, net_won_bb, allin_equity, ev_won_bb, saw_flop, "
-    "saw_turn, saw_river, went_to_showdown, won_hand, parsed_at, bounty_won, was_eliminated, "
-    "finish_position, extra, made_hand_flop, made_hand_turn, made_hand_river"
+# The seat's identity, and the five columns this pass owns. Nothing else is named, and that is
+# the point: everything else is copied inside ClickHouse and never travels through Python.
+_KEYS = ("user_id", "hand_uid", "seat")
+_OWNED = ("allin_equity", "ev_won_bb", "made_hand_flop", "made_hand_turn", "made_hand_river")
+
+_MERGE = """
+insert into core.hand_players (
+    user_id, dataset, hand_uid, played_at_utc, seat, player_key, screen_name, is_hero,
+    is_anonymized, anon_alias, position, position_index, starting_stack, starting_stack_bb,
+    hole_cards, total_invested, net_won, net_won_bb, allin_equity, ev_won_bb, saw_flop,
+    saw_turn, saw_river, went_to_showdown, won_hand, parsed_at, bounty_won, was_eliminated,
+    finish_position, extra, made_hand_flop, made_hand_turn, made_hand_river
 )
+select
+    p.user_id, p.dataset, p.hand_uid, p.played_at_utc, p.seat, p.player_key, p.screen_name,
+    p.is_hero, p.is_anonymized, p.anon_alias, p.position, p.position_index, p.starting_stack,
+    p.starting_stack_bb, p.hole_cards, p.total_invested, p.net_won, p.net_won_bb,
+    e.allin_equity, e.ev_won_bb,
+    p.saw_flop, p.saw_turn, p.saw_river, p.went_to_showdown, p.won_hand,
+    now64(3),
+    p.bounty_won, p.was_eliminated, p.finish_position, p.extra,
+    e.made_hand_flop, e.made_hand_turn, e.made_hand_river
+from (select * from core.hand_players final where {where}) as p
+inner join {scratch} as e
+    on e.user_id = p.user_id and e.hand_uid = p.hand_uid and e.seat = p.seat
+"""
+"""The whole row is rewritten, but only the five owned columns come from Python.
+
+**A bug fix, not a refactor.** The first version selected all 33 columns into Python and
+inserted them back, round-tripping `played_at_utc` — a `DateTime64(3, 'UTC')` — through an
+aware `datetime` that clickhouse-connect re-encoded in the machine's local zone. On a UTC+3
+laptop every rewritten row moved **three hours earlier** (2,264,407 of them), and those
+crossing a month boundary landed in another partition where `ReplacingMergeTree` cannot
+collapse them, so the hand grew duplicate seats. Copying inside ClickHouse removes the class.
+"""
 
 
 def write(hands: list[Hand], day: str, dataset: str | None) -> int:
-    """Rewrite whole rows for the seats whose five columns changed, with a bumped version.
+    """Merge the five computed columns into the day's seats, in place, server-side.
 
     Written by comparison, not by intent: a seat is rewritten when what it holds differs from
     what it should hold. That makes the pass idempotent — a second run over the same day writes
@@ -201,43 +245,56 @@ def write(hands: list[Hand], day: str, dataset: str | None) -> int:
     wanted = {(h.uid, s.seat): s for h in hands for s in h.seats}
     if not wanted:
         return 0
-    out = _changed_rows(_stored_rows(dataset, day), wanted)
-    for start in range(0, len(out), BATCH_ROWS):
-        clickhouse().insert(
-            "core.hand_players", out[start : start + BATCH_ROWS], column_names=_COLUMNS.split(", ")
-        )
-    return len(out)
+    where = _scope(dataset, day=day)
+    changed = _changed_rows(_stored_rows(where), wanted)
+    if not changed:
+        return 0
+    scratch = f"core.enrichment_{day.replace('-', '')}"
+    client = clickhouse()
+    client.command(f"drop table if exists {scratch}")
+    client.command(
+        f"create table {scratch} (user_id UInt32, hand_uid String, seat UInt8, "
+        "allin_equity Nullable(Decimal(9, 6)), ev_won_bb Nullable(Decimal(18, 4)), "
+        "made_hand_flop LowCardinality(String), made_hand_turn LowCardinality(String), "
+        "made_hand_river LowCardinality(String)) engine = Memory"
+    )
+    try:
+        for start in range(0, len(changed), BATCH_ROWS):
+            client.insert(
+                scratch,
+                changed[start : start + BATCH_ROWS],
+                column_names=[*_KEYS, *_OWNED],
+            )
+        client.command(_MERGE.format(where=where, scratch=scratch))
+    finally:
+        client.command(f"drop table if exists {scratch}")
+    return len(changed)
 
 
-def _stored_rows(dataset: str | None, day: str) -> list[list[Any]]:
-    """The day's seats that could possibly change.
+def _stored_rows(where: str) -> list[list[Any]]:
+    """The day's seats that could possibly change, with only the columns needed to compare.
 
     A seat with no cards, no stored equity and no stored class has nothing to write and nothing
-    to clear, so it is not fetched: on a dense day that is ~150k rows instead of ~600k.
+    to clear, so it is not fetched: on a dense day that is ~150k rows instead of ~600k. No
+    timestamp is selected, because none is needed and selecting one is how this went wrong.
     """
-    where = _scope(dataset, day=day) + (
+    clause = where + (
         " and (hole_cards != '' or allin_equity is not null or made_hand_flop != ''"
         " or made_hand_turn != '' or made_hand_river != '')"
     )
-    rows = clickhouse().query(f"select {_COLUMNS} from core.hand_players final where {where}")
+    columns = ", ".join([*_KEYS, *_OWNED])
+    rows = clickhouse().query(f"select {columns} from core.hand_players final where {clause}")
     return [list(r) for r in rows.result_rows]
 
 
 def _changed_rows(rows: list[list[Any]], wanted: dict[tuple[str, int], Seat]) -> list[list[Any]]:
-    """The stored rows whose five enriched columns differ from what they should be."""
-    stamp = datetime.now(UTC)
+    """The seats whose five owned columns differ from what they should be."""
     out = []
     for row in rows:
-        seat = wanted.get((row[2], row[4]))
+        seat = wanted.get((row[1], row[2]))
         if seat is None:
             continue
-        current = (row[18], row[19], row[30], row[31], row[32])
-        target = (seat.equity, seat.ev_won_bb, *seat.made)
-        if current == target:
+        if tuple(row[3:8]) == (seat.equity, seat.ev_won_bb, *seat.made):
             continue
-        updated = list(row)
-        updated[18], updated[19] = seat.equity, seat.ev_won_bb
-        updated[25] = stamp
-        updated[30], updated[31], updated[32] = seat.made
-        out.append(updated)
+        out.append([row[0], row[1], row[2], seat.equity, seat.ev_won_bb, *seat.made])
     return out
