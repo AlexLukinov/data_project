@@ -4,10 +4,11 @@
 // pool column is the field's own showdown range at this node (plan F.8), gated on `min_n`.
 import type { ComboIndex, HandClass, NodeKey, WeightedRange } from '@poker/core';
 import { HAND_CLASS_COMBOS, nodeKey, nodeKeyLabel, parseRange, step } from '@poker/core';
-import { NodeKeyEditor, PoolDataBadge, RangeDiffView, RangeDisagreementTable, RangeMatrix } from '@poker/ui';
+import { EstimatedRangePanel, NodeKeyEditor, PoolDataBadge, RangeDiffView, RangeDisagreementTable, RangeMatrix } from '@poker/ui';
 import { computed, ref, watch } from 'vue';
 
 import { createPoolApi } from '~/pool/api';
+import { estimateAt, movers, reweight } from '~/pool/estimate';
 import { poolRange } from '~/pool/range';
 import type { StoredRange } from '~/ranges/api';
 import { useRangesStore } from '~/stores/ranges';
@@ -45,7 +46,32 @@ function parsed(range: StoredRange | null, label: string): WeightedRange | null 
 }
 const mine = computed(() => parsed(current('own'), 'My chart'));
 const solver = computed(() => parsed(current('solver'), 'Solver'));
-const pool = computed(() => poolFromServer.value ?? parsed(current('pool'), 'Pool'));
+const showdown = computed(() => poolFromServer.value ?? parsed(current('pool'), 'Pool'));
+
+/**
+ * Tier 3 (plan F.10). A reconstruction needs a range to start from, so it runs only once a
+ * chart of mine is on screen — and it replaces the showdown column when it lands, because a
+ * prior reweighted by the field beats the field's shown hands read as a range (spec §10.3).
+ */
+const MOVERS = 10;
+const estimated = ref<Awaited<ReturnType<typeof estimateAt>>>(null);
+
+watch(
+  [mine, key],
+  async ([prior, at]) => {
+    estimated.value = prior === null ? null : await estimateAt(poolApi, at, prior);
+  },
+  { immediate: true },
+);
+
+const reconstructed = computed(() => {
+  const answer = estimated.value;
+  return answer?.enough && mine.value ? reweight(mine.value, answer.classes, 'Pool estimate') : null;
+});
+const topMovers = computed(() => (estimated.value === null ? [] : movers(estimated.value, MOVERS)));
+const measured = computed(() => (estimated.value?.classes ?? []).filter((c) => !c.fallback).length);
+const pool = computed(() => reconstructed.value ?? showdown.value);
+const poolTier = computed<1 | 2 | 3>(() => (reconstructed.value === null ? 2 : 3));
 const diffRanges = computed(() => [mine.value, solver.value, pool.value].filter((r): r is WeightedRange => r !== null).map((r) => ({ label: r.label ?? '', range: r })));
 
 watch(picked, (id) => {
@@ -91,7 +117,15 @@ const COLUMNS = [
         </select>
         <template v-if="c.source === 'pool' && pool">
           <RangeMatrix :range="pool" mode="view" :highlight-combos="highlight" @cell-click="ring" />
-          <PoolDataBadge v-if="shown" :tier="2" :sample-size="shown.sample_size" :enough="shown.enough" :min-n="shown.min_n" :covers="shown.covers" />
+          <PoolDataBadge
+            v-if="estimated?.enough"
+            :tier="3"
+            :sample-size="estimated.sample_size"
+            :enough="true"
+            :min-n="estimated.min_n"
+            :covers="estimated.covers"
+          />
+          <PoolDataBadge v-else-if="shown" :tier="poolTier" :sample-size="shown.sample_size" :enough="shown.enough" :min-n="shown.min_n" :covers="shown.covers" />
         </template>
         <template v-else-if="c.source !== 'pool' && current(c.source)">
           <RangeMatrix :range="(c.source === 'own' ? mine : solver)!" mode="view" :highlight-combos="highlight" @cell-click="ring" />
@@ -106,6 +140,24 @@ const COLUMNS = [
         </p>
       </div>
     </div>
+
+    <section v-if="estimated" class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="compare-tier3">
+      <h2 class="mb-2 font-medium">What the field does with your range here</h2>
+      <EstimatedRangePanel
+        v-if="estimated.enough"
+        :action="estimated.action"
+        :observed="estimated.observed_frequency"
+        :implied="estimated.implied_frequency"
+        :classes="topMovers"
+        :measured="measured"
+        :total="estimated.classes.length"
+        :min-bucket-n="estimated.min_bucket_n"
+      />
+      <p v-else class="text-sm text-zinc-500" data-testid="compare-tier3-thin">
+        The pool has played this situation {{ estimated.sample_size.toLocaleString('en-US') }} times, under the
+        {{ estimated.min_n }} a reconstruction needs. The Pool column is the showdown range, unreweighted.
+      </p>
+    </section>
 
     <div v-if="diffRanges.length >= 2" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]" data-testid="compare-diff">
       <RangeDiffView :ranges="diffRanges" @cell-click="ring" />

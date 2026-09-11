@@ -23,13 +23,17 @@ from analysis.pool.node_service import NodeFrequencies, NodeShowdownRange
 from analysis.pool.node_service import frequencies as node_frequencies
 from analysis.pool.node_service import showdown_range as node_showdown_range
 from analysis.pool.nodes import NodeKey
+from analysis.pool.realization import NodeRealization
+from analysis.pool.realization import realization as node_realization
+from analysis.pool.reconstruct import NodeEstimatedRange
+from analysis.pool.reconstruct import estimated_range as node_estimate
 from analysis.pool.service import players as player_lookup
 from analysis.pool.service import pool_report, presets
 from api import cache, hand_query
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import Cohort
 from api.schemas import HandSummary
-from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, PoolPresetsOut
+from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, EstimateIn, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
 from stats.request import CohortSpec, ReportRequest, ReportResult
 from stats.service import Cache, validate_request
@@ -207,6 +211,48 @@ async def node_showdown_range_at(
             node_showdown_range, body, user.tenant_id, cohort=cohort, cache=report_cache()
         )
     except (ReportError, RegistryError) as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/node/estimated-range", response_model=NodeEstimatedRange)
+async def node_estimated_range_at(
+    body: EstimateIn, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
+) -> NodeEstimatedRange:
+    """Tier 3: the prior reweighted by what the field does with each class (spec §10.3).
+
+    The key's last step is the action being explained. `implied_frequency` against
+    `observed_frequency` is the reconstruction checking its own work: they agree only if the
+    per-class rates really do produce the frequency tier 1 measured directly.
+    """
+    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    try:
+        return await run_in_threadpool(
+            node_estimate,
+            body.node,
+            body.prior,
+            user.tenant_id,
+            cohort=cohort,
+            cache=report_cache(),
+        )
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/node/eqr", response_model=NodeRealization)
+async def node_realization_at(
+    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
+) -> NodeRealization:
+    """What the field won from this node onwards, overall and by holding (spec §10.4).
+
+    The pool's half of EQR only: `realized` is EV as a share of the pot, and the caller divides
+    it by the equity its own engine computed against the range it is holding (ADR-035).
+    """
+    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    try:
+        return await run_in_threadpool(
+            node_realization, body, user.tenant_id, cohort=cohort, cache=report_cache()
+        )
+    except ValueError as exc:
         raise _bad_request(exc) from exc
 
 

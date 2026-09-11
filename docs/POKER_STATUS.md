@@ -5,8 +5,8 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.8 and D.1/D.2 committed (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, and the pool's tiered answers at a node); F.9 (the 9-step analyzer) done and uncommitted; CI run pending a push**
-**Last updated:** 2026-09-10 (session 7, Range Lab F.0 → F.9, D.2)
+**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; CI run pending a push**
+**Last updated:** 2026-09-11 (session 8, F.10 + the §5b re-parse and rebuild)
 
 ---
 
@@ -15,10 +15,10 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.10** (tier 3 reconstruction + empirical EQR), then **F.11**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.11** (training modes), then **F.12**
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
-(ADR-020…034) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
+(ADR-020…035) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
 
 **Where things stand (2026-09-10):** phases A–C are done and merged into `main` (`f18049b`);
@@ -190,39 +190,78 @@ is green; `make check` was 310 then (338 after F.6). CI job `web` (Node 24) is i
 `platform/web/LICENSES.md` lists every direct dependency; MPL-2.0 `lightningcss` (unmodified,
 dev-only) and the CC-BY-3.0 `spdx-exceptions` data file are flagged there for the founder.
 
+**Where F.10 stands (2026-09-11):** **done, uncommitted** (ADR-035). Tier 3 reconstructs a prior
+at a node and shows its own error; empirical EQR is split between the pool and the engine;
+`invested_bb` is a new column on `marts.decisions`. The estimator deviates from the spec's
+literal wording for a measured reason: counting a class's revealed hands and taking the share
+that took the action reads *"the field opens 97% of AQs, 85% of KTo, 80% of QTo"* at a node
+where tier 1 says it opens **18.35%** at all — folders are never shown, so every class saturates
+against the ceiling. Tier 3 reweights by a **likelihood ratio** instead, which cancels the reveal
+rate, leaves the posterior unchanged and makes `implied_frequency` equal tier 1's observed
+frequency exactly when the prior matches the field's own class mix. Verified in Chrome against
+the real pool at the BB's flop lead: 35 of 51 chart classes reweighted, KK/AA/AKo to ~1.6× and
+22 to 0.33× (22 falls from 100% of the prior to 20% of the estimate), implied 12.9% against
+observed 14.1%. `EQRPanel`'s pool slot — left empty in F.5 — is filled in the replayer.
+
+**And §5b ran with it (2026-09-11).** `scripts/reparse.py` re-read the whole 9.07M-hand pool
+corpus from the raw text in object storage, so the F.8 parser fix finally reaches hands imported
+before it. The rebuild that followed needed **no downtime**: `REPLACE PARTITION` only wants
+identical structure, so `ALTER TABLE marts.decisions ADD COLUMN invested_bb Float32 AFTER
+pot_before_bb` plus the ordinary `scripts.backfill` fills the column a day at a time with the
+marts queryable throughout — rehearsed on the test databases first and written up in
+`macros/incremental.sql` as the preferred path for a column-only change.
+
+**It worked, and the numbers are verified.** Pool showdown-seat card coverage went from
+**387,740 of 2,227,803 (17.4%) to 2,273,342 of 2,273,342 (100.0%)**; pool decision coverage
+1.89% → **13.35%**; the BB flop lead went from **35 of 51** chart classes reweighted to **169 of
+169**. The **hero fingerprint did not move** — 19,802 hands, VPIP .229573, PFR .188466, WTSD
+.033835, −1.37 bb/100 — which was the load-bearing check, because hero exports always contained
+their own cards and any movement there would have meant a parser regression, not a recovery. Row
+counts are unchanged (73,679,949 decisions / 54,562,770 player-hands); pool WTSD rose .040919 →
+.041756 as previously-unidentifiable showdowns became identifiable.
+
+**Three bugs surfaced during the rebuild, all fixed** (details in plan §5b):
+`scripts/backfill.py` ran whole-table data tests every pass and `dbt build` skips nodes
+downstream of a failed test, so the anchor never built (`--skip-tests`); an `ALTER ADD COLUMN`
+dirties no partition, so **both hero months silently kept `invested_bb = 0`** while the eight
+months the re-parse touched came out right (`--rebuild-from`, with an advancing floor so the
+loop still converges); and the assertion that should have caught that sampled by day-of-month,
+covering 4 months of 10 — it now samples on `cityHash64(hand_uid)`. Dead letters were also
+deduplicated to a single generation, 128,340 → **19,117**, with the original preserved as
+`core.parse_failures_pre_dedupe_20260911` (drop it once these numbers have been accepted).
+
 **Do this:**
-1. F.9 is done and verified (`make check` 387, `make test-all` 429, `make web-check` 364;
-   acceptance 9 checked in Chrome against the real pool, read-only), **uncommitted** — commit it
-   as one commit when the founder says so: `api/models_analyses.py`, `api/schemas_analyses.py`,
-   `api/analysis_store.py`, `api/routers/analyses.py`, `api/main.py`,
-   `migrations/versions/d5e6f7a8b9c0_analyses.py`, `migrations/env.py`,
-   `ingestion/clickhouse.py` (sessions off), `tests/test_analysis_store.py`,
-   `tests/integration/test_analyses.py`; `web/packages/poker-ui/src/{prediction,stepper}.ts`,
-   `src/components/{PredictionGate,StepperNav}.vue`, `src/index.ts`, `src/theme.css`,
-   `test/analyzer.test.ts`; `web/apps/web/app/analyze/` (whole directory),
-   `app/components/analyze/` (whole directory), `app/pages/analyze/` (whole directory),
-   `app/stores/analysis.ts`, `app/app.vue`, `app/pages/dev/components.vue`,
-   `app/pages/hands/paste.vue`, `app/components/hands/HandStudy.vue`; docs (plan, this file,
-   ADR-034, `CLAUDE.md`). Nothing on `feat/range-lab` is pushed yet; after a push, when the CI
-   `web` job is green, tick **F.1**.
-2. **Decide on the re-parse** ([POKER_PLAN.md](POKER_PLAN.md) §5b) — still open. The parser fix
-   is in, but the 9.1M-hand corpus still carries the old parse: pool showdown cards stay at
-   17.4% until it is re-parsed, and tier 2 answers from that. Hours of compute, and it moves
-   pool WTSD/W$SD slightly, so it is the founder's call; the plan lists the four steps and what
-   to verify afterwards.
-3. **F.10 Tier 3 reconstruction + empirical EQR** (plan F.10). Concretely:
-   - `invested_bb` on `marts.decisions` — the macro, the registry entry and a partition rebuild
-     through `scripts/backfill.py` (never a one-shot `--full-refresh`, ADR-019).
-   - `POST /v1/pool/node/estimated-range` (tier 3: the showdown range of F.8 reweighted by the
-     tier-1 frequencies, falling back to the prior where a bucket is thin) and
-     `POST /v1/pool/node/eqr` (EQR per hand class from `invested_bb` and `net_won_bb`).
-   - Per-bucket sample sizes on every figure, with `PoolDataBadge` tier 3, and the
-     frequency-validation view: the reconstructed range's implied frequency shown against the
-     tier-1 frequency it was built from.
-   - `EQRPanel`'s pool slot (left empty in F.5) filled in.
-   - **Done means** the reconstructed range's implied frequency is shown against tier 1, EQR per
-     class carries its n, and no bucket under the threshold shows a number. Then tick F.10,
-     update the plan's Status and §6 and this block, and offer the commit.
+1. **F.10 is done and verified, uncommitted** — commit it as one commit when the founder says
+   so. Backend: `analysis/pool/{node_query,reconstruct,realization}.py` (new),
+   `analysis/pool/node_service.py` (rebased on the shared query), `api/routers/pool.py`,
+   `api/schemas_pool.py`; data: `dbt/poker_dwh/macros/decision_state.sql`,
+   `macros/incremental.sql` (the no-downtime ALTER path), `stats/registry/dimensions.yaml`,
+   `dbt/poker_dwh/tests/assert_invested_bb_is_the_seats_own_chips.sql` (new);
+   `scripts/reparse.py` (new); tests `tests/test_node_tier3.py`, `tests/test_reparse.py`,
+   `tests/integration/test_pool_tier3.py` (new), `tests/test_api_v2.py` (the dimension count).
+   Web: `web/packages/poker-ui/src/estimate.ts`,
+   `src/components/{EstimatedRangePanel,PoolRealizationPanel}.vue`, `test/tier3.test.ts` (new),
+   `src/{index.ts,glossary.ts}`; `web/apps/web/app/pool/{estimate.ts,estimate.test.ts}` (new),
+   `app/pool/api.ts`, `app/pages/ranges/compare.vue`, `app/components/hands/HandStudy.vue`,
+   `app/pages/dev/components.vue`. Also from the rebuild: `scripts/anchors.py` (the dirty-gate
+   SQL moved here beside the anchor SQL, plus `dirty_where`/`advance`/`partition_of`),
+   `scripts/backfill.py` (`--rebuild-from`), `tests/test_backfill_anchors.py`,
+   `tests/test_backfill_tests_flag.py`, and `dbt/poker_dwh/profiles.yml` (`max_threads`, scoped
+   to dbt). Docs: plan, this file, ADR-035, `CLAUDE.md`. A ready commit message is not stored in
+   the repo — write one; the gates were `make check` 420, `make test-all` 469 (2 skipped),
+   `make web-check` 386, licence audit unchanged.
+2. Nothing on `feat/range-lab` is pushed yet; **after a push, when the CI `web` job is green,
+   tick F.1** (it is the one step held open purely on a CI run).
+3. **F.11 Training modes** (plan F.11, spec §16). Concretely: the six modes, the scoring store,
+   `/progress`, spaced repetition, and the **heuristic log with its 14-day review prompt** —
+   which is a query over `analyses.heuristic`, the column F.9 deliberately kept out of the steps
+   JSON for exactly this. `/v1/heuristics` follows the same shape as `/v1/analyses`.
+   `PredictionGate`, `scorePrediction` and the step definitions in `analyze/steps.ts` are the
+   reusable pieces — the nine questions, tolerances and units are already data, not code.
+   **Done means** acceptance 11.
+4. Carried over, unchanged: **B.5b**'s `core.*` rebuild; the phase-E performance note; the real
+   Postgres `users` table still holds old `e2e-*`/`iso-*` test accounts; on a comma-decimal
+   locale `PotOddsPanel`'s number inputs display `2,5` for 2.5 (recorded for F.12).
 
 ---
 
@@ -516,6 +555,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-11 (24) | **Plan F.10 done — tier 3, empirical EQR, and the §5b corpus re-parse.** Committed F.9 (`5852d14`). Tier 3 reconstructs a prior you bring by a **likelihood ratio** rather than the spec's literal estimator, which saturates at ~97% on real data because folders are never shown (ADR-035); empirical EQR sits beside it on a new `decisions.invested_bb`. Then **§5b**: `scripts/reparse.py` re-read all 2,492 objects from object storage (9,079,995 hands stored, 19,097 `pot_mismatch` failures, **0 unreadable**), and the chain was rebuilt with **no downtime** — `ALTER TABLE ... ADD COLUMN ... AFTER` plus the ordinary backfill, since `REPLACE PARTITION` only wants identical structure. **Pool showdown-seat card coverage went 17.4% → 100.0%**, pool decision coverage 1.89% → **13.35%**, and the BB flop lead went from 35 of 51 chart classes reweighted to **169 of 169**. The **hero fingerprint did not move** (.229573 / .188466 / .033835 / −1.37) — the load-bearing check, since hero exports always had their own cards. Three real bugs surfaced and were fixed: the backfill ran whole-table data tests every pass and `dbt build` skipped the anchor downstream of their failure (`--skip-tests`); an `ALTER` dirties no partition, so **both hero months silently kept `invested_bb = 0`** (`--rebuild-from`); and the assertion that should have caught that sampled by date, covering 4 months of 10 — it now samples by `cityHash64(hand_uid)`. Dead letters deduped to one generation (128,340 → 19,117; original kept as `core.parse_failures_pre_dedupe_20260911`). Verified in Chrome, read-only: tier 3 reweighted 51 of 51 (AA 4.90×, KK 4.77×, JTo 0.57×), implied 19.1% vs observed 14.7%; the **EQR panel now answers** (52.5% of pot, 8.33 bb from here) where it could only say `needs_rebuild` before; one copy bug fixed where full coverage made "the rest" describe an empty set. `make check` 420, `make test-all` 469, `make web-check` 386. Uncommitted. | **Commit F.10 + §5b, then F.11** (training modes). |
 | 2026-09-10 (23) | **Plan F.9 done — the 9-step analyzer.** Committed F.8 (`45ff8f3`). `analyses` in Postgres with **merge-by-step** saves (`/v1/analyses`), so an autosave of one step can never lose another; `PredictionGate` (the truth is fetched only after the answer is committed) and `StepperNav` in `poker-ui`; the `analyze/` module in the app (the nine questions as data, the spot the earlier steps build, every reveal computed and hand-counted in tests, Dexie autosave with an offline queue and retry); nine step components; `/analyze`; and **Analyze this node** on the replayer. Verified in Chrome against the **real** pool, read-only: all nine steps run on one of the founder's NL10 hands, a prediction committed at each, ending in a saved heuristic and `9 of 9` — **acceptance 9**; the CO folds 43.2% (n = 3,988) against an MDF of 39.8%. Four browser-found defects fixed (a stale step snapshot losing a patch; `classifyCombos` throwing on a partial board; step 8 reading its own size; step 9 asking the wrong side of the bet) and one server bug: the shared ClickHouse client refused concurrent queries because of its session id. `make check` 387, `make test-all` 429, `make web-check` 364. ADR-034. Uncommitted. | **Commit F.9, decide on the re-parse, then F.10** (tier 3 + empirical EQR). |
 | 2026-09-10 (22) | **Plan F.8 done — the pool at a node, and the parser gap behind it.** Committed F.7 (`317fab4`). Answered the plan's first question: the pool's missing showdown cards were a **parser gap** — observed GG tables print revealed cards only in the per-seat SUMMARY, which the parser skipped (752 of 752 sampled cardless showdown seats had them there). Fixed with `SEAT_SUMMARY` + `summary_seat_line`; a whole real pool file goes from 18.5% to 100% card coverage on re-parse, and §5b holds the re-parse plan for the founder to schedule. Then the step itself: `raise_to_bb` buckets, `node_filter` (a `NodeKey` as a predicate over `decisions`, the villain named only through a column that means it, the stack by registry bucket), `node_service` tiers 1 and 2 as `run_report` calls, `POST /v1/pool/node/{frequencies,showdown-range}` with `MIN_N = 100` and no numbers below it, `PoolDataBadge`, the pool column of `/ranges/compare` (per-combo weights) and the replayer's frequencies panel. Verified in Chrome against the **real** pool read-only: real nodes answered with n in the millions, the UTG-RFI showdown range drawn with its coverage caveat, a thin node gated — **acceptance 10**. Fixed `nodeKeyAt` carrying every street into the sequence. `make check` 377, `make test-all` 410, `make web-check` 323. ADR-033. Uncommitted. | **Commit F.8, decide on the re-parse, then F.9** (the 9-step analyzer). |
 | 2026-09-10 (21) | **Plan F.7 done — the hand replayer.** Committed F.6 (`951107a`). Replay engine in `poker-core/src/hand/`: one hand shape for all three sources, `replayStates` (chips as *committed in front* plus the *settled pot*; the street's bets collected exactly when the next card is dealt; the engine's pot and to-call checked against the parser's own figures for every action of a real hand), and `nodeKeyAt` (the situation **ending with the decision just made**, so stepping walks the node tree). `poker-ui`: `PokerTable` (6-max oval, stacks in bb, chips in front, board, pot, button, the seat to act, the last action as a bubble, the winner named at the end), `HandActionLog`, `HandReplayer` (step, seek, play, `←`/`→`/space/`1`–`4`). Backend: `POST /v1/hands/parse` (ADR-029 — nothing stored; two hands or a hand that does not reconcile are refused in words), `POST /v1/hands/search` (the report filter asked backwards, answering with decisions so the seat comes too), `GET /v1/pool/hands`, `seat` on `HandSummary`. App: `/hands` (my hands · pool, situation filter), `/hands/[id]`, `/hands/paste`, `HandStudy` binding my stored chart, pot odds, MDF, distribution and equity to the current node. Verified in Chrome on the test databases — **acceptance 8** (the two stored ranges at the node gave 64.2% / 35.8%), a pasted hand replayed, junk refused, pool hands listed on their showdown seat. Found and fixed the `FixedString(16)` hand id in the decision mart (the search was silently empty). `make check` 354, `make test-all` 385, `make web-check` 317. ADR-032. Uncommitted. | **Commit F.7, then F.8** (pool integration, tiers 1 and 2). |

@@ -44,6 +44,7 @@ not a change I've made.
 | [032](#adr-032--the-replayer-one-hand-shape-from-three-sources-states-are-derived-the-node-is-the-decision-just-made) | The replayer: one hand shape from three sources, states are derived, the node is the decision just made | ✅ |
 | [033](#adr-033--what-the-pool-may-say-a-node-is-only-as-good-as-its-columns-and-a-range-is-only-the-hands-that-were-shown) | What the pool may say: a node is only as good as its columns, and a range is only the hands that were shown | ✅ |
 | [034](#adr-034--the-analyzer-the-answer-is-fetched-after-the-commit-a-save-is-a-merge-and-a-reveal-names-its-own-authority) | The analyzer: the answer is fetched after the commit, a save is a merge, and a reveal names its own authority | ✅ |
+| [035](#adr-035--tier-3-estimates-a-likelihood-ratio-not-a-frequency-and-reports-its-own-error-eqr-is-split-between-the-pool-and-the-engine) | Tier 3 estimates a likelihood ratio, not a frequency, and reports its own error; EQR is split between the pool and the engine | ✅ |
 
 ---
 
@@ -1192,3 +1193,88 @@ card at a time and the partial states are real; and the process-wide ClickHouse 
 with `autogenerate_session_id` off, because ClickHouse refuses a second query inside a session
 while the first runs, which made two concurrent reads (a hand and the pool's frequencies) fail
 outright. Nothing in the platform uses session state.
+
+---
+
+## ADR-035 — Tier 3 estimates a likelihood ratio, not a frequency, and reports its own error; EQR is split between the pool and the engine
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** F.10
+
+**Context.** Spec §10.3 asks for a Bayesian reconstruction of villain's range at a node:
+`P(combo | action) ∝ P(action | combo) × P(combo)`, with `P(action | combo)` estimated per
+169-combo class from showdown data and applied to every combo in the class. Spec §10.4 asks for
+empirical EQR beside it: `EQR = (EV / pot) / equity`, where the EV comes from the pool.
+
+Implementing §10.3 literally — a class's revealed hands, and the share of them that took the
+action — produces numbers that are not merely biased but inverted in meaning. Hole cards are
+seen **only at showdown**, and a seat that folds is almost never shown, so among the revealed
+hands nearly everything continued. Measured on the real corpus at the UTG open node (5.3M
+decisions, 27,867 of them revealed), the direct estimate reads *"the field opens 97% of AQs, 85%
+of KTo, 80% of QTo"* at a node where tier 1 — which is unbiased, because every decision records
+its action — says the field opens **18.35%** of the time at all. Every class saturates near 1,
+the differences between them are noise, and a range reweighted by them would be confidently
+wrong in a product whose entire premise is never showing a number it cannot stand behind
+(ADR-033).
+
+**Decision.**
+
+- **The likelihood is a ratio, not a rate.** `L(class)` is the class's share of the hands that
+  took the action, divided by its share of all hands revealed at the node. Both halves count
+  only revealed hands, so the chance of being shown at all divides out where it saturates. `L`
+  is 1 for a class that takes the action as often as the node's average, above 1 for one that
+  takes it more, and it has no ceiling to be pinned against. The reported per-class rate is
+  `P(action) × L`, capped at 1 because it is a probability. **The posterior is unchanged by this
+  choice** — the two estimators differ by a constant that renormalization removes — so this is
+  about what the screen may claim, not about where the range lands.
+- **A reconstruction must report its own error.** `implied_frequency` (the prior-weighted mean
+  of the per-class rates) is shown against `observed_frequency` (tier 1). The ratio makes the
+  two **equal exactly when the prior matches the class mix the field shows at that node**, so
+  the gap is a reading on the prior, not an artefact of the estimator: positive means the prior
+  is heavy on hands that take the action, negative that it is heavy on hands that do not. A
+  test pins the equality; the panel prints the direction in words.
+- **A bucket under `MIN_BUCKET_N` (200 revealed) is not reweighted at all** — `L` is 1, the
+  prior's weight does not move, and `fallback` says so, so the UI greys it rather than drawing a
+  number nobody measured. When every bucket falls back, implied and observed agree by
+  construction, which is the honest answer for a node the showdown data says nothing about.
+- **EQR is split at the language boundary.** The pool owns `EV / pot` — `net_won_bb +
+  invested_bb` over `pot_before_bb`, straight out of the decision fact. Equity needs a range, a
+  board and an evaluator, all of which live in `packages/poker-core`, so the server returns
+  `realized` and the client divides by the equity it computed. A row shows an EQR only where an
+  equity was supplied; a realized share on its own is never presented as one.
+- **`invested_bb` is a new column on `marts.decisions`,** the seat's own chips already in the
+  pot. It is what turns the hand-level `net_won_bb` into "chips won *from this point*": the
+  chips already in the middle belong to the pot, not to the seat. A mart gains a column only
+  when the chain is rebuilt, so the service **checks once** whether the column is there and
+  answers `needs_rebuild` rather than letting UNKNOWN_IDENTIFIER out as a 500.
+- **The per-class EQR sample is stated for what it is.** `overall` counts every decision that
+  took the action, revealed or not — nothing selects it. `by_hand_class` can only count hands
+  that were turned over, so `covers` is printed beside it and the panel says the rows favour
+  hands that saw a showdown.
+
+**Alternatives.** *Estimate `P(action | class)` directly, as the spec's wording reads* — the
+saturation above; rejected on the measurement, not on theory. *Correct for the reveal rate per
+action* — needs `P(shown | action)`, which is exactly what is unobservable for folds. *Compute
+equity server-side* — a second evaluator in Python, to be kept in step with the TypeScript one
+that the rest of the product already trusts (ADR-027). *Return the posterior per combo* — 1,326
+numbers to say what 169 multipliers say, and it would discard the shape inside a class, which is
+the part a chart author actually drew.
+
+**Consequences.** The reconstruction is *under*-informative where the data is thin rather than
+misleading — at a preflop open node it barely moves the prior, which is correct, because the
+showdown sample there carries almost no information about who folded. It bites where both
+branches reach showdown: verified in Chrome on the real pool at the BB's flop lead (1.35M
+decisions, 1.8% revealed, 35 of 51 prior classes measured), where KK/AA/AKo move to 1.6× and
+small pairs to 0.33×, cutting 22 from 100% of the prior to 20% of the reconstruction — a
+polarised leading range, which is what the field actually has. It also makes the value of
+plan §5b's re-parse measurable rather than assumed: more revealed seats is directly more classes
+over `MIN_BUCKET_N`.
+
+**The bucket is the 169 preflop classes, and that is a ceiling, not a preference.** Postflop what
+moves a decision is whether the hand is a pair, a draw or air, not whether it is 98s — but
+`decisions` carries `hand_class` and `hand_shape`, and `made_hand` is still the column reserved
+for the evaluator (F-902). The 169-class bucket works here only because the node already fixes
+the board *texture*, and it is the finest grain the fact table can answer. When F-902 fills
+`made_hand`, tier 3 should bucket on it postflop: same likelihood ratio, same thresholds, same
+validation view, one dimension swapped. The client cannot do this itself — the pool's counts
+come from many boards that share only their texture tags, so classifying them against the one
+board on screen would be wrong.

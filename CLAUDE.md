@@ -142,7 +142,7 @@ working code and a stale status file has lost the work, because the next session
 - **Poker platform docs** (the product; separate from the lab): `docs/POKER_STATUS.md` (live
   progress — read first), **`POKER_PLAN.md` (the v2 plan being implemented — read second)**,
   `POKER_AUDIT.md` (2026-09-09 audit: what is sound, what is broken, why v2), `POKER_DECISIONS.md`
-  (ADRs 001–034), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
+  (ADRs 001–035), `POKER_FEATURES.md` (backlog), `POKER_ROADMAP.md`, `POKER_ARCHITECTURE.md`,
   `POKER_DATA_MODEL.md`, `POKER_GAP_ANALYSIS.md`, `POKER_OBSERVABILITY.md` (the last five are
   2026-09-06 planning snapshots; where they disagree with AUDIT/PLAN, AUDIT/PLAN win). Prefixed
   because `docs/ARCHITECTURE.md` is the lab's. The product gets its own docker-compose stack; the
@@ -206,13 +206,18 @@ Redis 6380 · MinIO 9010/9011**.
 - Layout: `parser/sites/` (one file or package per network) · `ingestion/` (upload → MinIO →
   Kafka → worker → ClickHouse; sinks behind Protocols in `ingestion/sinks/`) · `core/` (canonical
   model + pot-math validation + the table schema in `core/schema/`) · `api/` · `ch/migrations/` ·
-  `dbt/poker_dwh/` · `scripts/` (bulk importer, backfill loop, generators, parity fingerprint,
-  account registration) · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the
+  `dbt/poker_dwh/` · `scripts/` (bulk importer, corpus re-parse, backfill loop, generators, parity
+  fingerprint, account registration) · `reports/` · `infra/clickhouse/` (small-node sizing) · `stats/` (the
   stat registry as YAML in `stats/registry/` — dimensions and built-in stats, the column contract
   for the marts — plus the filter/expression AST, compiler, router and report service that
   `POST /v1/reports/run` calls) · `analysis/` (`hero/` leaks, sessions; `pool/` reports, player
   lookup, cohorts, the `BaselineProvider` seam; each with `presets.yaml`; ADR-026 — their routers
-  are `api/routers/{hero,pool}.py`) · `web/` (the JavaScript workspace, npm workspaces, ADR-027:
+  are `api/routers/{hero,pool}.py`. The pool answers a node in three tiers over one shared query
+  (`pool/node_query.py`): observed frequencies and showdown ranges (`node_service.py`), the
+  reconstruction of a prior (`reconstruct.py`) and the empirical EQR beside it
+  (`realization.py`); tier 3 reweights by a **likelihood ratio** and prints its implied frequency
+  against tier 1's observed one, because showdown data pins a direct rate against its ceiling —
+  ADR-035) · `web/` (the JavaScript workspace, npm workspaces, ADR-027:
   `packages/poker-core` — pure TypeScript poker maths: cards/combos, weighted ranges, range
   notations, evaluator, equity engine, metrics, blockers, distribution; `packages/poker-workers`
   — the equity Worker service; `packages/poker-ui` — the Vue components, which import

@@ -161,6 +161,36 @@
 
   NEVER `--full-refresh` a populated corpus without that var: that is the one-shot CTAS this
   whole design exists to avoid, and it needs 7+ GiB.
+
+  ### Adding a column without emptying the table (preferred; F.10)
+
+  The recreate above empties the marts until the backfill catches up, which for the real corpus
+  is ~25 minutes with nothing to query. For the common case -- **one new column, no type or
+  partition-key change** -- there is no need for it. `REPLACE PARTITION` only requires the two
+  tables to have identical structure, so give the target that structure by hand first:
+
+      ALTER TABLE marts.decisions ADD COLUMN invested_bb Float32 AFTER pot_before_bb
+      uv run python -m scripts.backfill --skip-tests --rebuild-from 2024-01-01
+
+  `AFTER <the column it follows in the model's SELECT>` matters: the temp table's layout comes
+  from the SELECT, and "identical structure" includes the order. Existing rows read the type's
+  zero until their partition is rebuilt, and each `REPLACE PARTITION` fills the column for a
+  whole day at a time -- so the table stays queryable throughout and every partition is either
+  fully old or fully new, never half-written.
+
+  **`--rebuild-from` is not optional here, and leaving it off fails silently.** The gate below
+  asks whether the SOURCE changed since a partition was built; an ALTER changes no source row,
+  so a partition that nothing else dirtied stays "clean" and keeps the type's zero forever. On
+  2026-09-11 the re-parse dirtied the whole pool and masked this exactly -- eight months came
+  out right and both hero months, which the population-only re-parse never touched, silently
+  held `invested_bb = 0`. Pass the first day of the corpus to force the lot; each partition is
+  still rebuilt only once, because the loop advances the floor past what it has just built.
+
+  That miss is also why the test beside it samples by `cityHash64(hand_uid)` rather than by
+  date: a day-of-month sample covered 4 months of 10 and both hero months fell in the gap.
+
+  Anything else -- a changed type, a new partition key, a dropped column the SELECT still
+  names -- is still the `empty_chain` recreate.
 #}
 
 {% macro dirty_partitions(column='played_at_utc') %}
@@ -186,7 +216,15 @@
            for it, which is exactly what we want. This is the one place that zero-padding is
            relied on deliberately; everywhere else it is the bug documented in
            docs/POKER_STATUS.md, so the dependency is called out rather than left implicit. #}
-        where src.src_max > built.built_max
+        {# `rebuild_from` mirrors dirty_where() in scripts/anchors.py. The watermark asks "has
+           the source changed", which is the wrong question after a bare ALTER ADD COLUMN: the
+           column is empty but no source row moved, so the partition looks clean and keeps its
+           zeroes. This forces everything from that partition on. #}
+        where {% if var('rebuild_from', 0) | int > 0 -%}
+        (src.src_max > built.built_max or src.m >= {{ var('rebuild_from') | int }})
+        {%- else -%}
+        src.src_max > built.built_max
+        {%- endif %}
         {%- if batch > 0 %}
         order by src.m
         limit {{ batch }}

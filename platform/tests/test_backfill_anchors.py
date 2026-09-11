@@ -10,7 +10,15 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.anchors import DEFAULT_ANCHORS, anchor_sql, dbt_vars, parse_anchors
+from scripts.anchors import (
+    DEFAULT_ANCHORS,
+    anchor_sql,
+    dbt_vars,
+    dirty_sql,
+    dirty_where,
+    parse_anchors,
+    partition_of,
+)
 
 
 def test_default_anchor_is_the_last_model() -> None:
@@ -52,3 +60,43 @@ def test_dbt_vars_carry_batch_and_anchors() -> None:
         dbt_vars(1, (("decisions", "played_date"), ("player_hands", "played_date")))
         == "{batch_partitions: 1, anchors: [[decisions, played_date], [player_hands, played_date]]}"
     )
+
+
+def test_the_watermark_alone_is_the_gate_by_default() -> None:
+    """The ordinary case: only a changed source makes a partition dirty."""
+    assert dirty_where(None) == "src.src_max > built.built_max"
+    assert dirty_where(0) == "src.src_max > built.built_max"
+
+
+def test_rebuild_from_forces_partitions_the_watermark_calls_clean() -> None:
+    """The ALTER ADD COLUMN case (F.10).
+
+    A new column leaves every source row untouched, so the watermark says "clean" while the
+    column is empty. On 2026-09-11 that left `invested_bb` at zero for both hero months, which
+    no re-parse had touched, while the other eight months were correct. The override must be an
+    OR: partitions that are dirty for the ordinary reason stay dirty too.
+    """
+    where = dirty_where(20260801)
+    assert where == "(src.src_max > built.built_max OR src.m >= 20260801)"
+    assert dirty_sql("", DEFAULT_ANCHORS, 20260801).count("20260801") == 1
+
+
+def test_rebuild_from_reaches_the_dbt_macro_as_a_var() -> None:
+    """The loop and the macro each filter; both must learn about the override."""
+    assert dbt_vars(2, DEFAULT_ANCHORS, 20260801).endswith(", rebuild_from: 20260801}")
+    assert "rebuild_from" not in dbt_vars(2, DEFAULT_ANCHORS)
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [("2026-08-01", 20260801), ("2025-1-5", 20250105), ("2024-12-31", 20241231)],
+)
+def test_dates_become_partition_integers(day: str, expected: int) -> None:
+    assert partition_of(day) == expected
+
+
+@pytest.mark.parametrize("bad", ["20260801", "2026/08/01", "2026-08", "not-a-date", "26-08-01"])
+def test_a_malformed_rebuild_from_is_rejected_rather_than_silently_zero(bad: str) -> None:
+    """A misread date here would rebuild everything or nothing, both quietly."""
+    with pytest.raises(SystemExit, match="YYYY-MM-DD"):
+        partition_of(bad)

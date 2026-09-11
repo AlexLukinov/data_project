@@ -10,9 +10,9 @@
 | | |
 |---|---|
 | **Phase** | **F — Range Lab** (the founder's 2026-09-10 spec, [POKER_RANGE_LAB_SPEC.md](POKER_RANGE_LAB_SPEC.md); exploration report [POKER_RANGE_LAB.md](POKER_RANGE_LAB.md)), **interleaved with D — UI** in the order §9 of the report gives: F.1–F.3 headless, then D.1 = F.4's app shell, D.2, F.5…. Phase C complete 2026-09-10; **B.5b**'s `core.*` rebuild stays open |
-| **Next step** | **F.10 Tier 3 reconstruction + empirical EQR** (`invested_bb` on `decisions`, `POST /v1/pool/node/{estimated-range,eqr}`, per-bucket sample sizes, the frequency-validation view) — the order from the report's §9: F.9 → F.10 → F.11 → F.12. Done so far: F.1 (`e74c148`), F.2 (`2216e3e`), F.3 (`fd11451`), F.4 = D.1 (`232e096`), D.2 (`3e5cabe`), F.5 (`021f7ae`), F.6 (`951107a`), F.7 (`317fab4`), F.8 (`45ff8f3`), **F.9 done 2026-09-10, uncommitted** (the 9-step analyzer: `PredictionGate`, `StepperNav`, `/v1/analyses` with merge-by-step saves, the nine steps bound to the spot the earlier ones built, and the heuristic the whole analysis ends in) |
+| **Next step** | **F.11 Training modes** (the six modes of spec §16, the scoring store, `/progress`, spaced repetition, the heuristic log with its 14-day review prompt over `analyses.heuristic`, `/v1/heuristics`) — the order from the report's §9: F.11 → F.12 → D.8/D.9. Done so far: F.1 (`e74c148`), F.2 (`2216e3e`), F.3 (`fd11451`), F.4 = D.1 (`232e096`), D.2 (`3e5cabe`), F.5 (`021f7ae`), F.6 (`951107a`), F.7 (`317fab4`), F.8 (`45ff8f3`), F.9 (`5852d14`), **F.10 done 2026-09-11, uncommitted** (tier 3 by likelihood ratio with its own validation view, empirical EQR split between the pool and the engine, `invested_bb` on `decisions`) — and **§5b's corpus re-parse ran with it**, so pool showdown cards are no longer at 17.4% |
 | **Branch** | `feat/range-lab` (phase C merged into `main` at `f18049b` on 2026-09-10); nothing pushed yet |
-| **Last updated** | 2026-09-10, session 7 (Range Lab: F.0 report, ADR-027…034, F.1–F.8 + D.2 committed, F.9 done) |
+| **Last updated** | 2026-09-11, session 8 (F.10: tier 3 + empirical EQR, ADR-035; the §5b re-parse and the column rebuild) |
 | **Blockers** | none |
 | **Rules** | Tick a step only when its **Done means** is verified. Add a row to §6 at the end of every session. Never commit without asking. Never load synthetic hands into the analysis databases (`core.*`/`marts.*`) — tests use the `test_` prefix from B.4 on. |
 
@@ -507,7 +507,7 @@ real hands in the analysis databases, licences from the allowlist only (ADR-027)
 - [x] **F.7** Hand replayer (absorbs plan **D.7**) · `PokerTable` (SVG/CSS 6-max), `HandReplayer` (step, seek, play, keyboard), action log; `POST /v1/hands/parse` (ADR-029, raw text → `HandDetail`, nothing stored), `GET /v1/pool/hands`, `filter` on `/v1/hands`; every panel rebinds to the current node · **Done means** acceptance 8 on one of the founder's real hands and on a pasted one. ✅ **Done 2026-09-10** (ADR-032). **Core:** `poker-core/src/hand/` — `types.ts` (the hand shape, one for all three sources), `replay.ts` (`replayStates`: one state per step, chips tracked as *committed in front* plus *settled pot* so pot odds are quoted against what is actually in the middle; the street's bets are collected exactly when the next card is dealt), `node.ts` (`nodeKeyAt`: the situation the hand is in, ending with the decision that has just been made — so stepping walks the node tree and every stored range is one lookup away). **Backend:** `api/hand_parse.py` (paste → one hand or a sentence saying why not: two hands are refused rather than truncated, a hand that does not reconcile is refused as the ingest loop refuses to store one), `api/hand_query.py` (the ClickHouse reads both routers share), `stats/hands.py` + `stats/request.py`'s `HandSearch` (the report filter asked backwards: `SELECT` the matching **decisions**, so the answer carries the seat), `POST /v1/hands/search`, `POST /v1/hands/parse`, `GET /v1/pool/hands`; `HandSummary` gains `seat`. **App:** `/hands` (my hands · pool, four registry dimensions as a situation filter), `/hands/[id]`, `/hands/paste`, `components/hands/HandStudy.vue` (the replayer with the panels bound to the node: my chart from the library, pot odds, MDF, distribution, equity of my node's range against the villain node's). **Deviations, both recorded in ADR-032:** the filter arrives as `POST /v1/hands/search` rather than a `filter` parameter on `GET /v1/hands` (a filter tree is a document, as `/v1/reports/run` and `/v1/ranges/lookup` already are), and awards are **not** actions — no parser emits one, so the pot stands until the hand ends and the winner is named from `pot_winners` via `ReplaySeat.wonHand`. **Verified in Chrome against the API on the `test_` databases** (`make seed`, the demo account): the 8-hand corpus lists with the seat to open on; hand `38dcad35` steps from the deal to the muck — chips 0.25/0.50/1.50 in front, "raises to 6.00" beside the seat, the flop dealt with the preflop chips collected into a 12.50 pot, `←`/`→` and the street buttons and the log all seeking; the situation reads `BTN RFI · 105bb · NL50` at step 6 and `SB 3-bet vs BTN 3bb · 100bb · NL50` at step 7, where the stored ranges bound to those two nodes gave **SB 3-bet vs BTN 64.2% / BTN RFI 35.8%** (Monte Carlo 50 000, ±0.42 pp) and pot odds "calling 5.5 to win 8 is 1.5 : 1, 40.7%"; a pasted PokerStars hand replayed with hero HJ A♣K♦ and junk text was refused with the parser's own sentence; the Pool tab listed the two pool hands, each opening on the seat that showed cards. One defect found in the browser and fixed with a test: `marts.decisions.hand_uid` is `FixedString(16)` while `core.*` and every URL use the hex form, so the search returned ids that matched no hand and the list was silently empty. `make check` 354 unit tests, `make test-all` 385 (8 new integration tests), `make web-check` 317.
 - [x] **F.8** Pool integration, tiers 1 and 2 · `analysis/pool/nodes.py` (`NodeKey` Pydantic + `node_filter()` → AST; `raise_to_bb` buckets added to `dimensions.yaml`; shared `tests/fixtures/nodes.json` parsed by both suites), `POST /v1/pool/node/{frequencies,showdown-range}`, `PoolDataBadge`, `min_n` gating; **first** read raw text of pool showdown hands to explain why only 17% of showdown seats carry cards (report §7) · **Done means** acceptance 10 for tiers 1 and 2; a node under `min_n` shows "insufficient data"; the missing-cards question is answered in §6 and, if it is a parser gap, fixed with a re-parse plan. ✅ **Done 2026-09-10** (ADR-033). **The question is answered in §5b: a parser gap, fixed.** Observed GG tables print a card-less `Dealt to` line for every seat and the revealed cards only in the per-seat SUMMARY, which the parser skipped; 752 of 752 cardless showdown seats sampled from 371 real pool hands had their cards there. `grammar.SEAT_SUMMARY` + `lines.summary_seat_line` (keyed on the seat number, `setdefault` so a self-export's own cards are never overwritten) take card coverage on a whole real pool file from **168 of 907 showdown seats (18.5%) to 923 of 923 (100%)**; `seeds/hands/ggpoker/observed_nl25.txt` is the fixture, and the corpus re-parse is planned in §5b for the founder to schedule. `lines.py` reached the 300-line limit and its action handlers moved to `parser/sites/pokerstars/actions.py`. **The engine:** `raise_to_bb` gains buckets (opens through 4-bets); `analysis/pool/node_filter.py` compiles a `NodeKey` into the filter (position, street, `facing`, the seat's own line, `players_dealt_in`, the effective-stack **bucket**, stake, texture tags looked up in the flop dimensions); `analysis/pool/node_service.py` answers tier 1 (`group_by: action`) and tier 2 (`group_by: hand_class`, revealed cards only) as `run_report` calls, so tenancy, the dataset rule and caching are the engine's. **`POST /v1/pool/node/{frequencies,showdown-range}`** take the typed key and refuse to show a figure under `MIN_N = 100`. **UI:** `PoolDataBadge` (tier, sample size, and the share of decisions ever shown down), the pool column of `/ranges/compare` built from the field's own showdown counts (`app/pool/range.ts`: per-combo weight, so a 12-combo class is not double-counted), and the replayer's situation panel showing the field's frequencies at the node it is on. **Verified in Chrome, reading the real pool** (API on the real ClickHouse read-only, auth on the test Postgres): replaying one of the founder's own NL10 hands, the panel rebinds node by node — `HJ fold · 100bb · NL10` fold 78.8% / raise 20.7% / call 0.5% (n = 1,443,908), `BB call vs CO 2.5bb · 40bb` fold 61.4% / call 32.3% / raise 6.3% (n = 32,239), `BB bet vs CO · turn` check 68.8% / bet 31.2% (n = 8,786) — and `/ranges/compare` draws the pool's UTG-RFI showdown range (AA 100%, AKs 64%, AQs 35%, n = 27,867, "0.5% of the decisions here were shown down"), while a trips-flop node shows **"insufficient data — 35 of the 100 needed"** — **acceptance 10** for tiers 1 and 2. One defect found in the browser and fixed with tests on both sides: `nodeKeyAt` carried every street's decisions into the sequence, so every postflop node asked for a line nobody ever took and answered "never seen". `make check` 377, `make test-all` 410, `make web-check` 323.
 - [x] **F.9** The 9-step analyzer · `PredictionGate`, `StepperNav`, steps 1–9 (§15), Pinia + Dexie autosave, `/v1/analyses` · **Done means** acceptance 9. ✅ **Done 2026-09-10** (ADR-034). **Backend:** `analyses` (Alembic `d5e6f7a8b9c0`), `api/models_analyses.py`, `api/schemas_analyses.py` (one flat `StepWork` covering all nine steps, range bodies validated by the library's own combo-text rule), `api/analysis_store.py`, `GET/POST/PUT/DELETE /v1/analyses` — **a save merges by step number**, so autosaving the step being worked on can never wipe the ones before it. **`poker-ui`:** `PredictionGate` (the answer is committed before the truth is asked for; `unavailable` says why there is no truth rather than waiting for ever) with `prediction.ts` (`scorePrediction`, `explainPrediction`) tested on its own, and `StepperNav` (click, arrows, digits 1–9). **App:** `analyze/` — `api.ts`, `steps.ts` (the nine questions, tolerances and units as data), `spot.ts` (what steps 1–5 have built, read back as one spot), `reveals.ts` (every scored number, hand-counted in tests), `facing.ts`, `cache.ts` (Dexie), `session.ts` (debounced save, offline queue, retry), `stores/analysis.ts`; nine step components over a shared `StepShell`; `/analyze` and `/analyze/[id]`; **Analyze this node** on the replayer. **Verified in Chrome against the real pool, read-only** (API on the real ClickHouse, auth and the analyses on the test Postgres): one of the founder's own NL10 hands taken from the replayer's `BB bet vs CO · turn · 40bb` node through all nine steps, a prediction committed at each — the field takes this line 30.0% of the time (n = 40,680), 25.5% of villain's range is top pair or better, the BB holds 69.5% of the nut combos, A♣5♦ removes 20 combos, the field checks 70/30, the hand places as a semi-bluff at the 19.2nd percentile of its own range by class, 1.50 bluffs per value combo against 0.33 balanced for a half-pot bet, and the CO folds 43.2% (n = 3,988) against an MDF of 39.8% — ending in a saved heuristic and `9 of 9` in the list: **acceptance 9**. Four defects found in the browser and fixed: the step context was a fresh object per render, so two patches in one tick both built on the same stale snapshot and the first was lost (now one object read through getters); `classifyCombos` throws on a board that is not 3–5 cards, which froze step 3 while the flop was being clicked out (`isDealt`, with a regression test); step 8 read its own size instead of step 6's; and **step 9 asked hero's own node for a fold frequency, where the answer is always zero** (`facingNode()` swaps the seats — ADR-034). One server bug fixed with it: the process-wide ClickHouse client stamped every request with one session id, and ClickHouse refuses a second query inside a session while the first runs, so a hand and a pool query issued together failed outright (`autogenerate_session_id` off, with a concurrency integration test). `make check` 387, `make test-all` 429, `make web-check` 364.
-- [ ] **F.10** Tier 3 reconstruction + empirical EQR · `invested_bb` on `decisions` (macro + registry + partition rebuild), `POST /v1/pool/node/{estimated-range,eqr}`, per-bucket sample sizes with fallback to the prior, the frequency-validation view · **Done means** the reconstructed range's implied frequency is shown against tier 1; EQR per class carries n; no bucket under the threshold shows a number.
+- [x] **F.10** Tier 3 reconstruction + empirical EQR · `invested_bb` on `decisions` (macro + registry + partition rebuild), `POST /v1/pool/node/{estimated-range,eqr}`, per-bucket sample sizes with fallback to the prior, the frequency-validation view · **Done means** the reconstructed range's implied frequency is shown against tier 1; EQR per class carries n; no bucket under the threshold shows a number. ✅ **Done 2026-09-11** (ADR-035). **The estimator is not the spec's literal one, and the measurement is why.** Counting a class's revealed hands and taking the share that took the action reads *"the field opens 97% of AQs, 85% of KTo, 80% of QTo"* at the UTG open node, where tier 1 says it opens **18.35%** at all: folders are never shown, so every class saturates against the ceiling and the differences are noise. Tier 3 therefore reweights by a **likelihood ratio** — the class's share of the action's revealed hands over its share of all revealed hands here — which cancels the reveal rate, leaves the posterior mathematically unchanged, and puts the reported rates on a scale that means something. **Backend:** `analysis/pool/node_query.py` (the one report every tier is built from; `MIN_N` 100, `MIN_BUCKET_N` 200, the `REVEALED` gate), `reconstruct.py` (`answered_action`, the likelihood, the fallback, the validation numbers), `realization.py` (`net_won_bb + invested_bb` over `pot_before_bb` as two custom stats, an unselected *overall* row beside the revealed-only per-class rows, and a cached column check so a mart without `invested_bb` answers `needs_rebuild` instead of letting UNKNOWN_IDENTIFIER out as a 500); `POST /v1/pool/node/{estimated-range,eqr}`; `EstimateIn` validates the prior as 169-class weights. **Data:** `invested_bb` in `macros/decision_state.sql` + `dimensions.yaml`, with the independent dbt test `assert_invested_bb_is_the_seats_own_chips` (a window function over `stg_actions`, no arrays, no macro) and an integration test that every `decisions` dimension the registry declares is a real column. **Web:** `pool/estimate.ts` (a range to class weights and back; the shape *inside* a class survives untouched), `poker-ui` `EstimatedRangePanel` (implied vs observed, the direction in words, per-class movers, fallbacks marked "kept") and `PoolRealizationPanel` (EQR only where an equity was supplied), three glossary entries, the tier-3 column on `/ranges/compare`, and `EQRPanel`'s pool slot filled in the replayer — the F.5 promise. **Verified in Chrome against the real pool, read-only:** at the BB's flop lead (1,354,266 decisions, 24,410 revealed = 1.8%) the reconstruction reweighted **35 of the 51** classes in the chart, moved KK 1.62× / AA 1.58× / AKo 1.52× up and 22 0.33× / 55 0.34× down — cutting 22 from 100% of the prior to **20%** of the estimate, a polarised leading range — and printed **implied 12.9% against observed 14.1%, a −1.2 pt gap**, with "the rest were shown fewer than 200 times here and were left exactly as you drew them"; at a preflop open it correctly barely moves the prior, because the showdown sample there says nothing about who folded. No console errors. **Then §5b ran** (see above): the corpus re-parse and, folded into the same rebuild, the `ALTER ... ADD COLUMN` + `backfill` that fills `invested_bb` without ever emptying the marts.
 - [ ] **F.11** Training modes · six modes (§16), scoring store, `/progress`, spaced repetition, heuristic log with the 14-day review prompt, `/v1/heuristics` · **Done means** acceptance 11.
 - [ ] **F.12** UX polish · §13 as a checklist ticked item by item, first-run tour, 3–5 examples, glossary coverage audit; acceptance 12 (import `EquityCalculator` and `RangeMatrix` elsewhere) and 13 (`npm run license-check` clean) · **Done means** every §13 line checked here; Status → "Phase D remaining / E"; commit offered.
 
@@ -572,18 +572,150 @@ because 16 more seats per 900 become showdowns.
 1. The raw text is already in object storage: `core.hands.raw_object_key` points at it, and
    `hand_uid` is deterministic, so re-ingesting the same text through `ingestion.pipeline
    .ingest_text` **replaces** rows rather than duplicating them (`ReplacingMergeTree`).
-2. A `scripts/reparse.py` walks `SELECT DISTINCT raw_object_key FROM core.hands WHERE dataset =
-   'population'`, fetches each object with `ingestion.storage.get_raw`, and runs the loop with
-   the file's own tenant and dataset. Bounded memory, resumable per object, no new seams — the
-   same shape as `scripts/import_archive.py` minus the archive reading.
-3. Then rebuild the marts for the touched partitions with `uv run python -m scripts.backfill`
-   (ADR-019), never a one-shot `dbt build --full-refresh`.
+2. **`scripts/reparse.py` (built 2026-09-11, F.10).** It groups `core.hands` by
+   `raw_object_key` for a dataset, fetches each object with `ingestion.storage.get_raw`, and
+   runs `ingestion.pipeline.ingest_text` with the **row's own** tenant and site — never a flag,
+   because a corpus can hold more than one of either and a re-parse must not relabel anything.
+   `hero_names` is empty, so no seat can be promoted to hero. One object at a time, so memory is
+   bounded by the largest file; interrupting is safe because every object is independent and an
+   object done twice converges to the same rows. `--limit N` takes the N smallest, to check
+   first.
+3. Then rebuild the marts with `uv run python -m scripts.backfill` (ADR-019), never a one-shot
+   `dbt build --full-refresh`. **F.10 folds its own DDL change into this rebuild** — and does
+   not need the `empty_chain` recreate to do it. `REPLACE PARTITION` only wants the target and
+   the temp table to have identical structure, so `ALTER TABLE marts.decisions ADD COLUMN
+   invested_bb Float32 AFTER pot_before_bb` gives it that, and the backfill fills the column a
+   partition at a time. The marts stay **queryable throughout**, instead of being empty for the
+   ~25 minutes the recreate would cost. Rehearsed on the test databases first (drop the column,
+   re-add it, backfill, `assert_invested_bb_is_the_seats_own_chips` passes); written up in
+   `macros/incremental.sql`. The order is re-parse → `ALTER` → `backfill`: one rebuild, both
+   changes, no downtime.
+
+   **Confirmed mid-rebuild on the real corpus, not only on the test databases.** Running the
+   assertion's own logic against an already-rebuilt day (2025-01-15) compared **975,545 rows**,
+   495,421 of them non-zero, for **0 mismatches** and a worst delta of 0.000009 — float32
+   rounding, nothing else. The row count is quoted because the test is an inner join, and a
+   vacuous zero would look identical to a passing one. The rebuild frontier is visible in the
+   column itself: months already rebuilt sit at a ~0.51 non-zero share, months still queued at
+   exactly 0, which is also the cheapest progress check there is.
 4. Verify with the fingerprint table below: hero figures must be **unchanged** (self-exports
    already had their cards), pool `wtsd`/`wsd` move slightly, and pool showdown-seat card
    coverage goes from 17.4% to ~100%.
 
-Until that runs, F.8's tier 2 (showdown ranges) is answering from 17% of the seats it should
-have, which is why this question came first.
+**Verified 2026-09-11, after the rebuild.** Every prediction above held:
+
+| | before | after |
+|---|---|---|
+| pool showdown seats with cards | 387,740 of 2,227,803 (17.4%) | **2,273,342 of 2,273,342 (100.0%)** |
+| hero VPIP / PFR / WTSD / bb100 | .229573 / .188466 / .033835 / −1.37 | **identical** |
+| pool WTSD / W$SD | .040919 / .520087 | .041756 / .520923 |
+| `marts.decisions` / `marts.player_hands` | 73,679,949 / 54,562,770 | **unchanged** |
+| pool decision coverage | 1,387,483 (1.89%) | **9,816,123 (13.35%)** |
+| classes over `MIN_BUCKET_N` at the BB flop lead | 35 of 51 in the chart | **169 of 169** |
+
+The hero row is the load-bearing one: hero exports always contained their own cards, so a
+re-parse that moved those numbers would have meant a parser regression rather than a recovery.
+It moved nothing. The pool's WTSD rising by 0.0008 is the real recovery showing up — showdowns
+that previously could not be identified as such now can be.
+
+**One side effect, recorded rather than tidied away.** `core.parse_failures` is a plain
+MergeTree (sorted by `user_id, failed_at, error_code`), not a ReplacingMergeTree, so a hand that
+failed before and fails again gets a **second** dead-letter row rather than replacing the first.
+A full re-parse therefore roughly doubles that table — 104,443 rows before the 2026-09-11 run.
+That is factually true (it failed twice, at two times, and the second time proves the parser fix
+did not rescue it) and the table is a diagnostic, not a fact table. A failing hand never gets a
+`hand_uid` — that is the point of the dead letter — so the identity of one is
+**`(user_id, raw_object_key, raw_byte_offset)`**: that triple is what to count distinct.
+
+**Deduplicating it needs the generation, not a timestamp — and not "newest per identity"
+either.** Both obvious rules are wrong here, and the table says so:
+
+| rule | leaves | identities | why it fails |
+|---|---|---|---|
+| delete everything before the run | 23,897 | 19,097 | keeps the trial's 4,800 duplicates *and* destroys the 20 hero rows |
+| delete an old row that has a newer twin | 109,243 | 104,410 | offsets shifted between imports, so most old rows have no twin and survive |
+| **keep the full run, plus every hero object** | **19,117** | 19,108 | one generation, one row per failure |
+
+Three facts force the third rule. The **trial** (60 smallest objects) and the **full run** both
+land after any cutoff, and the trial is a strict duplicate subset — 19,097 + 4,800 = the 23,897
+rows stamped 2026-09-11; separating them needs the full run's own start (05:10:58 UTC), since
+log timestamps are local (UTC+3) and `failed_at` is UTC. The **20 hero dead letters** on 9
+objects were never re-parsed at all, because the run was `--dataset population`, so only an
+explicit hero clause saves them. And the **85,326 rows on the 3,055 superseded objects** below
+are worse than redundant: left in place they read as "the corpus lost 85,326 hands", which is
+precisely the wrong conclusion this session drew once and had to retract.
+
+Applied 2026-09-11 as a table swap, not a mutation: build the kept set, `EXCHANGE TABLES`, then
+rename the original to **`core.parse_failures_pre_dedupe_20260911`** — all 128,340 rows survive
+there as the documented backup, so nothing was dropped and the step is reversible. Drop the
+backup only once the fingerprint verification below has been read and accepted.
+
+**The trial before the run (2026-09-11).** On the 60 smallest pool objects the re-parse stored
+**14,807 hands — exactly the number `core.hands` already holds for those objects** — and
+dead-lettered 4,800, which were already dead letters (`validation_failed: pot_mismatch`, not
+new). So the stored/rejected split is reproduced exactly and only the cards change: one sampled
+hand went from 0 of 2 showdown seats with cards to 2 of 2, with the pool hand count unchanged at
+9,073,994. Measured throughput ~3,300 hands/s single-process, so the 9.07M-hand corpus is under
+an hour.
+
+**The run (2026-09-11, ~45 minutes).** 2,492 objects · 9,099,092 hands found · **9,079,995
+stored** · 19,097 failed · **0 objects unreadable**, at ~3,400 hands/s single-process.
+`core.hands` stayed at 9,073,994 pool hands, exactly its distinct `hand_uid` count — the 6,001
+difference against "stored" is overlap *within* the corpus (observed exports of the same table
+overlap), not new hands, and nothing duplicated. The 19,097 failures are the same 19,097 that
+failed on those objects before: they are `pot_mismatch`, a money-reconciliation refusal, which
+the cards fix was never going to rescue, and the ingest loop is right to refuse them.
+
+**A finding on the way, recorded because it looks like a bug and is not.** 3,055 object keys
+carry dead letters but no stored hand, which reads as "files the corpus lost". They are the
+**2026-09-08 first import**, superseded by a re-import on 09-09: object keys are
+content-addressed, so a file re-imported after a parser fix lands under a *new* key and the
+hands settle there, leaving the old key alive only in the dead letters of the import it
+replaced. Every sampled hand from one of those files was already stored under its 09-09
+sibling, so re-parsing them would store nothing and would rewrite `raw_object_key` on hands
+that already carry the current one. `scripts/reparse.py` therefore starts from `core.hands` on
+purpose; the docstring says what a genuinely lost file would look like instead.
+
+**And the rebuild found a real bug in `scripts/backfill.py`.** It ran `dbt build` on every pass
+— models *and* data tests — and those tests scan **whole tables**, not the partitions the pass
+touched. Building from empty they are cheap and grow with the table; on a chain that starts
+full at 73.7M rows every pass re-scans all of it, which exhausted the 3.6 GiB server budget. The
+damaging part was not the memory: **`dbt build` skips everything downstream of a failed test**,
+so `marts.stats_daily` — the anchor the dirty-partition gate reads — never built, no partition
+was ever marked clean, and the loop spun while the adaptive row budget halved itself from
+2,000,000 to 31,250 chasing a sizing problem it did not have. `--skip-tests` now builds models
+only and runs the data tests **once at the end over the finished chain**, returning non-zero if
+they fail; three tests in `tests/test_backfill_tests_flag.py` pin it, because getting it
+backwards is silent. Use the flag whenever the chain is already populated.
+
+**And a second, quieter one: `--rebuild-from`.** The dirty gate asks whether the *source*
+changed since a partition was built. That is the right question for new or re-parsed hands and
+the wrong one after a bare `ALTER TABLE ... ADD COLUMN`, which moves no source row: a partition
+nothing else dirtied stays "clean" with the new column empty in it **forever**. The re-parse
+dirtied the entire pool and so masked it almost perfectly — eight months of `invested_bb` came
+out correct, and both **hero** months, which a `--dataset population` re-parse never touches,
+silently held zero. `scripts/backfill.py --rebuild-from YYYY-MM-DD` now forces a floor, with
+`advance()` raising it past each pass so a forced partition is rebuilt exactly once and the
+loop can still converge (a fixed floor is dirty by definition and trips the no-progress guard —
+which it did, correctly, on the first attempt). Mirrored in `macros/incremental.sql`, which is
+where the ALTER path is recommended, and pinned by six tests in `tests/test_backfill_anchors.py`.
+
+**What caught it was a test that samples by hand, not by date.** `assert_invested_bb_...`
+cannot run unbounded — it window-sorts ~100M `stg_actions` rows and joins 73.7M `decisions`
+against them, which on the 3.6 GiB node returns `MEMORY_LIMIT_EXCEEDED`, a red result that
+never compared a single row. Sampling by `toDayOfMonth` fixed the memory and introduced a
+blind spot: sparse months have no such day, so it covered 4 months of 10 and **both hero months
+fell in the gap**. Sampling on `cityHash64` of the 16 raw `hand_uid` bytes covers every month
+in proportion, and found the zeros immediately. (Both sides can filter independently because
+`cityHash64` over `unhex(hex_string)` equals `cityHash64` over the `FixedString(16)` of the
+same bytes — checked, not assumed.) The lesson is general: an expensive assertion has to be
+bounded, and *how* it is bounded decides what it can still see.
+
+Until this ran, F.8's tier 2 (showdown ranges) answered from 17% of the seats it should
+have, which is why this question came first — and F.10's tier 3 inherits it directly: a class
+is only reweighted above `MIN_BUCKET_N` = 200 revealed decisions, so more revealed seats is
+more classes measured rather than kept at the prior (ADR-035). The measured effect is large:
+at the BB's flop lead the chart went from **35 of 51 classes** reweighted to **169 of 169**.
 
 ---
 
@@ -591,6 +723,7 @@ have, which is why this question came first.
 
 | Date | Session did | Next |
 |---|---|---|
+| 2026-09-11 (session 8, F.10 + §5b) | F.9 committed (`5852d14`). **F.10 done:** tier 3 reconstructs a prior by **likelihood ratio** (the spec's literal estimator saturates at ~97% on real data — ADR-035), empirical EQR beside it on a new `decisions.invested_bb`, `POST /node/estimated-range` and `/node/eqr`, the two `poker-ui` panels, and `--skip-tests` on the backfill. **§5b ran with it:** 2,492 objects re-parsed, 9,079,995 hands stored, 0 unreadable; `core.hands` unchanged at 9,073,994 = its distinct `hand_uid` count. The chain was rebuilt **with no downtime** via `ALTER ADD COLUMN` + backfill. Results: pool showdown-seat card coverage **17.4% → 100.0%**, pool decision coverage **1.89% → 13.35%**, classes over `MIN_BUCKET_N` at the BB flop lead **35 of 51 → 169 of 169**; hero fingerprint **identical** (.229573/.188466/.033835/−1.37), row counts unchanged. Three bugs found and fixed on the way: the backfill ran whole-table data tests every pass and `dbt build` skipped the anchor downstream of their failure; **`--rebuild-from`**, because an `ALTER` dirties nothing and left `invested_bb` at zero across both hero months; and the assertion that should have caught it sampled by date, covering 4 months of 10. Dead letters deduped to one generation (128,340 → 19,117, original kept as `parse_failures_pre_dedupe_20260911`). Verified in Chrome: tier 3 reweighted **51 of 51** classes (AA 4.90×, KK 4.77×, JTo 0.57×), implied 19.1% vs observed 14.7%; the **EQR panel now answers** (52.5% of pot, 8.33 bb from here) where it previously said `needs_rebuild`. One UI copy bug fixed — full coverage made "the rest were shown fewer than 200 times" describe an empty set. `make check` 420, `make test-all` 469, `make web-check` 386. | **F.11** |
 | 2026-09-10 (session 7, F.9) | F.8 committed (`45ff8f3`). **F.9 done:** the 9-step analyzer — `analyses` in Postgres with **merge-by-step** saves (`/v1/analyses`), `PredictionGate` + `StepperNav` in `poker-ui`, the `analyze/` module (step definitions as data, the spot the earlier steps build, every reveal computed and tested hand-counted, Dexie autosave with an offline queue), nine step components, `/analyze`, and **Analyze this node** on the replayer. Verified in Chrome against the **real** pool, read-only: all nine steps run on one of the founder's NL10 hands, a prediction committed at each, ending in a saved heuristic and `9 of 9` — **acceptance 9**. Four browser-found defects fixed (stale step snapshot losing a patch; `classifyCombos` throwing on a partial board; step 8 reading its own size; step 9 asking the wrong side of the bet for a fold frequency) plus a server one: the shared ClickHouse client refused concurrent queries because of its session id. `make check` 387, `make test-all` 429, `make web-check` 364. ADR-034. | **F.10** |
 | 2026-09-10 (session 7, F.8) | F.7 committed (`317fab4`). **F.8 done:** answered §5b's question — the pool's missing showdown cards were a **parser gap** (observed GG tables print them only in the per-seat SUMMARY), fixed, taking coverage on a real file from 18.5% to 100% and leaving a re-parse plan. `raise_to_bb` buckets; `analysis/pool/node_filter.py` (a `NodeKey` as a predicate, naming the villain only where a column means it, the effective stack by registry bucket); `analysis/pool/node_service.py` + `POST /v1/pool/node/{frequencies,showdown-range}` with `MIN_N = 100` and no numbers below it; `PoolDataBadge`, the pool column of `/ranges/compare`, the replayer's frequencies panel. Verified in Chrome against the **real** pool, read-only: a real NL10 hand's nodes answered 78.8/20.7/0.5 at n=1.44M, the UTG-RFI showdown range drawn with "0.5% of the decisions here were shown down", a trips flop gated at "35 of the 100 needed" — **acceptance 10**. Found and fixed `nodeKeyAt` carrying every street into the sequence (every postflop node came back empty). `make check` 377, `make test-all` 410, `make web-check` 323. ADR-033. | **F.9** |
 | 2026-09-10 (session 7, F.7) | F.6 committed (`951107a`). **F.7 done:** the replay engine and `nodeKeyAt` in `poker-core/src/hand/`; `PokerTable`, `HandReplayer`, `HandActionLog` in `poker-ui`; `POST /v1/hands/parse` (ADR-029) and `/v1/hands/search` (the report filter asked backwards, answering with decisions so the seat comes too), `GET /v1/pool/hands`, `seat` on `HandSummary`; pages `/hands`, `/hands/[id]`, `/hands/paste` with the panels bound to the current node. Verified in Chrome on the test databases: stepping a real corpus hand rebinds the situation, my stored chart, pot odds and the equity of the two nodes' ranges (64.2% / 35.8%) — **acceptance 8**; a pasted hand replays and junk is refused in words. Found and fixed the `FixedString(16)` hand id in the decision mart. `make check` 354, `make test-all` 385, `make web-check` 317. ADR-032. | **F.8** |

@@ -2,13 +2,25 @@
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
 import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
 import { equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PoolDataBadge, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, EstimatedRangePanel, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
 import { GG_HAND as SAMPLE_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
 import { STEP_LABELS } from '~/analyze/steps';
 
 definePageMeta({ public: true });
+
+// Tier 3 (plan F.10), with the numbers the real pool gives at the BB's flop lead.
+const ESTIMATED_CLASSES = [
+  { hand_class: 'KK', prior: 0.0217, posterior: 0.0378, likelihood: 1.6209, action_rate: 0.229, sample_size: 1633, fallback: false },
+  { hand_class: 'AA', prior: 0.0217, posterior: 0.0368, likelihood: 1.5794, action_rate: 0.2232, sample_size: 1887, fallback: false },
+  { hand_class: '22', prior: 0.0217, posterior: 0.0076, likelihood: 0.3251, action_rate: 0.0459, sample_size: 218, fallback: false },
+  { hand_class: '54s', prior: 0.0109, posterior: 0.0109, likelihood: 1, action_rate: 0.1413, sample_size: 63, fallback: true },
+];
+const REALIZATION_ROWS = [
+  { hand_class: 'AA', sample_size: 412, mean_net_bb: 9.1, mean_pot_bb: 10.4, realized: 0.875 },
+  { hand_class: '72o', sample_size: 41, mean_net_bb: null, mean_pot_bb: null, realized: null },
+];
 
 const { service } = useEquityService();
 const range = ref<WeightedRange>({ ...parseRange('AA,KK,QQ:0.75,JJ,AKs,AKo:0.5,AQs+,A5s-A2s,JTs+,KQo,76s').range, label: 'Fixture' });
@@ -179,6 +191,26 @@ const analysisStep = ref(3);
       <div class="space-y-2">
         <h2 class="font-medium">StepperNav</h2>
         <div class="max-w-xs"><StepperNav :steps="STEP_LABELS" :current="analysisStep" :completed="[1, 2]" @navigate="(s) => (analysisStep = s)" /></div>
+      </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">EstimatedRangePanel</h2>
+        <EstimatedRangePanel action="bet" :observed="0.1413" :implied="0.1319" :classes="ESTIMATED_CLASSES" :measured="35" :total="51" :min-bucket-n="200" />
+        <PoolDataBadge :tier="3" :sample-size="1354266" :enough="true" :min-n="100" :covers="0.018" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">PoolRealizationPanel</h2>
+        <PoolRealizationPanel
+          action="bet"
+          :overall="{ hand_class: '', sample_size: 191_384, mean_net_bb: 2.4, mean_pot_bb: 8, realized: 0.3 }"
+          :rows="REALIZATION_ROWS"
+          :covers="0.018"
+          :min-bucket-n="200"
+          :equity="{ AA: 0.72 }"
+          :overall-equity="0.25"
+        />
       </div>
     </section>
   </div>

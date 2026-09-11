@@ -3,38 +3,46 @@
 **Why this exists.** Peak ClickHouse memory is set by the size of ONE dbt run, not by the size
 of the table. Routine traffic is cheap — a player uploading a session dirties a day or two —
 but a first load, or a re-import of a large archive after a parser fix, dirties every day at
-once. Rebuilding all 54.5M player-rows in a single query needs ~7.3 GiB, which is a machine you
-would otherwise be renting purely for an operation that runs twice a year.
+once, and rebuilding all 54.5M player-rows in one query needs ~7.3 GiB.
 
-Looping instead keeps every individual run small, so the memory ceiling is a function of the
-largest single pass rather than of the whole dataset. That is what makes a 4 GB node viable,
-and it is the same shape as the production plan: many small nodes, none of which ever has to
-hold everything.
+Looping keeps every individual run small, so the memory ceiling follows the largest single pass
+rather than the whole dataset. That is what makes a 4 GB node viable, and it is the same shape
+as the production plan: many small nodes, none of which ever holds everything.
 
 Each pass rebuilds the oldest dirty partitions and advances their watermark, so the loop
-converges. It is safe to interrupt and re-run: a partition is either fully replaced or
-untouched (`insert_overwrite` swaps whole partitions), and a model that fell behind catches up
-on the next pass.
+converges. It is safe to interrupt and re-run: `insert_overwrite` swaps whole partitions, so a
+partition is either fully replaced or untouched, and a model that fell behind catches up next.
 
-**A pass is sized by ROWS, not by partition count.** Days are wildly uneven: a quiet day is a
-few thousand player-rows, a grinding December day ~900k. Memory follows rows, so a fixed
-number of partitions is either wasteful on quiet days or fatal on dense ones -- measured on
-4 GB: two dense days (~1.8M rows) fit, four (~3.6M) do not. Each pass therefore takes as many
-of the oldest dirty partitions as fit under a row budget. The budget still ADAPTS as a safety
-net: it halves when a pass runs out of memory and doubles back after a run of clean passes.
+**A pass is sized by ROWS, not by partition count.** Days are wildly uneven (a few thousand
+player-rows to ~900k) and memory follows rows, so a fixed partition count is either wasteful or
+fatal -- on 4 GB, two dense days (~1.8M rows) fit and four (~3.6M) do not. Each pass takes as
+many of the oldest dirty partitions as fit under a row budget, which halves after an
+out-of-memory pass and doubles back after a run of clean ones.
 
     uv run python -m scripts.backfill                        # 2.0M rows/pass, adapt
     uv run python -m scripts.backfill --row-budget 1000000   # gentler
-    uv run python -m scripts.backfill --max-passes 5         # stop early
+    uv run python -m scripts.backfill --skip-tests           # tests once at the end, not per pass
+
+**Use `--skip-tests` whenever the chain is already populated** (a re-parse, or a column added
+by ALTER rather than by the `empty_chain` recreate). `dbt build` runs the data tests too, and
+those scan WHOLE tables: on a chain that starts empty they are cheap and grow with it, but on
+one that starts at 73.7M rows every pass re-scans all of it, which is both pointless and, on a
+4 GB node, what exhausts the 3.6 GiB server budget. With the flag the loop builds models only
+and the tests run once at the end over the finished chain -- the stronger assertion.
+
+**After a bare `ALTER TABLE ... ADD COLUMN`, add `--rebuild-from`** (`--skip-tests
+--rebuild-from 2026-08-01`). The gate asks whether the SOURCE changed since a partition was
+built, and an ALTER changes neither, so every partition no re-parse happened to touch stays
+"clean" with the new column empty in it forever. That is how 2026-09-11 left `invested_bb` at
+zero across both hero months -- caught only because a test sampled by hand rather than by date.
 
 **Bootstrapping a second chain beside the first** (plan C.2): anchor on the new tables and
-select only them, so the built v1 chain is neither rebuilt nor consulted:
+select only them, so the v1 chain is neither rebuilt nor consulted. With several anchors a
+partition is clean only once EVERY anchor holds it -- as `anchor_built()` does in
+macros/incremental.sql, which `scripts/anchors.py` mirrors exactly.
 
     uv run python -m scripts.backfill --anchor decisions:played_date
         --anchor player_hands:played_date --select '+decisions +player_hands'
-
-With several anchors a partition is clean only once EVERY anchor holds it -- the same rule as
-`anchor_built()` in macros/incremental.sql, which `scripts/anchors.py` mirrors exactly.
 """
 
 from __future__ import annotations
@@ -49,11 +57,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.anchors import (
-    PARTITION_EXPR,
     Anchor,
-    anchor_sql,
+    advance,
     dbt_vars,
+    dirty_sql,
     parse_anchors,
+    partition_of,
 )
 
 log = logging.getLogger("backfill")
@@ -73,9 +82,8 @@ part, and `max_partitions_per_insert_block` defaults to 100; sixteen 155-column 
 comfortably inside both."""
 
 GROW_AFTER = 3
-"""Consecutive successful passes before doubling the budget again. Small enough to recover
-quickly after a dense stretch, large enough not to thrash back into the failure that shrank
-it."""
+"""Consecutive successful passes before doubling the budget again -- small enough to recover
+after a dense stretch, large enough not to thrash back into the failure that shrank it."""
 
 
 def _clickhouse(sql: str, *, check: bool = True) -> str:
@@ -90,29 +98,17 @@ def _clickhouse(sql: str, *, check: bool = True) -> str:
     return out.stdout
 
 
-def _dirty_partitions(anchors: tuple[Anchor, ...]) -> list[tuple[int, int]]:
+def _dirty_partitions(
+    anchors: tuple[Anchor, ...], rebuild_from: int | None = None
+) -> list[tuple[int, int]]:
     """Dirty partitions still pending, oldest first, each with its player-row count.
 
-    **This must mirror `dirty_partitions()` in macros/incremental.sql exactly**: the same
-    anchors (by default `marts.stats_daily`, the LAST model of the chain) and the same
-    per-partition comparison. A global `max(src_parsed_at)` answers a different question and
-    undercounts, because ingest order and partition order are unrelated. If the two ever
-    disagree, the loop stops while work remains.
+    The SQL lives in `scripts/anchors.py`: it must mirror `dirty_partitions()` in
+    macros/incremental.sql exactly, so one file owns that duty.
     """
     prefix = os.environ.get("CLICKHOUSE_DB_PREFIX", "")
-    sql = (
-        "SELECT src.m AS m, coalesce(pr.rows, 0) AS rows FROM ("
-        f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, max(parsed_at) AS src_max"
-        f"  FROM {prefix}core.hands GROUP BY m"
-        f") AS src LEFT JOIN ({anchor_sql(prefix, anchors)}"
-        ") AS built ON built.m = src.m LEFT JOIN ("
-        f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, count() AS rows"
-        f"  FROM {prefix}core.hand_players GROUP BY m"
-        ") AS pr ON pr.m = src.m "
-        "WHERE src.src_max > built.built_max ORDER BY m FORMAT TSV"
-    )
     rows: list[tuple[int, int]] = []
-    for line in _clickhouse(sql).splitlines():
+    for line in _clickhouse(dirty_sql(prefix, anchors, rebuild_from)).splitlines():
         m, n = line.split("\t")
         rows.append((int(m), int(n)))
     return rows
@@ -188,25 +184,31 @@ def _recover(budget: _Budget, batch: int, attempt: int) -> bool:
     return False
 
 
-def _run_pass(batch: int, anchors: tuple[Anchor, ...], select: str | None) -> bool:
-    """One dbt pass over the oldest `batch` dirty partitions. True if it succeeded."""
+def _dbt(
+    verb: str,
+    batch: int,
+    anchors: tuple[Anchor, ...],
+    select: str | None,
+    rebuild_from: int | None = None,
+) -> bool:
+    """Run one dbt command against the project. True if it succeeded."""
     env = {**os.environ, "CLICKHOUSE_PORT": os.environ.get("CLICKHOUSE_PORT", "8124")}
     command = [
         str(DBT),
-        "build",
+        verb,
         "--project-dir",
         str(PROJECT),
         "--profiles-dir",
         str(PROJECT),
         "--vars",
-        dbt_vars(batch, anchors),
+        dbt_vars(batch, anchors, rebuild_from),
     ]
     if select:
         command += ["--select", select]
     result = subprocess.run(command, cwd=PLATFORM, env=env, capture_output=True, text=True)
     if result.returncode != 0:
         tail = "\n".join(result.stdout.splitlines()[-25:])
-        log.error("dbt pass failed:\n%s", tail)
+        log.error("dbt %s failed:\n%s", verb, tail)
     return result.returncode == 0
 
 
@@ -227,7 +229,29 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "clean; repeatable; default stats_daily:day",
     )
     ap.add_argument("--select", help="dbt selector, e.g. '+decisions +player_hands'")
+    ap.add_argument(
+        "--rebuild-from",
+        metavar="YYYY-MM-DD",
+        help="rebuild every partition from this day on whatever the watermark says (use after "
+        "a bare ALTER ADD COLUMN — see the module docstring)",
+    )
+    ap.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="build models only during the loop and run the data tests once at the end "
+        "(they scan whole tables, so per-pass they cost the same every pass)",
+    )
     return ap.parse_args(argv)
+
+
+def _final_tests(anchors: tuple[Anchor, ...], select: str | None) -> int:
+    """The data tests, once, over the finished chain. 0 when they pass."""
+    log.info("running the data tests once over the rebuilt chain")
+    if _dbt("test", 0, anchors, select):
+        log.info("data tests green")
+        return 0
+    log.error("data tests failed on the rebuilt chain")
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -237,30 +261,32 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     budget = _Budget(ceiling=max(1, args.row_budget), rows=max(1, args.row_budget))
     start = time.monotonic()
+    forced = partition_of(args.rebuild_from) if args.rebuild_from else None
 
     for attempt in range(1, args.max_passes + 1):
-        pending = _dirty_partitions(anchors)
+        pending = _dirty_partitions(anchors, forced)
         if not pending:
             log.info("caught up after %d pass(es), %.0fs", attempt - 1, time.monotonic() - start)
-            return 0
+            return _final_tests(anchors, args.select) if args.skip_tests else 0
 
         batch, rows = _batch_for(pending, budget.rows)
         log.info(
-            "pass %d — %d partition(s) dirty, taking %d (%s rows, budget %s)",
+            "pass %d — %d dirty, taking %d (%s rows, budget %s)",
             attempt,
             len(pending),
             batch,
             f"{rows:,}",
             f"{budget.rows:,}",
         )
-        if not _run_pass(batch, anchors, args.select):
+        if not _dbt("run" if args.skip_tests else "build", batch, anchors, args.select, forced):
             if _recover(budget, batch, attempt):
                 continue
             return 1
         if budget.reward():
             log.info("steady; growing row budget to %s", f"{budget.rows:,}")
+        forced = advance(forced, pending[batch - 1][0])
 
-        if len(_dirty_partitions(anchors)) >= len(pending):
+        if len(_dirty_partitions(anchors, forced)) >= len(pending):
             # No forward progress: another pass would loop forever. Fail loudly rather than
             # spinning -- the usual cause is a model erroring on one partition every time.
             log.error("pass %d made no progress (%d still dirty) — stopping", attempt, len(pending))

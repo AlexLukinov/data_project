@@ -56,7 +56,59 @@ def anchor_sql(prefix: str, anchors: tuple[Anchor, ...]) -> str:
     )
 
 
-def dbt_vars(batch: int, anchors: tuple[Anchor, ...]) -> str:
+def partition_of(day: str) -> int:
+    """`YYYY-MM-DD` to the `toYYYYMMDD` partition integer the gate compares against."""
+    parts = day.split("-")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts) or len(parts[0]) != 4:
+        raise SystemExit(f"expected a YYYY-MM-DD date, got {day!r}")
+    return int(f"{parts[0]}{parts[1]:0>2}{parts[2]:0>2}")
+
+
+def dirty_where(rebuild_from: int | None) -> str:
+    """The gate itself: which partitions a pass must still (re)build.
+
+    The watermark half asks "has the source changed since this partition was built", which is
+    the right question for new or re-parsed hands and the WRONG one after a bare
+    `ALTER TABLE ... ADD COLUMN`: the new column is empty but no source row moved, so the
+    partition looks clean and keeps its zeroes forever. `rebuild_from` is the override for
+    exactly that case -- everything from that partition on is dirty whatever the watermark says.
+    """
+    gate = "src.src_max > built.built_max"
+    return f"({gate} OR src.m >= {rebuild_from})" if rebuild_from else gate
+
+
+def advance(rebuild_from: int | None, highest_built: int) -> int | None:
+    """Move the force floor past what this pass just rebuilt, so the loop can still converge.
+
+    A forced partition is dirty *by definition*, so a fixed floor never goes clean: the loop
+    rebuilds the same oldest partitions every pass and trips its own no-progress guard. Raising
+    the floor above the highest partition just built leaves each forced partition rebuilt
+    exactly once, while partitions below it stay eligible on the ordinary watermark.
+    """
+    return max(rebuild_from, highest_built + 1) if rebuild_from else rebuild_from
+
+
+def dirty_sql(prefix: str, anchors: tuple[Anchor, ...], rebuild_from: int | None = None) -> str:
+    """Dirty partitions oldest first, each with the player-row count that sizes a pass.
+
+    **Must mirror `dirty_partitions()` in macros/incremental.sql exactly.** They drifted once
+    already (monthly vs daily) and the loop stopped early believing it was done.
+    """
+    return (
+        "SELECT src.m AS m, coalesce(pr.rows, 0) AS rows FROM ("
+        f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, max(parsed_at) AS src_max"
+        f"  FROM {prefix}core.hands GROUP BY m"
+        f") AS src LEFT JOIN ({anchor_sql(prefix, anchors)}"
+        ") AS built ON built.m = src.m LEFT JOIN ("
+        f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, count() AS rows"
+        f"  FROM {prefix}core.hand_players GROUP BY m"
+        ") AS pr ON pr.m = src.m "
+        f"WHERE {dirty_where(rebuild_from)} ORDER BY m FORMAT TSV"
+    )
+
+
+def dbt_vars(batch: int, anchors: tuple[Anchor, ...], rebuild_from: int | None = None) -> str:
     """The `--vars` YAML for one pass: the batch size and the anchor list the macro reads."""
     pairs = ", ".join(f"[{table}, {column}]" for table, column in anchors)
-    return f"{{batch_partitions: {batch}, anchors: [{pairs}]}}"
+    extra = f", rebuild_from: {rebuild_from}" if rebuild_from else ""
+    return f"{{batch_partitions: {batch}, anchors: [{pairs}]{extra}}}"

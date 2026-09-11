@@ -23,7 +23,7 @@ select
     n_raises_preflop, n_limpers, n_callers_before, n_cold_callers,
     am_preflop_opener, am_preflop_aggressor, opener_position, last_raiser_position, pot_type,
     n_bets_street, n_raises_street, facing, facing_is_cbet, facing_size_pct,
-    to_call_bb, pot_before_bb,
+    to_call_bb, pot_before_bb, invested_bb,
     players_live, players_acted_before, is_first_to_act, is_last_to_act, is_ip,
     am_prev_street_aggressor, prev_street_my_action, prev_street_faced,
     preflop_line, street_line, line_so_far,
@@ -113,6 +113,13 @@ from (
         toFloat32(coalesce(p_amt[last_aggr_k] / nullIf(p_pot[last_aggr_k], 0), 0)) as facing_size_pct,
         hb.a_call[k]                                                 as to_call_bb,
         hb.a_pot[k]                                                  as pot_before_bb,
+        -- The seat's OWN chips already in the middle, blinds and antes included. `pot_before_bb`
+        -- is everybody's; this is the part that is already sunk for this seat, which is what
+        -- turns the hand-level `net_won_bb` into "chips won from this point"
+        -- (`net_won_bb + invested_bb`) for empirical EQR -- spec §10.4, plan F.10.
+        -- Safe to sum: `acts` in hand_arrays.sql keeps only posts and the five real actions, so
+        -- an uncalled return is never in these arrays and there is nothing to subtract.
+        toFloat32(arraySum(arrayFilter((amt, s) -> s = seat, p_amt, p_seat))) as invested_bb,
 
         -- ---- who is still in, who has acted ------------------------------------------
         arrayDistinct(arrayFilter((s, t) -> t = 'f', p_seat, p_tok))  as folded_seats,

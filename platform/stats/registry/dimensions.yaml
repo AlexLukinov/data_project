@@ -372,6 +372,16 @@
   group_by: false
   description: The pot before this decision, in big blinds.
 
+- code: invested_bb
+  label: Already invested (bb)
+  type: number
+  tables: [decisions]
+  group_by: false
+  description: >-
+    This seat's own chips already in the pot before the decision, blinds and antes included.
+    Sum it, never count it. Added to net_won_bb it gives what the seat won from this point on,
+    which is the numerator of empirical EQR.
+
 - code: players_live
   label: Players live
   type: number

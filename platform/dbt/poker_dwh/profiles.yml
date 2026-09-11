@@ -30,6 +30,23 @@ poker_dwh:
         #   DBT_CH_MAX_MEMORY=12000000000 .venv-dbt/bin/dbt build --full-refresh ...
         # Scoping the override to dbt keeps ad-hoc queries bounded even during a rebuild.
         max_memory_usage: "{{ env_var('DBT_CH_MAX_MEMORY', '5500000000') | int }}"
+        # Query parallelism, scoped to dbt the same way the memory ceiling is. The default
+        # mirrors `max_threads` in infra/clickhouse/limits.xml: a small node serving an API
+        # wants queries that leave cores for everything else, and 2 is that choice.
+        #
+        # A WHOLE-CHAIN REBUILD is the exception -- one operator, one job, nothing else to be
+        # polite to, and 140-odd daily partitions to get through:
+        #   DBT_CH_MAX_THREADS=6 uv run python -m scripts.backfill --skip-tests
+        #
+        # Expect a modest gain, not the one a read benchmark promises. On the real corpus a
+        # pure SELECT over a week of marts.decisions (6.48M rows) went 0.53 s -> 0.16 s from 2
+        # threads to 8, but the rebuild itself only went 23 s -> 19 s per partition (-17%),
+        # because a pass is an INSERT SELECT and the write side is not what `max_threads`
+        # widens. `max_insert_threads` is the knob for that half if it ever matters enough to
+        # measure. Threads cost memory (measured peak here: 0.98 GiB of the 3.6 GiB server
+        # budget), so raise this and DBT_CH_MAX_MEMORY together if passes start failing -- or
+        # let backfill.py's adaptive row budget find the ceiling for you.
+        max_threads: "{{ env_var('DBT_CH_MAX_THREADS', '2') | int }}"
         # Spill to disk instead of dying, at half the ceiling so the switch to the external
         # algorithm happens while there is still room to perform it.
         max_bytes_before_external_group_by: 2500000000
