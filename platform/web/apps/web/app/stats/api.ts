@@ -34,6 +34,44 @@ export interface Leaf {
 /** The filter tree of §2.5. `{all: []}` is the default and means every row; `{any: []}` is a 422. */
 export type FilterNode = Leaf | { all: FilterNode[] } | { any: FilterNode[] } | { not: FilterNode };
 
+/**
+ * An aggregate over one grain (`stats/ast.py`). This is what a stat's definition is made of, so
+ * `DefinitionPanel` can show what a number actually counts instead of only what it is called.
+ * `countIf` is the wire name; the Python field is `count_if` behind an alias.
+ */
+export type Expr =
+  | { count: true }
+  | { sum: string }
+  | { countIf: FilterNode }
+  | { add: Expr[] }
+  | { sub: Expr[] }
+  | { mul: Expr[] }
+  | { div: Expr[] };
+
+/** Cohort rules compare a *cached* stat against a threshold, per player (`stats/request.py`). */
+export type CohortOp = 'lt' | 'lte' | 'gt' | 'gte';
+
+export interface CohortRule {
+  stat: string;
+  op: CohortOp;
+  value: number;
+}
+
+/** A set of pool players named by criteria; every rule must hold. Never a stored member list. */
+export interface CohortSpec {
+  rules: CohortRule[];
+}
+
+/** A user-defined stat, sent inline. The workbench carries these through; D.5 does not author them. */
+export interface CustomStatSpec {
+  code: string;
+  label?: string;
+  grain: Grain;
+  format?: StatFormat;
+  numerator: Expr;
+  denominator?: Expr | null;
+}
+
 /** A presentation bucket `[low, high)`; `null` is an open end. */
 export type BucketRange = [number | null, number | null];
 
@@ -53,20 +91,43 @@ export interface Dimension {
   allowed_ops: Op[];
 }
 
+export type Category = 'preflop' | 'postflop' | 'showdown' | 'money';
+
+/**
+ * A built-in stat, as the registry serves it — every field, not only the ones a column header
+ * needs. The rest is what `DefinitionPanel` exists to show: a stat is either `situation` +
+ * `action` (the value is `countIf(situation AND action) / countIf(situation)`) or
+ * `numerator` (+ `denominator`), and `notes` is where a definition's caveats are recorded.
+ */
 export interface Stat {
   code: string;
   label: string;
-  category: 'preflop' | 'postflop' | 'showdown' | 'money';
+  category: Category;
   grain: Grain;
   format: StatFormat;
   description?: string;
+  /** `true`/`false` where the registry commits; `null` — the common case — where it does not. */
   higher_is_better?: boolean | null;
+  situation?: FilterNode | null;
+  action?: FilterNode | null;
+  numerator?: Expr | null;
+  denominator?: Expr | null;
+  /** The band this stat usually falls in, `[low, high]`. For reading a value, never for gating one. */
+  typical?: [number, number] | null;
+  /** Answered from the daily rollup rather than the fact table, so it is cheap. */
+  cached?: boolean;
+  /** Caveats on the definition itself — a v1 discrepancy, an edge case the count excludes. */
+  notes?: string;
 }
 
 export interface DefinitionsResponse {
   stats: Stat[];
   dimensions: Dimension[];
 }
+
+/** The server's own ceilings (`stats/request.py`), so a screen can stop before earning a 422. */
+export const MAX_GROUP_BY = 4;
+export const MAX_STATS = 40;
 
 /**
  * A report request. Only the fields a screen actually sets are optional here; the server
@@ -78,9 +139,16 @@ export type ReportRequest = {
   hero_only?: boolean;
   date_from?: string | null;
   date_to?: string | null;
+  /** One named pool player. The pool area sets it; the workbench carries it through untouched. */
+  player_key?: string | null;
   filter?: FilterNode;
   group_by?: string[];
   stats?: string[];
+  custom?: CustomStatSpec[];
+  /** The same question asked of the field, returned in each cell's `baseline`. Hero dataset only. */
+  compare_to?: 'population' | null;
+  /** Scopes a population report, or scopes the baseline of a hero one (hero vs regs). */
+  cohort?: CohortSpec | null;
   limit?: number;
 };
 /* A type alias, not an interface: the fetcher takes `Record<string, unknown>` as a body, and
