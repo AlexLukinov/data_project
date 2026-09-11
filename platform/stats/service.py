@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Protocol
 
 from ingestion.clickhouse import clickhouse
+from stats.interval import DISPERSION_SUFFIX, Level, for_cell
 from stats.query import HANDS_ALIAS, build_query
 from stats.registry import Registry, registry
 from stats.request import Cell, ReportRequest, ReportResult, ReportRow, StatMeta
@@ -51,7 +52,8 @@ def validate_request(request: ReportRequest, reg: Registry | None = None) -> Non
     """
     reg = reg or registry()
     stats = resolve_stats(request, reg)
-    for one in plan(stats, dimensions_used(request), reg):
+    wants = request.confidence is not None
+    for one in plan(stats, dimensions_used(request), reg, dispersion=wants):
         build_query(request, 0, one, reg)
 
 
@@ -73,11 +75,11 @@ def run_report(
             return ReportResult.model_validate(hit).model_copy(update={"cached": True})
 
     stats = resolve_stats(request, reg)
-    plans = plan(stats, dimensions_used(request), reg)
+    plans = plan(stats, dimensions_used(request), reg, dispersion=request.confidence is not None)
     merged: dict[GroupKey, ReportRow] = {}
     for one in plans:
         columns, rows = runner(*build_query(request, tenant_id, one, reg))
-        _merge(merged, request.group_by, one.stats, columns, rows)
+        _merge(merged, request.group_by, one.stats, columns, rows, request.confidence)
 
     result = ReportResult(
         hands=sum(row.hands for row in merged.values()) if request.group_by else _total(merged),
@@ -98,17 +100,13 @@ def _merge(
     stats: Sequence[ResolvedStat],
     columns: Sequence[str],
     rows: Sequence[Sequence[Any]],
+    level: Level | None = None,
 ) -> None:
     """Fold one query's rows into the result, keyed by the group values."""
     for raw in rows:
         record = dict(zip(columns, raw, strict=True))
         key = tuple(record[code] for code in group_by)
-        cells = {
-            stat.code: Cell(
-                value=_float(record.get(stat.code)), n=int(record.get(f"{stat.code}__n") or 0)
-            )
-            for stat in stats
-        }
+        cells = {stat.code: _cell(stat, record, level) for stat in stats}
         existing = merged.get(key)
         if existing is None:
             merged[key] = ReportRow(
@@ -123,6 +121,21 @@ def _merge(
                     "hands": max(existing.hands, int(record.get(HANDS_ALIAS) or 0)),
                 }
             )
+
+
+def _cell(stat: ResolvedStat, record: Mapping[str, Any], level: Level | None) -> Cell:
+    """One stat in one row: its value, the sample size behind it, and the interval if asked.
+
+    `__sd` is absent for every stat but a per-100 one, and absent for all of them when no
+    level was requested; `for_cell` turns a missing spread into no interval rather than a
+    guess at one.
+    """
+    value = _float(record.get(stat.code))
+    n = int(record.get(f"{stat.code}__n") or 0)
+    if level is None:
+        return Cell(value=value, n=n)
+    spread = _float(record.get(f"{stat.code}{DISPERSION_SUFFIX}"))
+    return Cell(value=value, n=n, interval=for_cell(stat.format, value, n, spread, level))
 
 
 def _total(merged: Mapping[GroupKey, ReportRow]) -> int:

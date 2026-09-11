@@ -28,10 +28,27 @@ class Plan:
     stats: tuple[ResolvedStat, ...]
 
 
-def plan(stats: Sequence[ResolvedStat], dims_used: Iterable[str], reg: Registry) -> list[Plan]:
-    """At most two plans, cheapest table first."""
+def plan(
+    stats: Sequence[ResolvedStat],
+    dims_used: Iterable[str],
+    reg: Registry,
+    *,
+    dispersion: bool = False,
+) -> list[Plan]:
+    """At most two plans, cheapest table first.
+
+    `dispersion` is set when the caller asked for confidence intervals. The rollup holds a
+    daily sum and a daily count per stat and **no sum of squares**, so the per-hand spread a
+    per-100 interval needs cannot be recovered from it at any cost. Asking for that interval
+    therefore costs the rollup: the report drops to the fact tables, where `stddevSamp` is
+    available. Proportions are unaffected -- Wilson needs only the value and `n`, both of
+    which the rollup already sums exactly (plan E.2, ADR-040).
+    """
     dims = _dimensions(dims_used, reg)
-    if all(s.cached for s in stats) and all(ROLLUP in d.tables for d in dims):
+    rollup_serves = all(s.cached for s in stats) and all(ROLLUP in d.tables for d in dims)
+    if dispersion and any(s.dispersion is not None for s in stats):
+        rollup_serves = False
+    if rollup_serves:
         return [Plan(ROLLUP, tuple(stats))]
     plans: list[Plan] = []
     for grain in ("hand", "decision"):

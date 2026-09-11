@@ -23,11 +23,11 @@ from stats.router import plan
 
 
 def _build(request: ReportRequest, tenant_id: int = 1) -> list[tuple[str, dict[str, Any]]]:
+    """Plan and build exactly as `stats.service.run_report` does, including the interval flag."""
     reg = registry()
     stats = resolve_stats(request, reg)
-    return [
-        build_query(request, tenant_id, p, reg) for p in plan(stats, dimensions_used(request), reg)
-    ]
+    plans = plan(stats, dimensions_used(request), reg, dispersion=request.confidence is not None)
+    return [build_query(request, tenant_id, p, reg) for p in plans]
 
 
 def _one(request: ReportRequest, tenant_id: int = 1) -> tuple[str, dict[str, Any]]:

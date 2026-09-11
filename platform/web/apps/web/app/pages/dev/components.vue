@@ -2,7 +2,7 @@
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
 import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
 import { equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, EstimatedRangePanel, HandReplayer, MDFPanel, MetricLabel, NodeKeyEditor, PokerTable, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, EstimatedRangePanel, HandReplayer, MDFPanel, MetricLabel, MetricValue, NodeKeyEditor, PokerTable, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
 import { ref, shallowRef } from 'vue';
 
 import { GG_HAND as SAMPLE_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
@@ -211,6 +211,17 @@ const analysisStep = ref(3);
           :equity="{ AA: 0.72 }"
           :overall-equity="0.25"
         />
+      </div>
+    </section>
+    <section class="space-y-2">
+      <h2 class="font-medium">MetricValue</h2>
+      <!-- Plan E.2: the same point estimate over 19,802 hands and over 200, and the Wilson
+           interval on a rate that has been seen three times. All four come from the engine. -->
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricValue :value="-1.37" :low="-2.624" :high="-0.116" :n="19802" unit="bb/100" signed />
+        <MetricValue :value="-1.37" :low="-15.229" :high="12.489" :n="200" unit="bb/100" signed />
+        <MetricValue :value="22.96" :low="22.38" :high="23.55" :n="19802" unit="%" />
+        <MetricValue :value="0" :low="0" :high="56.15" :n="3" unit="%" />
       </div>
     </section>
   </div>

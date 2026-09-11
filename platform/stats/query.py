@@ -18,8 +18,9 @@ from typing import Any
 from core.settings import get_settings
 from stats.ast import All
 from stats.compiler import COMPARISONS, Compiler, Params, quote
-from stats.definitions import Dimension, Format, Stat, Table
+from stats.definitions import ROUNDING, Dimension, Format, Stat, Table
 from stats.errors import RegistryError, ReportError
+from stats.interval import DISPERSION_SUFFIX
 from stats.registry import Registry
 from stats.request import DATASET_POPULATION, CohortSpec, ReportRequest
 from stats.resolve import ResolvedStat
@@ -53,7 +54,6 @@ hands (every hero report), within 0.15% on the 9M-hand pool, and 1.6 s / 16 MiB 
 4.3 s / 864 MiB for a whole-pool situation query on the 4 GB node (measured, plan C.7)."""
 
 HANDS_ALIAS = "__hands"
-ROUNDING: dict[Format, int] = {"percent": 2, "per100": 3, "ratio": 3, "count": 0}
 
 
 def build_query(
@@ -66,9 +66,10 @@ def build_query(
     select: list[str] = []
     for code in request.group_by:
         select.append(f"{group_expr(_dimension(code, reg, plan.table))} AS {code}")
+    wants = request.confidence is not None
     try:
         for stat in plan.stats:
-            select.extend(stat_columns(stat, plan.table, compiler))
+            select.extend(stat_columns(stat, plan.table, compiler, dispersion=wants))
         filter_sql = compiler.node(request.filter)
     except RegistryError as exc:
         raise ReportError(str(exc)) from exc
@@ -181,18 +182,31 @@ def _number(value: float) -> str:
     return str(int(value)) if value == int(value) else repr(value)
 
 
-def stat_columns(stat: ResolvedStat, table: Table, compiler: Compiler) -> list[str]:
-    """`<value> AS code, <n> AS code__n`: the sample size travels with every stat, always."""
+def stat_columns(
+    stat: ResolvedStat, table: Table, compiler: Compiler, *, dispersion: bool = False
+) -> list[str]:
+    """`<value> AS code, <n> AS code__n`: the sample size travels with every stat, always.
+
+    With `dispersion`, a per-100 stat gains a third column, `stddevSamp(x) AS code__sd`: the
+    per-row spread its confidence interval is computed from (plan E.2). Nothing else gains a
+    column -- a proportion's interval needs only the value and `n`.
+    """
     if table == ROLLUP:
         numerator = f"sum(s.{stat.code}_action)" if stat.denominator else f"sum(s.{stat.code})"
         denominator = f"sum(s.{stat.code}_opp)" if stat.denominator else None
     else:
         numerator = compiler.expr(stat.numerator)
         denominator = compiler.expr(stat.denominator) if stat.denominator else None
-    return [
+    columns = [
         f"{value_expr(numerator, denominator, stat.format)} AS {stat.code}",
         f"{denominator or numerator} AS {stat.code}__n",
     ]
+    spread = stat.dispersion if dispersion and table != ROLLUP else None
+    if spread is not None:
+        # `compiler.expr(stat.numerator)` above already refused a column this table does not
+        # have, so the identifier below is the registry's and never the caller's (rule 3).
+        columns.append(f"stddevSamp({compiler.column(spread)}) AS {stat.code}{DISPERSION_SUFFIX}")
+    return columns
 
 
 def value_expr(numerator: str, denominator: str | None, fmt: Format) -> str:

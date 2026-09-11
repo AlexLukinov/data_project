@@ -124,3 +124,70 @@ def test_empty_result_is_zero_hands_not_an_error() -> None:
     db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [])})
     result = run_report(ReportRequest(stats=["vpip"]), tenant_id=1, run=db)
     assert result == ReportResult(hands=0, group_by=[], stats=result.stats, rows=[])
+
+
+def test_no_confidence_level_means_no_interval_anywhere() -> None:
+    db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)])})
+    result = run_report(ReportRequest(stats=["vpip"]), tenant_id=1, run=db)
+    assert result.rows[0].cells["vpip"].interval is None
+    assert "stddevSamp" not in db.calls[0][0]
+
+
+def test_a_proportion_carries_its_wilson_interval_and_its_own_n() -> None:
+    db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [(50.0, 100, 100)])})
+    result = run_report(ReportRequest(stats=["vpip"], confidence=95), tenant_id=1, run=db)
+    interval = result.rows[0].cells["vpip"].interval
+    assert interval is not None
+    assert (interval.low, interval.high) == (40.38, 59.62)  # Wilson on 50 of 100
+    assert (interval.n, interval.level, interval.method) == (100, 95, "wilson")
+
+
+def test_a_per_hundred_stat_reads_the_spread_column_the_query_asked_for() -> None:
+    db = FakeDB(
+        {
+            "player_hands": (
+                ["bb_per_100", "bb_per_100__n", "bb_per_100__sd", "__hands"],
+                [(-1.37, 10_000, 1.0, 10_000)],
+            )
+        }
+    )
+    request = ReportRequest(stats=["bb_per_100"], confidence=95)
+    result = run_report(request, tenant_id=1, run=db)
+    interval = result.rows[0].cells["bb_per_100"].interval
+    assert interval is not None
+    assert (interval.low, interval.high) == (-3.33, 0.59)  # -1.37 ∓ 100 · 1.959964 / sqrt(10000)
+    assert interval.method == "normal" and interval.n == 10_000
+    assert "stddevSamp(s.net_won_bb) AS bb_per_100__sd" in db.calls[0][0]
+
+
+def test_a_missing_spread_column_leaves_the_cell_without_an_interval() -> None:
+    # Belt and braces: if a plan ever answers a per-100 stat without the companion column,
+    # the cell says nothing rather than inventing a band.
+    db = FakeDB({"player_hands": (["bb_per_100", "bb_per_100__n", "__hands"], [(-1.37, 900, 900)])})
+    request = ReportRequest(stats=["bb_per_100"], confidence=95)
+    result = run_report(request, tenant_id=1, run=db)
+    cell = result.rows[0].cells["bb_per_100"]
+    assert cell.value == -1.37 and cell.n == 900 and cell.interval is None
+
+
+def test_the_population_baseline_is_asked_without_an_interval() -> None:
+    # Only the baseline's value and n are attached to a cell, so carrying the level into the
+    # pool query would drop a whole-pool per-100 report off the rollup for nothing.
+    db = FakeDB(
+        {
+            "stats_daily:hero": (["vpip", "vpip__n", "__hands"], [(24.5, 1000, 1000)]),
+            "stats_daily:population": (["vpip", "vpip__n", "__hands"], [(22.0, 5_000_000, 5e6)]),
+        }
+    )
+    request = ReportRequest(stats=["vpip"], compare_to="population", confidence=95)
+    cell = run_report(request, tenant_id=1, run=db).rows[0].cells["vpip"]
+    assert cell.interval is not None and cell.interval.n == 1000  # hero's own, not the pool's
+    assert (cell.baseline, cell.baseline_n, cell.delta) == (22.0, 5_000_000, 2.5)
+
+
+def test_the_level_is_part_of_the_cache_key() -> None:
+    db = FakeDB({"stats_daily": (["vpip", "vpip__n", "__hands"], [(50.0, 100, 100)])})
+    cache = FakeCache()
+    run_report(ReportRequest(stats=["vpip"]), tenant_id=1, run=db, cache=cache)
+    run_report(ReportRequest(stats=["vpip"], confidence=95), tenant_id=1, run=db, cache=cache)
+    assert len(db.calls) == 2 and len(cache.store) == 2

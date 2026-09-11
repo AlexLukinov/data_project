@@ -23,6 +23,7 @@ import '@poker/ui/theme.css';
 | `CardBlockerHeatmap` | `villainRange`, `board` | `cardHover` |
 | `ComboDrilldown` | `handClass`, `range`, `board` | `update:range` |
 | `MetricLabel` | `term` (a `GlossaryKey`), `label` | — |
+| `MetricValue` | `value`, `low`, `high`, `n`, `unit`, `digits`, `level`, `signed` — one number with its confidence interval and sample size (plan E.2) | — |
 | `PotOddsPanel` | `pot`, `bet`, `call`, `impliedExtra`, `rakeConfig` | `update:pot`, `update:bet`, `update:call`, `update:impliedExtra`, `update:rakeConfig` |
 | `MDFPanel` | `pot`, `bet`, `rakeConfig`, `range`, `equities` | `update:pot`, `update:bet`, `defendClick` |
 | `EQRPanel` | `equity`, `pot`, `ev`, `poolEqr` | `update:ev` |

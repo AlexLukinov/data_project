@@ -41,6 +41,7 @@ export const GLOSSARY = {
   poolRealization: { term: 'Realized (pool)', definition: 'What the field actually took away from this point on, as a share of the pot it was playing for; measured rather than solved, and divided by equity it gives EQR.', formula: '(net won + already invested) / pot' },
   exact: { term: 'Exact', definition: 'Every remaining runout was enumerated, so the number has no sampling error.', formula: 'all runouts of the cards to come' },
   monteCarlo: { term: 'Monte Carlo', definition: 'Random runouts were sampled; the ± figure is the 95% confidence interval of the estimate.', formula: 'n samples; ± 1.96 × standard error' },
+  confidenceInterval: { term: 'Confidence interval', definition: 'The range the true figure would fall in for this share of samples this size, so a number over few hands is shown as the wide claim it is.', formula: 'a rate: Wilson score; a per-100 amount: ± 1.96 × sd / √n' },
 } as const satisfies Record<string, GlossaryEntry>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

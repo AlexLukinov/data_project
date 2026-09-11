@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from stats.ast import Expr, leaves, terms
+from stats.ast import Count, Expr, Sum, leaves, terms
 from stats.checks import check_expr
 from stats.definitions import TABLE_FOR_GRAIN, Format, Grain, Table
 from stats.errors import RegistryError, ReportError
@@ -33,6 +33,21 @@ class ResolvedStat:
     def table(self) -> Table:
         """The fact table this stat is computed on."""
         return TABLE_FOR_GRAIN[self.grain]
+
+    @property
+    def dispersion(self) -> str | None:
+        """The column whose per-row spread is this stat's standard error, when it has one.
+
+        A per-100 stat is `100 * sum(x) / count()` -- a sample mean of `x` -- so the error of
+        the estimate comes from the spread of `x` itself, and the column IS the answer. Only
+        that exact shape qualifies: a per-100 stat assembled out of arithmetic is not the mean
+        of any one column, and the rollup stores no per-row values at all (plan E.2).
+        """
+        if self.format != "per100":
+            return None
+        if isinstance(self.numerator, Sum) and isinstance(self.denominator, Count):
+            return self.numerator.sum
+        return None
 
 
 def resolve_stats(request: ReportRequest, reg: Registry) -> list[ResolvedStat]:

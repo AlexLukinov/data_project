@@ -17,6 +17,7 @@ from pydantic import Field, model_validator
 
 from stats.ast import CODE, All, Expr, Node, _Strict
 from stats.definitions import Format, Grain
+from stats.interval import Interval, Level
 
 Dataset = Literal["hero", "population"]
 DATASET_HERO: Dataset = "hero"
@@ -90,6 +91,13 @@ class ReportRequest(_Strict):
     cohort: CohortSpec | None = None
     """Restrict the pool to these players. On a population request it scopes the report; on a
     hero request with `compare_to` it scopes the baseline (hero vs regs)."""
+    confidence: Level | None = None
+    """Put a confidence interval at this level on every cell that can carry one (plan E.2).
+
+    Opt-in rather than always-on, because it is not free: a per-100 interval needs the
+    per-hand spread, which only the fact tables can give, so asking for one on `bb_per_100`
+    takes that report off the rollup (`stats.router.plan`). Screens that show a KPI want it;
+    a 40-column grid being scrolled does not."""
     limit: int = Field(default=500, ge=1, le=MAX_LIMIT)
 
     @model_validator(mode="after")
@@ -115,13 +123,20 @@ class ReportRequest(_Strict):
         return f"report:{tenant_id}:{digest}"
 
     def baseline(self) -> ReportRequest:
-        """The same question asked of the pool: every seat, no player, no further baseline."""
+        """The same question asked of the pool: every seat, no player, no further baseline.
+
+        Without the interval: only the baseline's `value` and `n` are attached to a cell, and
+        carrying `confidence` here would drop a whole-pool per-100 query off the rollup to
+        compute bounds nobody reads. A caller that wants the pool's own interval asks for the
+        pool's own report (plan E.2).
+        """
         return self.model_copy(
             update={
                 "dataset": DATASET_POPULATION,
                 "hero_only": False,
                 "player_key": None,
                 "compare_to": None,
+                "confidence": None,
             }
         )
 
@@ -169,6 +184,9 @@ class Cell(_Strict):
     baseline: float | None = None
     baseline_n: int | None = None
     delta: float | None = None
+    interval: Interval | None = None
+    """Present when the request named a `confidence` level and the format has one. Its own `n`
+    repeats this cell's, so a client holding only the interval still knows what it rests on."""
 
 
 class ReportRow(_Strict):

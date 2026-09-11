@@ -36,6 +36,10 @@ TABLE_FOR_GRAIN: dict[str, Table] = {"hand": "player_hands", "decision": "decisi
 Range = tuple[float | None, float | None]
 """A presentation bucket: [low, high), `null` for an open end."""
 
+ROUNDING: dict[Format, int] = {"percent": 2, "per100": 3, "ratio": 3, "count": 0}
+"""Decimals a value of each format is printed to. A property of the format, so the query
+builder and `stats.interval` round a value and the bounds around it the same way."""
+
 
 class Dimension(_Strict):
     """A column a filter, a group-by or a custom stat may name."""

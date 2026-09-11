@@ -100,6 +100,7 @@ async def test_run_report_is_tenant_scoped_and_typed(
         "baseline": None,
         "baseline_n": None,
         "delta": None,
+        "interval": None,
     }
     assert body["stats"][0]["label"] == "VPIP"
     assert runner.calls[0][1]["tenant_id"] == TENANT
@@ -191,3 +192,26 @@ async def test_unauthenticated_requests_are_rejected() -> None:
         assert (await c.get("/v1/definitions")).status_code == 401
         assert (await c.post("/v1/reports/run", json={})).status_code == 401
         assert (await c.get("/v1/saved/reports")).status_code == 401
+
+
+async def test_a_confidence_level_travels_the_wire_with_no_adapter(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    """`POST /v1/reports/run` gains intervals for free: the body IS the engine's request.
+
+    The route declares `ReportRequest` in and `ReportResult` out, so plan E.2 added a field to
+    each model and nothing in `api/` at all -- the layering (ADR-023) doing its job.
+    """
+    res = await client.post(
+        "/v1/reports/run",
+        json={"stats": ["vpip"], "group_by": ["position"], "confidence": 95},
+    )
+    assert res.status_code == 200, res.text
+    interval = res.json()["rows"][0]["cells"]["vpip"]["interval"]
+    # Wilson on 30% of 400 opportunities: (25.72, 34.66), and the n comes with it.
+    assert interval == {"low": 25.72, "high": 34.66, "n": 400, "level": 95, "method": "wilson"}
+
+
+async def test_a_confidence_level_outside_the_offered_set_is_a_422(client: AsyncClient) -> None:
+    res = await client.post("/v1/reports/run", json={"stats": ["vpip"], "confidence": 97})
+    assert res.status_code == 422, res.text

@@ -51,3 +51,4 @@ export { default as PositionPicker } from './components/PositionPicker.vue';
 export { default as ActionLine } from './components/ActionLine.vue';
 export { ACTION_LETTERS, ACTION_WORDS, formatLine, isActionLine, lineWords, parseLine } from './line';
 export type { ActionLetter } from './line';
+export { default as MetricValue } from './components/MetricValue.vue';
