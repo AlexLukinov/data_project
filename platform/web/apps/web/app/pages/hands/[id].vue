@@ -6,9 +6,14 @@ import { computed } from 'vue';
 import { describeApiError } from '~/auth/api';
 import HandStudy from '~/components/hands/HandStudy.vue';
 import { toReplayHand } from '~/hands/replay';
+import { useFilterStore } from '~/stores/filter';
 
 const api = useHands();
 const route = useRoute();
+// The way back carries the situation, so opening a hand in a new tab and going back still lands
+// on the set it came from. This page does not call `useFilterUrl()` — a hand's own link stays a
+// hand's link — so the query is read off the shared store rather than out of this URL.
+const filter = useFilterStore();
 const handUid = route.params.id as string;
 const seat = computed(() => {
   const asked = Number(route.query.seat);
@@ -26,7 +31,7 @@ function day(iso: string): string {
 <template>
   <section class="space-y-4">
     <div class="flex flex-wrap items-baseline gap-3">
-      <NuxtLink to="/hands" class="text-sm text-zinc-500 hover:underline">← hands</NuxtLink>
+      <NuxtLink :to="{ path: '/hands', query: filter.query }" data-testid="hand-back" class="text-sm text-zinc-500 hover:underline">← hands</NuxtLink>
       <h1 class="text-xl font-semibold" data-testid="hand-title">{{ data ? `${data.stake_level} · ${day(data.played_at_utc)}` : 'Hand' }}</h1>
       <span v-if="data" class="text-sm text-zinc-500">{{ data.site }} · {{ data.site_hand_id }}</span>
     </div>

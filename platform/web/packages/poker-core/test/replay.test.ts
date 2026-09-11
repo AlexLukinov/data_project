@@ -63,6 +63,28 @@ describe('replayStates', () => {
     expect(STATES.at(-1)!.toCall).toBe(0);
   });
 
+  it('names nobody to act while the blinds are posted or the hand is being settled', () => {
+    // The four bookkeeping steps of this hand: post_sb, post_bb, uncalled_return, muck. The ring
+    // used to sit on a player through all of them, because `actor` is the next action's seat
+    // whatever kind it is — which is still what `toCall` is reckoned for, and still 0.25 at
+    // step 1, so the two live side by side rather than one replacing the other.
+    expect(STATES[0]!.toAct).toBeNull();
+    expect(STATES[1]!.toAct).toBeNull();
+    expect(STATES[11]!.toAct).toBeNull();
+    expect(STATES[12]!.toAct).toBeNull();
+    expect(STATES[0]!.actor).toBe(2);
+    expect(STATES[1]!.toCall).toBeCloseTo(0.25, 2);
+  });
+
+  it('names the seat facing a decision at every other step', () => {
+    const decisions = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+    for (const index of decisions) {
+      expect(STATES[index]!.toAct, `step ${index}`).toBe(GG_HAND.actions[index]!.seat);
+      expect(STATES[index]!.toAct, `step ${index} agrees with actor`).toBe(STATES[index]!.actor);
+    }
+    expect(STATES.at(-1)!.toAct).toBeNull();
+  });
+
   it('never invents chips: stack plus invested is the starting stack', () => {
     for (const state of STATES) {
       for (const seat of state.seats) {

@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="pk-replayer">
     <div class="pk-stage">
-      <PokerTable :seats="seats" :board="at.board" :pot="at.pot" :active-seat="at.actor" :last-action="lastAction" :last-seat="at.last?.seat ?? null" :big-blind="hand.bigBlind" :button-seat="buttonSeat" :hand-over="step >= last" />
+      <PokerTable :seats="seats" :board="at.board" :pot="at.pot" :active-seat="at.toAct" :last-action="lastAction" :last-seat="at.last?.seat ?? null" :big-blind="hand.bigBlind" :button-seat="buttonSeat" :hand-over="step >= last" />
       <div class="pk-controls">
         <button type="button" data-testid="replay-back" :disabled="step === 0" @click="seek(step - 1)">← back</button>
         <button type="button" data-testid="replay-play" @click="play">{{ playing ? '❚❚ pause' : '▶ play' }}</button>

@@ -85,8 +85,18 @@ export interface HandState {
   readonly board: readonly string[];
   /** Everything in the middle, including chips committed on the current street. */
   readonly pot: number;
-  /** The seat about to act, or null at the end of the hand. */
+  /**
+   * The seat of the next action, whatever kind it is, or null at the end of the hand. Blind
+   * posts and the bookkeeping kinds are actions too, so this is not the same as `toAct` — it is
+   * the seat the *money* of the next step belongs to, which is what `toCall` is reckoned for.
+   */
   readonly actor: number | null;
+  /**
+   * The seat facing a decision, or null where nobody is: at the end of the hand, and at a step
+   * whose next action is a forced post or bookkeeping (`uncalled_return`, `muck`, `show`, `win`).
+   * This is what "the seat to act" means on a table, and what the acting ring is drawn on.
+   */
+  readonly toAct: number | null;
   /** What the seat about to act must put in to continue. */
   readonly toCall: number;
   /** The action that produced this state, or null at the deal. */

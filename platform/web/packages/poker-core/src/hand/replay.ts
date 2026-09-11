@@ -12,7 +12,7 @@
 
 import type { Street } from '../node';
 import type { ActionStreet, HandState, ReplayAction, ReplayHand, SeatState } from './types';
-import { CONTRIBUTING } from './types';
+import { CONTRIBUTING, DECISIONS } from './types';
 
 const STREET_CARDS: Record<Street, number> = { preflop: 0, flop: 3, turn: 4, river: 5 };
 const BETTING: readonly Street[] = ['preflop', 'flop', 'turn', 'river'];
@@ -94,13 +94,17 @@ function streetAt(hand: ReplayHand, index: number): Street {
 
 function stateAt(hand: ReplayHand, index: number, settled: number, chips: Map<number, Chips>): HandState {
   const street = streetAt(hand, index);
-  const actor = hand.actions[index]?.seat ?? null;
+  const next = hand.actions[index];
+  const actor = next?.seat ?? null;
   return {
     index,
     street,
     board: hand.board.slice(0, STREET_CARDS[street]),
     pot: potOf(settled, chips),
     actor,
+    // A forced post is not a choice and the bookkeeping kinds are not a player's turn, so the
+    // seat to act is the seat facing a decision — never simply the seat of the next action.
+    toAct: next !== undefined && DECISIONS.has(next.kind) ? next.seat : null,
     toCall: toCallFor(actor, chips),
     last: hand.actions[index - 1] ?? null,
     seats: frozen(chips),
