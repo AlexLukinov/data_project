@@ -45,6 +45,8 @@ not a change I've made.
 | [033](#adr-033--what-the-pool-may-say-a-node-is-only-as-good-as-its-columns-and-a-range-is-only-the-hands-that-were-shown) | What the pool may say: a node is only as good as its columns, and a range is only the hands that were shown | ✅ |
 | [034](#adr-034--the-analyzer-the-answer-is-fetched-after-the-commit-a-save-is-a-merge-and-a-reveal-names-its-own-authority) | The analyzer: the answer is fetched after the commit, a save is a merge, and a reveal names its own authority | ✅ |
 | [035](#adr-035--tier-3-estimates-a-likelihood-ratio-not-a-frequency-and-reports-its-own-error-eqr-is-split-between-the-pool-and-the-engine) | Tier 3 estimates a likelihood ratio, not a frequency, and reports its own error; EQR is split between the pool and the engine | ✅ |
+| [036](#adr-036--shard-by-cityhash64user_id-with-a-reserved-tenant-for-the-pool-buy-threads-before-shards) | Shard by `cityHash64(user_id)` with a reserved tenant for the pool; buy threads before shards | ✅ planned (E) |
+| [039](#adr-039--all-in-ev-redistributes-the-pot-that-was-actually-awarded-per-side-pot-and-only-where-the-runout-happened) | All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened | ✅ |
 
 ---
 
@@ -1278,3 +1280,338 @@ the board *texture*, and it is the finest grain the fact table can answer. When 
 validation view, one dimension swapped. The client cannot do this itself — the pool's counts
 come from many boards that share only their texture tags, so classifying them against the one
 board on screen would be wrong.
+
+---
+
+## ADR-036 — Shard by `cityHash64(user_id)` with a reserved tenant for the pool; buy threads before shards
+**Status:** ✅ Recommended by me. Phase E.4, 2026-09-11. Design only — nothing is built.
+
+**Context.** [ADR-025](#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant)
+settled the scale plan in one sentence: shard `marts.*` by `cityHash64(user_id)`, keep the
+population dataset on its own shard, `Distributed` tables on top, dbt per shard. Plan step **E.4**
+asks for that as a design document with a shard key, a migration path and a per-node cost table.
+Writing it against the code turned up two things the sentence could not have known, and the full
+working is [POKER_SCALE.md](POKER_SCALE.md).
+
+First, **the population dataset is not a user.** A `--dataset population` import stamps the
+*importing account's* `tenant_id` on every row (`scripts/import_archive.py`;
+`core/schema/hands.py` maps `user_id ← tenant_id`), and hero and pool are separated by the
+`dataset` **column** alone. So `cityHash64(user_id)` co-locates the founder's 19,802 hero hands
+with 9,073,994 pool hands: the two halves of ADR-025's sentence contradict each other as the code
+stands.
+
+Second, **sharding does not fix the query that motivated it.** The phase-C exit measured an
+arbitrary uncached pool situation at **1.6 s over 73.5M decisions at `max_threads 2`**, against a
+stated goal of under a second. The pool is one tenant and one dataset, so no hash of `user_id`
+can divide it — however many nodes exist, that query runs on one of them.
+
+**Decision.**
+
+- **The shard key is `cityHash64(user_id)`, and nothing else.** It is already paid for: `user_id`
+  leads the `ORDER BY` of every tenant-scoped table, so sharding needs no re-sort — the opposite
+  of the rewrite [ADR-009](#adr-009--multi-tenancy-by-tenant-key-not-by-database) warns about — and
+  `stats/query.py` binds `s.user_id = {tenant_id:UInt32}` as the first predicate of every query, so
+  with `optimize_skip_unused_shards` a report prunes to one shard and the per-shard query is
+  byte-identical to today's.
+- **The pool corpus gets a reserved tenant id**, which is what makes "population on its own shard"
+  true rather than aspirational. The `dataset` column stays exactly as it is — it is the read-side
+  correctness boundary — but the rows move to an id of their own. This is a replay from object
+  storage, not an `ALTER`, because `user_id` leads the sort key.
+- **The shard key must stay a pure function of `user_id`.** `hand_uid` is deterministic, every core
+  table is `ReplacingMergeTree(parsed_at)` keyed `(user_id, hand_uid, …)`, and `played_at_utc` is a
+  property of the hand — so a re-parse lands on the same shard, partition and sorted range, and
+  dedup still collapses it. Any key that is not purely of `user_id` silently turns
+  exactly-once-effect into duplicate-on-retry. `FINAL` over a `Distributed` table deduplicates
+  *within* each shard only, so this is also what keeps every `FINAL` read in the platform correct.
+- **Writes go to the local table, reads go through `Distributed`.** A distributed insert would
+  multiply parts by the shard count for the same 5,000-row batch (against the "one INSERT = one
+  part" rule) and would break the worker's commit-after-insert contract, since async forwarding
+  makes "returned" mean "queued". The shard is chosen in `insert_hands`, where `tenant_id` is
+  already an argument and a batch never straddles tenants. The read swap is the `PHYSICAL` dict in
+  `stats/query.py`.
+- **dbt runs per shard, on local tables — mandatory, not preferred.** `insert_overwrite` is
+  `ALTER TABLE … REPLACE PARTITION`, which exists only on a local MergeTree. The row budget
+  (`DEFAULT_ROW_BUDGET = 2_000_000`, calibrated against one 4 GB node) and the dirty-partition gate
+  are per-node physics, so each shard gets its own loop, budget and anchor watermark.
+- **For the pool, buy threads before shards.** Measured: a `SELECT` over 6.48M `decisions` rows
+  went **0.53 s → 0.16 s from 2 threads to 8**, for 0.98 GiB more memory. Eight threads on one
+  larger node buys roughly what three shards would, with no fan-out, no initiator merge, and no
+  `GLOBAL IN` needed on the cohort subquery. So the population shard is **one node with more
+  vCPU**, not N nodes; a street-first projection on `decisions` is the next lever after that. Hero
+  shards stay 4 GB / 2 vCPU.
+- **Replicas are not designed here.** [ADR-013](#adr-013--rent-anything-with-a-replication-protocol)
+  already says rent anything with a replication protocol. Shards are ours; replicas are the managed
+  service's. One question is flagged unanswered rather than guessed: how `REPLACE PARTITION`
+  behaves under replication, on which the entire incremental chain rests.
+
+**Alternatives.** *A composite shard expression* — `if(dataset = 'population', 0,
+cityHash64(user_id) % (N-1) + 1)` is two lines at `insert_hands` because `dataset` is in scope
+there, but it makes the shard expression and the read predicate disagree about what identifies a
+row, and every future reader of the query builder would have to know it. *Shard the pool by
+`hand_uid` or by date* — divides the corpus, and breaks `FINAL` and `ReplacingMergeTree` dedup
+platform-wide the moment one hand's rows can live on two shards. *Leave the pool on the hash and
+add nodes* — buys nothing: it is one tenant. *Duplicate the pool per tenant* — 9M hands per
+customer.
+
+**Consequences.** The scale story becomes two node classes rather than one, which is why the cost
+table has two rows: hero shards are bounded by disk and by the ~150k-hands/day partition rule, the
+pool node by scan latency. The doc's shard-count model — ≈46M decisions ≈ 5.7M hands per shard for
+a sub-second arbitrary situation — is **one measurement extended by a straight line**, and it says
+so; measuring the same query at 20M, 40M and 73M decisions is what would replace it. Skew stays a
+known defect of this key rather than a solved problem ([POKER_ARCHITECTURE.md](POKER_ARCHITECTURE.md)
+named it first), with a trigger written down instead: pin a tenant to its own shard when its
+`decisions` rows pass the same cap. Everything stays portable — a `<remote_servers>` definition and
+`Distributed` tables are ClickHouse-native, and `Distributed` over one shard is a no-op, so
+`docker-compose` still brings the whole product up on one machine.
+
+**My reservation.** ADR-025 bundles the materialized views and sharding into one decision. They are
+independent, and the MV half is the one with a real deadline (stats fresh after an upload); the
+sharding half has no trigger until a second tenant exists whose data does not fit. Nothing here
+should be built before E.1, E.2 and E.3.
+
+---
+
+## ADR-037 — One filter object, flat and registry-driven, carried in the URL as text
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** D.3
+
+**Context.** Plan §2.5 gives the engine a fully recursive filter grammar (`Leaf | all | any | not`)
+and the registry (ADR-021) gives it 80 dimensions, each with its own type, vocabulary, allowed
+ops and presentation buckets. D.3 has to turn that into something a poker player can hold: one
+filter, shared by every screen, that survives being pasted into a chat window.
+
+The screens that existed before this step did not share anything. `apps/web/app/hands/search.ts`
+declared four `as const` tuples — `STREETS`, `FACING`, `ACTIONS`, `POSITIONS` — described in its
+own docstring as "the registry's own", and one of them had already drifted: the registry's
+`position` enum carries `UNKNOWN` and the copy did not, so an anonymised seat was unfilterable.
+`op` was hard-wired to `eq`. Four of eighty dimensions were reachable, with one comparison each.
+
+**Decision.**
+
+- **The client holds no vocabulary of its own.** Everything — which dimensions exist, their
+  values, their ops, their buckets, which tables hold them — comes from `GET /v1/definitions` and
+  is held once per session (`stores/definitions.ts`). The four hard-coded tuples are deleted with
+  the module that owned them. `Dimension.allowed_ops` is a server-computed field precisely so the
+  op picker needs no copy of `OPS_BY_TYPE`, and it is what the picker is driven by.
+- **The builder emits a conjunction, not the full grammar.** The shared filter is a flat list of
+  clauses, ANDed: `{all: [...]}`. The engine's `any` and `not` remain available to saved filters
+  and custom stats, but a *situation builder* that offered arbitrary nesting would be a visual
+  query language, and the questions players actually ask ("turn, facing a bet over 75% pot, I
+  called the flop c-bet in position") are conjunctions. Disjunction within one dimension is
+  already `in`. The cost of this choice is legible and reversible: a clause is one row.
+- **A clause holds its values as text, always in a list.** Text is what a URL carries and what an
+  `<input>` holds, so the round trip is exact by construction, and the registry — not the UI —
+  decides how a value is read. One function coerces, from the dimension's own type, at the single
+  point where a clause becomes AST. Bools go out as `0`/`1`, never `true`/`false`.
+- **A bucket is a UI op that compiles to a half-open pair, never to `between`.** The registry's
+  buckets are `[low, high)`; the compiler renders `between` as SQL `BETWEEN low AND high`, which
+  includes the top. A 40bb stack must land in `40-75` and not also in `0-40`, so `bucket` emits
+  `gte low` AND `lt high`. This is the one place the UI knowingly does not use the op whose name
+  matches.
+- **The URL is readable text, not an opaque blob.**
+  `?ds=population&f=street:eq:flop;position:in:BTN,CO;eff_stack_bb:bucket:75-125` — clauses on
+  `;`, parts on `:`, lists on `,`, every *value* percent-encoded so a value containing a
+  separator (`line_so_far` is `r/x-c/`) survives without the reader knowing which characters are
+  special. Base64 would have been shorter and unreadable; a bare JSON blob would have been
+  readable and fragile. Decoding is lenient and registry-free: it runs before `/v1/definitions`
+  has answered, and a hand-edited link drops the segment it cannot read rather than throwing.
+- **The URL wins when it says something; otherwise the filter does.** A pasted link replaces the
+  filter; a screen opened with no filter parameters adopts the filter already in the store and
+  stamps it into the address bar. That is what makes it *one* filter rather than one per page.
+  Writes use `replace`, not `push`, so refining a filter does not fill the Back button.
+- **An unfinished clause is held back, not sent.** `in` with nothing chosen and `between` with one
+  bound are 422s from the Leaf validator; the bar says what is missing in its own words and the
+  AST simply omits that clause.
+- **The builder says which tables can answer the situation.** Table routing (`stats/router.py`)
+  raises *before* leaf validation, so a decision-grain column beside a hand-grain stat fails with
+  `dimension 'street' is not available for hand-grain stat 'hands'`. The filter exposes the
+  surviving tables, the bar says so in words, and the stat picker offers only stats that fit.
+  This was not theoretical: the first browser run produced exactly that 400, from the harness's
+  own default stat.
+- **Grouping the 80 dimensions is a presentation choice and lives in the client.** The registry is
+  a flat list in table order, which is right for a compiler and wrong for a player. `families.ts`
+  holds twelve groups in the order a hand is thought about. A test reads
+  `stats/registry/dimensions.yaml` itself — the same trick `poker-core/test/node.test.ts` uses for
+  the shared `nodes.json` fixture (ADR-028) — and fails when a dimension is unclassified. It
+  earned its keep within the hour: it caught `made_hand` being added by a parallel session.
+  Anything still unclassified at runtime appears under "Other", so a new column is reachable on
+  the day it ships even if nobody has grouped it.
+
+**Alternatives.** *A visual tree editor for the full grammar* — the general case nobody asked for,
+at the cost of the common one. *Typed values in the clause* — then the URL codec needs the
+registry, and decoding has to wait for a network round trip before it can show anything. *A
+`family:` field in `dimensions.yaml`* — it is the column contract three non-UI consumers are built
+to (dbt, the compiler, the API); a display grouping does not belong in it, and the coverage test
+gives the same safety from the client side. *Keeping `situationFilter` and widening it* — it
+overloads `''` as "not chosen", and `''` is a real value on ten dimensions.
+
+**Consequences.** Four dimensions with one op became eighty with every op the registry allows,
+and the hand list gained all of it by deleting code rather than adding it. Two primitives came out
+of the work into `packages/poker-ui` — `PositionPicker` (a seat vocabulary as a ring; five
+registry dimensions are seat enums and three files had inlined the same `<select>`) and
+`ActionLine` (the `f·x·l·c·b·r` encoding spelled out; four dimensions are lines and nobody can
+read one as letters). `SizeBadge` and `StackBadge`, which D.3 also named, were not built: one
+`clauseLabel()` words every clause uniformly, and two bespoke badges would be a second copy of
+that wording for two of nine bucketed dimensions.
+
+**What is still owed.** `facing_size_pct` and `size_pct` are labelled "(% of pot)" and stored as
+fractions, so the builder shows `0.75` under a label that says percent. The value is not silently
+scaled, because the number typed and the number sent must agree — but the pair reads badly and
+belongs on F.12's §13 checklist beside the comma-decimal note. Group-by and stat selection are
+deliberately *not* in the shared filter: two screens sharing a situation should not be forced to
+share the columns they measure it with. The reports workbench (D.5) owns those.
+
+---
+
+## ADR-038 — The scoring store is browser-owned; a spot is a seed; and the drawing mode is scored on the metric the spec names, not on the gate's
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** F.11
+
+**Context.** Spec §16 asks for six training modes over one scoring store, a `/progress` route, spaced
+repetition, and a heuristic log with a "still true?" prompt after fourteen days. Spec §17 adds the
+constraint that decides most of the design: the trainers must work **with no backend at all**.
+Building them settled four questions the spec left open — where practice data lives, what a spot
+*is*, which number a mode is actually graded on, and where a scheduler belongs in a codebase whose
+core package is declared to be poker mathematics.
+
+**Decision.**
+
+- **The scoring store is owned by the browser, and it is the only thing here that is.** Every other
+  Dexie database in this app (`poker-ranges`, `poker-analyses`) is a cache of something the server
+  is the record for. `poker-training` is not: scores are per-device practice, the trainers must run
+  with the API stopped, no other part of the platform reads them, and a stat that says "you were
+  73% on two-tone flops last Tuesday" is worth nothing to a server that cannot see the spots. So
+  `/train` and `/progress` are `public: true`, take no token, and are correct offline. **The
+  heuristic log is the opposite case and is therefore split out** into `poker-heuristics` with
+  `/v1/heuristics` behind it: a lesson is worth having on every device and it points back at an
+  analysis the server already holds. Each row says on screen whether it has reached the server.
+- **A spot is a seed, not a record.** `generateSpot(mode, seed)` is deterministic, so re-serving a
+  missed spot regenerates it rather than storing it, and the review row is eight fields instead of
+  a frozen copy of a range, a board and a question. Two consequences worth stating: every spot
+  carries its seed into the equity run, because a preflop or hand-vs-range spot is Monte Carlo and
+  without the seed "the correct answer" would drift by a tenth of a point between two showings of
+  what is meant to be the same spot; and the spot's `hash` is **content-derived, not seed-derived**,
+  so two seeds that happen to build the same question are one thing to relearn and a change to how
+  seeds are drawn does not orphan a month of history.
+- **The range-drawing mode is scored on total absolute weight error, which is not what its gate
+  compares.** `PredictionGate` compares a committed number with a true one; the number a drawing can
+  commit is how *wide* it is. But a range of exactly the right width made of entirely the wrong
+  hands is not a range you know, and spec §16 names the right metric outright. So the mode's verdict
+  — the one the review schedule believes and the one the score row records — is
+  `diff(drawn, reference).totalAbsolute`, while the gate still does its job of taking the commitment
+  before the reveal. **Both numbers are on screen, labelled**, because hiding either would make the
+  other look like the whole truth.
+- **The scheduler lives in `@poker/core`, in a `training/` module of its own.** This stretches that
+  package's stated charter — "pure TypeScript poker mathematics" — and the alternative was worse:
+  intervals inside a component cannot be tested without either mounting it or waiting a month. Every
+  function takes `now` as an argument and returns ISO strings, so the whole of a spaced-repetition
+  month is a unit test. The scheme is Leitner over `[0, 1, 3, 7, 16, 35]` days; a miss returns a
+  spot to box 0, due at once, which is what "re-serve missed spots at increasing intervals" means in
+  practice.
+- **The fourteen-day rule has one definition per side of the wire and a test pinning each.**
+  `HEURISTIC_REVIEW_DAYS` in TypeScript and `REVIEW_DAYS` in `api/schemas_heuristics.py`. The client
+  computes whether a heuristic is due rather than reading the server's `is_due`, so an offline log
+  answers the question exactly as an online one does. Answering the prompt — *any* answer, including
+  retiring the lesson — is what resets the clock, because re-examining a heuristic is the act being
+  scheduled, and correcting its wording is not.
+- **The reference charts are labelled as what they are.** The offline modes need ranges to drill
+  against and cannot wait on the range library or the pool, so `app/train/charts.ts` ships eight
+  ordinary 6-max 100bb charts. Every screen that uses one prints the same sentence: a rule-of-thumb
+  baseline, **no solver was asked**, and your own imported chart for the situation is the better
+  reference. The blocker mode makes its continuing-range assumption visible for the same reason.
+
+**Alternatives.** *Sync the scores to the server* — a fifth table, a merge policy and an offline
+queue, for data the server cannot use and the user cannot lose anything by keeping locally. *Store
+each spot as a row* — simpler to reason about for a day, until a generator improves and every stored
+spot is a fossil that no longer matches the mode it belongs to. *Score the drawing on width alone* —
+one number, one verdict, and the mode stops teaching the thing it exists to teach. *Put the
+scheduler in the app* — untestable without a clock, and the first place a second consumer would have
+to copy it from.
+
+**Consequences.** F.12's §13 pass should look at `/train` with a month of history in it, which this
+session could not: a trend chart is honest with one day in it but it is not yet informative.
+`/v1/heuristics` ships with an integration test that has **not been run** — it needs the stack,
+which a parallel session owned while this one ran — so F.11 stays unticked until it is. The
+`candidates` endpoint is the bridge ADR-034 promised when it kept `analyses.heuristic` as a column
+of its own: the log offers a step-9 takeaway for adoption instead of making the founder retype it.
+One defect found in the browser and fixed with two regression tests: the guard against
+`PredictionGate` re-emitting `reveal` was keyed on the spot and never cleared between servings, so a
+spot answered again after coming back for review was scored once and never again — eight answers,
+four rows on `/progress`.
+
+---
+
+## ADR-039 — All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** E.5
+
+**Context.** [ADR-018](#adr-018--all-in-equity-uses-a-vetted-evaluator-computed-at-parse-time) decided
+in principle that all-in equity comes from a vetted evaluator at parse time, and left three things
+open that only real data could settle: which evaluator, how to price a preflop all-in without
+enumerating 1.7M runouts per hand, and what to do about multiway pots, where it warned that
+"equity against the whole field is not what determines your share of each pot" and offered the
+escape hatch of restricting the adjustment to two players and saying so in the UI. Meanwhile
+`marts.decisions.made_hand` had been reserved since ADR-020 and was still empty, which is what
+ADR-035 needs before tier 3 can bucket postflop by anything better than the 169 preflop classes.
+
+**Decision.** Four parts.
+
+*The evaluator is `phevaluator` (Apache-2.0), and it was already a dependency.* It is the Python
+binding of `HenryRLee/PokerHandEvaluator` — the same upstream the Range Lab already runs through
+WebAssembly under ADR-027, so the founder has approved this code base twice. It was declared in
+`pyproject.toml` from the first platform commit and never imported. The licence gate of spec §3.1
+therefore passes on an existing, already-reviewed dependency, and no evaluator had to be written.
+The *classifier* is a genuine port — `classify.ts` → `core/classify.py` — because the class
+vocabulary is ours, not the library's; the two are pinned to `tests/fixtures/made_hands.json`,
+1,024 cases covering all seventeen classes, generated from the TypeScript reference and asserted
+by both suites. That is the ADR-028/ADR-031 pattern, for the same reason: otherwise a hand sits in
+one class in the mart and another on screen and no test notices.
+
+*Equity is exact, never sampled, and the preflop case is affordable because suits are
+interchangeable.* A heads-up preflop all-in enumerates 1,712,304 runouts in 1.25 s. The corpus
+holds 60,709 of them, which is 21 hours naively — but `core.equity.canonical_key` relabels suits
+and player order to a fixed form, and those 60,709 collapse to **6,131** distinct matchups. Solved
+once each across a process pool, that is thirteen minutes. An EV number that changes when you
+recompute it is not one a player can act on, so sampling was not a trade worth making.
+
+*EV redistributes the pot that was actually awarded, layer by layer.* Rather than restricting the
+adjustment to heads-up, each side-pot layer is awarded separately to the best hand among the
+players eligible for *that* layer — which is what ADR-018 asked for and thought might be too much
+for a first version. It is not: the enumeration already ranks every contender on every runout, so
+layering costs a few lines. The awarded total is then shared out by expected share, which gives
+the invariant the whole design rests on — **`sum(ev_won) == sum(net_won)` for every hand, exactly**
+— so rake, jackpot drops and cash drops need no special handling, and an EV win rate stays
+comparable with the real one. `assert_ev_won_bb_redistributes_the_pot` checks it on the real data.
+
+*There is no adjustment where nobody gambled.* GGPoker settles an all-in on request without
+dealing the rest of the board, and such a hand stops with exactly the cards betting stopped on: 0
+after preflop, 3 after the flop, 4 after the turn. **27,088 hands — 20% of the pool's all-ins and
+18 of hero's — are like this.** De-lucking them would invent a swing that never existed, so the
+actual result stands. Likewise, every seat that reached showdown must have shown: two known hands
+out of three would hand the third player's money to the two that were seen.
+
+**Alternatives.** *Monte Carlo for the preflop case* — 100k samples is ±0.15 pp, which is ±0.3 bb
+on a 100 bb stack and visible in a hero sample of 654 all-ins; rejected once the canonical-form
+memo made exact affordable. *A shipped 47,008-entry preflop equity table*, which is what ADR-018
+literally suggested — six hours to build, a committed artifact to maintain, and unnecessary once
+only the ~6k matchups a corpus actually contains are solved lazily. *Restricting EV to heads-up
+all-ins*, ADR-018's escape hatch — rejected because the per-pot model is barely more code and
+5% of the corpus's all-ins are multiway. *Computing `made_hand` in dbt* — SQL cannot rank a poker
+hand; it is three `LowCardinality` columns on `core.hand_players`, one per street, because the
+class a decision is taken with is the one for the street it is taken on.
+
+**Consequences.** `core/` gains four pure modules (`cards`, `classify`, `equity`, `allin`) that
+depend on nothing above them, and `ingestion.pipeline` calls `enrich()` after validation, so the
+worker and the bulk importer are enriched identically by construction. The existing corpus is
+filled by `scripts/backfill_equity.py`, which recomputes from stored columns rather than
+re-reading 9M hands from object storage — the board is five columns on `core.hands` and the money
+is on `core.hand_players`, so a re-parse would spend forty-five minutes to change nothing else,
+and keeping the parser out of it is what lets the hero fingerprint be checked *against* this
+change rather than through it. That backfill writes whole rows by comparison, not by intent, so it
+is idempotent and can *clear* a value that should no longer be there — which is how the 18 hero
+cash-out hands written by an earlier revision of the runout rule were removed. Because it touches
+`core.hand_players` and not `core.hands`, it dirties no partition, and the mart rebuild after it
+needs `--rebuild-from`, exactly as `macros/incremental.sql` says for a bare `ALTER ADD COLUMN`.
+`ev_won_bb` stays NULL wherever the adjustment does not apply, and `hand_arrays.sql`'s existing
+`coalesce(ev_won_bb, net_won_bb)` means those hands read as the actual result, unchanged.
+ADR-035's postflop bucketing can now move from `hand_class` to `made_hand`.

@@ -6,7 +6,10 @@
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
 **Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; CI run pending a push**
-**Last updated:** 2026-09-11 (session 8, F.10 + the §5b re-parse and rebuild)
+**Last updated:** 2026-09-11 (session 10, **F.11** — the six training modes, the browser-owned
+scoring store, `/progress`, spaced repetition and the heuristic log, ADR-038; **built and
+browser-verified, left unticked pending one unrun integration test**. Run in parallel with the D.3
+session — ADR-037, the shared filter model — and the E.4 doc-only session, ADR-036)
 
 ---
 
@@ -15,7 +18,53 @@
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D**, next step **F.11** (training modes), then **F.12**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D** — four parallel sessions landed 2026-09-11; next: **finish E.5's data half**, then `make test-all` to close **F.11**, then **D.5**
+
+**Four sessions ran in parallel on 2026-09-11 and are committed** (`feat/range-lab`):
+`c316fd0` E.5 code half · `4f247a6` F.11 · `47702d7` D.3 · plus this docs commit (E.4).
+`make check` green, `make web-check` 556 tests over 60 files green, licence audit unchanged.
+**D.3 and E.4 are ticked; E.5 and F.11 are deliberately still `[ ]`** — both have a verification
+that could not run while three other sessions shared the machine.
+
+**First, and before any other ClickHouse work:** the pool equity backfill
+(`scripts/backfill_equity.py --dataset population --workers 8`) was **still running** when these
+commits were made. Let it finish. Then close E.5's data half:
+
+```bash
+cd platform
+docker compose exec -T clickhouse clickhouse-client -q \
+  "SELECT dataset, count() AS seats, countIf(made_hand_river != '') AS with_made
+   FROM core.hand_players GROUP BY dataset"        # population was 336,953 of ~2.27M at commit time
+uv run python -m scripts.backfill --skip-tests --rebuild-from 2024-01-01
+```
+
+**`--rebuild-from` is not optional here and leaving it off fails silently.** E.5 adds `made_hand`
+and real `ev_won_bb`, and the dirty gate is data-driven: an `ALTER ADD COLUMN` changes no source
+row, so every partition stays "clean" with the new columns empty forever. This exact bug shipped
+once already this month (§5b) and was caught only because an assertion sampled by hand.
+Then check E.5's "done means": on a hand with a preflop all-in `ev_won_bb != net_won_bb`;
+`made_hand` non-empty on every decision where hole cards are known; and the hero parity
+fingerprint **unchanged** (19,802 hands · VPIP .229573 · PFR .188466 · WTSD .033835 · −1.37
+bb/100) — if it moves, that is a regression, not a feature. Tick E.5 only then.
+
+**Second, to close F.11:** it ships one test that has never met a database —
+`platform/tests/integration/test_heuristics.py`. `make test-all` drops `poker_test` on exit, so:
+
+```bash
+cd platform && make seed && make test-all     # expect the 14 heuristics integration tests green
+```
+
+If they pass, tick **F.11**. If any fail, the fault is in `api/heuristic_store.py`,
+`api/routers/heuristics.py` or the Alembic migration `e6f7a8b9c0d1_heuristics.py` — all new,
+none yet exercised against Postgres.
+
+**Then:** **D.5** (reports workbench — `StatGrid`, `StatPicker`, `DefinitionPanel`, presets,
+save-report) is the next foundational step, because the plan has D.4 and D.6 consuming its
+components. **D.6, D.7 and D.8 must be audited against phase F before they are started** — D.3
+turned out to be half-built already (ADR-037), and the replayer, `/hands`, `/ranges` and the
+account pages mean the same is likely true of them. **F.12 and D.9 must run alone**, with no
+parallel session: F.12 touches every page and the glossary, D.9 deletes `api/static/index.html`
+and the old `/v1/stats*` adapters.
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…035) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
@@ -228,11 +277,130 @@ months the re-parse touched came out right (`--rebuild-from`, with an advancing 
 loop still converges); and the assertion that should have caught that sampled by day-of-month,
 covering 4 months of 10 — it now samples on `cityHash64(hand_uid)`. Dead letters were also
 deduplicated to a single generation, 128,340 → **19,117**, with the original preserved as
-`core.parse_failures_pre_dedupe_20260911` (drop it once these numbers have been accepted).
+`core.parse_failures_pre_dedupe_20260911`. **Accepted and dropped on 2026-09-11 (session 28)**
+after the numbers were re-verified against the live tables (19,097 + 20 hero = 19,117 over
+19,108 identities; 0 live rows missing from the backup) and the table was exported to
+`platform/backups/parse_failures_pre_dedupe_20260911.tsv.zst` — **restored into a scratch table
+and checksum-matched on all 128,340 rows before the DROP**, DDL saved beside it, the directory
+gitignored because the rows carry real hand text. Plan §5b has the restore command.
+
+**Where F.11 stands (2026-09-11):** **built, browser-verified, uncommitted — and deliberately
+still `[ ]`** (ADR-038). One of three parallel sessions; it touched the web workspace, its own
+Alembic migration and no data at all.
+
+**Why it is not ticked:** `platform/tests/integration/test_heuristics.py` has never been run. It
+needs the stack, which another session owned for the whole of this one, so the four new Python
+files behind `/v1/heuristics` have not yet met a database. Everything else is verified. See the
+`Next action` block above for the one command that closes it.
+
+**What the constraint was, and what it decided.** Spec §17 says the trainers must work with no
+backend at all, and that shaped the design more than §16 did. A spot is built from a **seed**, not
+stored, and its answer comes from `@poker/core` — so `/train` and `/progress` are `public: true`,
+hold no token, and are correct with the API stopped. The scoring store is therefore the one Dexie
+database in this app that the **browser owns** rather than caches; the heuristic log is the
+opposite case and is split out into its own database behind `/v1/heuristics`, with every row saying
+on screen whether it has reached the server.
+
+**What landed.** `@poker/core` gains `training/schedule.ts` — Leitner over `[0, 1, 3, 7, 16, 35]`
+days with the clock injected, plus the 14-day heuristic rule — so a month of review behaviour is a
+unit test instead of a month of waiting. App: `app/train/` (`types.ts`, `modes.ts`, `charts.ts`,
+`sampler.ts`, `texture.ts`, `spot-{equity,combos,drawing,blockers,advantage,potodds}.ts`, `spot.ts`,
+`cache.ts`, `session.ts`, `progress.ts`, `view.ts`, `numbers.ts`), `app/heuristics/{api,cache,log}.ts`
++ `stores/heuristics.ts`, `components/train/` (a shell, one component per mode, `AccuracyTrend`,
+`HeuristicLog`), pages `/train`, `/train/[mode]`, `/progress`, and two nav links. Backend:
+`heuristics` (Alembic `e6f7a8b9c0d1`), `api/models_heuristics.py`, `api/schemas_heuristics.py`,
+`api/heuristic_store.py`, `api/routers/heuristics.py`, wired in `api/main.py` and `migrations/env.py`
+— including `GET /v1/heuristics/candidates`, the bridge ADR-034 promised when it gave `analyses` a
+`heuristic` column of its own: the log offers a step-9 takeaway for adoption instead of making the
+founder retype it.
+
+**Three decisions worth remembering (ADR-038).** The scoring store is browser-owned. A spot's hash
+is **content-derived, not seed-derived**, so two seeds that build the same question are one thing to
+relearn and changing how seeds are drawn does not orphan a month of history. And the range-drawing
+mode is scored on **total absolute weight error** — the metric §16 names — while its gate compares
+how *wide* the range is; a range of the right width made of the wrong hands is not a range you know,
+so both numbers are on screen and labelled.
+
+**Verified in Chrome with every `/v1/` call refused at the fetch boundary** — a headless Chrome of
+its own over CDP on a separate profile, leaving the parallel sessions' browser, :3000 and :8000
+untouched. All six modes answered. Six rake-free pot-odds spots were **re-derived independently
+from the §8 formulas inside the harness and matched the app to a tenth of a point**. The advantage spot's second question appeared only once the first
+was committed. The blocker mode named its best bluff from `bluffScore`, with the full ranking beside it.
+The drawing mode reported *"298 combos of total error against 51 allowed — not yet; this one comes
+back"*. A heuristic written with the API down came back tagged `turn · CO · paired`, marked *"in
+this browser only"* and dated *"next asked 2026-09-25"* — fourteen days out — and survived a reload.
+`/progress` charted 5 of 14 right with 9 bucket rows across hand class, texture and bet size.
+**3 API calls attempted, all refused; 0 console errors.**
+
+**One defect found in the browser and fixed with two regression tests:** the guard against
+`PredictionGate` re-emitting `reveal` was keyed on the spot and never cleared between servings, so a
+spot answered again after coming back for review was scored once and never again — eight answers,
+four rows on `/progress`. Gates: `make web-check` lint clean, **556 tests**, 83 of them this step's, licence audit
+unchanged; the heuristics slice ruff/format/mypy clean, 12 unit tests, 7 import-linter contracts
+kept.
+
+
+**Where D.3 stands (2026-09-11):** **done, verified, uncommitted** (ADR-037). Run as one of three
+parallel sessions, in the **web workspace only**. The step was **amended before being built**: D.3
+was written 2026-09-09, before the Range Lab spec and therefore before phase F was interleaved
+into D, and it asks for seven primitives under `app/components/poker/` that F had already built in
+`packages/poker-ui/` — `RangeMatrix` even says so in its own docstring ("plan D.3's HandMatrix").
+Building the list would have put a second copy of each in a layer that may import the API, and the
+first casualty would have been D.3's own "one grid in the repo" test. The amendment is recorded in
+the step itself and in ADR-037: `PositionPicker` and `ActionLine` were the two genuinely missing
+primitives and went **into `poker-ui`**; `SizeBadge`/`StackBadge` were not built, because one
+`clauseLabel()` words every clause uniformly.
+
+What landed: `app/stats/{api,definitions,families}.ts` (the registry, held once per session, and
+the app's first real `FilterNode` — `hands/api.ts` had it as `Record<string, unknown>`),
+`app/filter/{clause,url,label,model}.ts`, `stores/{definitions,filter}.ts`,
+`composables/useFilterUrl.ts`, `components/filter/{FilterBar,SituationBuilder,ClauseRow,ClauseValue}.vue`,
+`pages/dev/filter.vue`; `poker-ui` gains `PositionPicker`, `ActionLine`, `line.ts`;
+**`app/hands/search.ts` and its test are deleted** and `/hands` now runs on the shared filter —
+its four hard-coded vocabularies were a copy of four registry entries and `position` had already
+drifted (no `UNKNOWN`, so anonymised seats were unfilterable). Two decisions worth remembering: a
+**bucket compiles to `gte low` AND `lt high`, never `between`** (the registry's buckets are
+half-open, the compiler's `between` is inclusive SQL, so 40bb would land in two buckets), and the
+builder **publishes which tables can answer a situation**, because `stats/router.py` raises before
+leaf validation.
+
+**Verified in Chrome against the real pool, read-only** — a Chrome of its own driven over CDP
+(another session held the shared MCP profile), the app on **:3001**, an API of its own on **:8001**
+with auth in a throwaway `poker_d3` since dropped; the other sessions' :3000 and :8000 untouched:
+the registry loads into 12 families; **every one of the 80 dimensions is reachable** (each code
+typed into the search box, its button confirmed present, none missing); a situation clicked
+together reads `Street is flop · Position is one of UTG, CO, BTN · Effective stack (bb) 75–125`,
+compiles to the nested AST with the bucket as its half-open pair, and links as
+`?f=street:eq:flop;position:in:UTG,CO,BTN;eff_stack_bb:bucket:75-125`; **pasting that link back
+reproduces url, sentence and AST identically**, and `/hands` opened with it shows the same
+sentence; **Run report → `767 hands · 1 row · fresh`**; no console errors. Offline against the same
+engine: **80/80 dimensions accepted** by `POST /v1/reports/run`, and 10 composite situations —
+including phase C's own demo, a multi-street line `r/x-c/`, `''` as a real value and an SPR bucket
+— all exact through the URL and all accepted. Three defects found and fixed (`defaultClause`
+ignored op arity; `''` on a `line` was worded "not applicable" when the registry means "my first
+decision on this street"; the harness offered hand-grain stats under a decision-grain filter and
+earned the router's 400). The registry-coverage test earned its keep within the hour: it caught
+**`made_hand`**, added by the parallel F.11 session, and it is now classified.
 
 **Do this:**
-1. **F.10 is done and verified, uncommitted** — commit it as one commit when the founder says
-   so. Backend: `analysis/pool/{node_query,reconstruct,realization}.py` (new),
+1. **D.3 is done and verified, uncommitted** — commit it when the founder says so, separately from
+   the other lanes' work. Web only: `apps/web/app/stats/{api,definitions,families}.ts` +
+   `families.test.ts`, `definitions.test.ts`; `apps/web/app/filter/{clause,url,label,model}.ts` +
+   a test beside each; `apps/web/app/stores/{definitions,filter}.ts`;
+   `apps/web/app/composables/useFilterUrl.ts`;
+   `apps/web/app/components/filter/{FilterBar,SituationBuilder,ClauseRow,ClauseValue}.vue`;
+   `apps/web/app/pages/dev/filter.vue`; modified `apps/web/app/pages/hands/index.vue` and
+   `apps/web/app/hands/api.ts`; **deleted** `apps/web/app/hands/search.ts` + `search.test.ts`;
+   `packages/poker-ui/src/components/{PositionPicker,ActionLine}.vue`,
+   `packages/poker-ui/src/line.ts`, `packages/poker-ui/test/filter-controls.test.ts`, and four
+   appended lines in `packages/poker-ui/src/index.ts`. Docs: plan (D.3 amended + ticked, Status,
+   §6), this file, ADR-037. Gates: `make web-check` lint 0 errors, **551 tests** (90 new), licence
+   audit unchanged; `nuxt typecheck` clean for every file of this step (the 4 errors it reports are
+   the F.11 session's `app/heuristics/*` and `app/train/*` — one of them, `HeuristicBody` not
+   assignable to `Record<string, unknown>`, is the same interface-vs-type-alias trap `stats/api.ts`
+   hit and solved).
+2. **F.10 is committed** (`775bc60`) — the paragraphs above describing it as uncommitted are
+   stale. Backend: `analysis/pool/{node_query,reconstruct,realization}.py` (new),
    `analysis/pool/node_service.py` (rebased on the shared query), `api/routers/pool.py`,
    `api/schemas_pool.py`; data: `dbt/poker_dwh/macros/decision_state.sql`,
    `macros/incremental.sql` (the no-downtime ALTER path), `stats/registry/dimensions.yaml`,
@@ -250,18 +418,31 @@ deduplicated to a single generation, 128,340 → **19,117**, with the original p
    to dbt). Docs: plan, this file, ADR-035, `CLAUDE.md`. A ready commit message is not stored in
    the repo — write one; the gates were `make check` 420, `make test-all` 469 (2 skipped),
    `make web-check` 386, licence audit unchanged.
-2. Nothing on `feat/range-lab` is pushed yet; **after a push, when the CI `web` job is green,
+3. Nothing on `feat/range-lab` is pushed yet; **after a push, when the CI `web` job is green,
    tick F.1** (it is the one step held open purely on a CI run).
-3. **F.11 Training modes** (plan F.11, spec §16). Concretely: the six modes, the scoring store,
+4. **D.4, D.5 and D.6 now have their filter.** The workbench is the next thing that should use it:
+   `filter.reportRequest({ stats, group_by })` is the whole call, `useFilterUrl()` is the whole URL
+   story, and `pages/dev/filter.vue` is a working reference for both. D.5 owns the stat and
+   group-by selection — they are deliberately **not** in the shared filter, so two screens can
+   share a situation without sharing the columns they measure it with.
+5. **F.11 Training modes** (plan F.11, spec §16). Concretely: the six modes, the scoring store,
    `/progress`, spaced repetition, and the **heuristic log with its 14-day review prompt** —
    which is a query over `analyses.heuristic`, the column F.9 deliberately kept out of the steps
    JSON for exactly this. `/v1/heuristics` follows the same shape as `/v1/analyses`.
    `PredictionGate`, `scorePrediction` and the step definitions in `analyze/steps.ts` are the
    reusable pieces — the nine questions, tolerances and units are already data, not code.
    **Done means** acceptance 11.
-4. Carried over, unchanged: **B.5b**'s `core.*` rebuild; the phase-E performance note; the real
+6. Carried over, unchanged: **B.5b**'s `core.*` rebuild; the phase-E performance note; the real
    Postgres `users` table still holds old `e2e-*`/`iso-*` test accounts; on a comma-decimal
    locale `PotOddsPanel`'s number inputs display `2,5` for 2.5 (recorded for F.12).
+7. **New for F.12's §13 checklist, from D.3:** `facing_size_pct` and `size_pct` are labelled
+   "(% of pot)" but stored as fractions, so the builder shows `0.75` under a label that says
+   percent. The value is deliberately **not** scaled — the number typed and the number sent must
+   agree — but the pair reads badly and wants either a relabelled registry entry or a percent
+   control like `NodeKeyEditor`'s. Also noted in passing, not fixed (it is D.5/D.6's):
+   `components/hands/HandStudy.vue` links to `/ranges/compare?hero=…&street=…`, but
+   `pages/ranges/compare.vue` reads only `?range`, so both parameters are silently dropped and the
+   page opens on its hard-coded UTG default.
 
 ---
 
@@ -499,6 +680,10 @@ section only records the link between the two tracks.
    parser dig.
 3. ~~The flag table must become incremental~~ — **done** (ADR-019). The remaining scale steps
    are in [POKER_PLAN.md](POKER_PLAN.md) phase E: MV (F-202) → shard by `user_id` → quotas.
+   **The shard half is now designed** — [POKER_SCALE.md](POKER_SCALE.md) + ADR-036 (plan E.4, done
+   2026-09-11): the key is `cityHash64(user_id)` with a **reserved tenant id for the pool** (the
+   pool is not a user today), the population gets *threads, not shards*, and the cost table says
+   2 / 9 / 44 four-GB shards at 10M / 50M / 250M hands. Nothing is built; E.1–E.3 come first.
    **New, from the audit:** the stat *model* itself is the limit for "any situation" and is
    replaced in phase C (ADR-020); fifteen concrete breakages (AUDIT B1–B15, e.g. the pool dataset
    unreachable via the API, two diverged ingest loops) are fixed in phase A.
@@ -555,6 +740,11 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-11 (29, merge) | **Committed the four parallel sessions** (25 docs/E.4, 26 D.3, 27 F.11, 28 E.5) as four coherent commits on `feat/range-lab`: `c316fd0` E.5 code half · `4f247a6` F.11 · `47702d7` D.3 · this docs commit. The four ran in **one working tree, not four worktrees**, so there was nothing to merge — and the append-only rule held: `poker-ui/src/index.ts` and `poker-core/src/index.ts` took additions from two different sessions with zero conflict. Gates re-run over the combined tree: **`make check` green**, **`make web-check` 556 tests over 60 files**, licence audit unchanged — which retires session 27's note that `make check` was red, that was session 28's uncommitted work seen mid-flight. Two pieces of debris removed before committing: `poker-core/_eqcheck.ts` (a scratch equity harness) and two stale `eslint-disable` directives in `fixtures/gen_made_hands.ts`. One staging mistake caught and fixed: the deletion of `hands/search.ts` was already in the index before the first commit and was swept into E.5's, making that commit delete a web module unrelated to equity; the three commits were redone from a `--soft` reset so the deletion sits in D.3 where it belongs. | **Finish E.5's data half** — the pool equity backfill was still running at commit time; when it finishes, `scripts/backfill --skip-tests --rebuild-from 2024-01-01` (**not optional**, the gate is data-driven) and check the hero fingerprint. Then `make seed && make test-all` to tick **F.11**. Then **D.5**. |
+| 2026-09-11 (28, data + `core/`) | **Plan E.5 — equity at parse time. Code complete, `make check` green (1,524 unit tests); the step stays `[ ]` until the corpus backfill and the mart rebuild are verified** (ADR-039). **The licence gate passed without adding anything:** `phevaluator` (Apache-2.0) is the Python binding of the *same* `HenryRLee/PokerHandEvaluator` the Range Lab already runs through WebAssembly (ADR-027), and it has been declared in `pyproject.toml` since the first platform commit, never imported. Nothing was taken from it; the **classifier** is a genuine port of `classify.ts` into `core/classify.py`, pinned to `tests/fixtures/made_hands.json` — 1,024 cases, all 17 classes, generated from the TypeScript reference and asserted by **both** suites (the ADR-028/031 pattern). Equity is **exact, never sampled**: 1,712,304 runouts per heads-up preflop all-in at 1.25 s, affordable because `canonical_key` folds suit relabelings and player order together — the corpus's 60,709 heads-up preflop all-ins reduce to **6,131** distinct match-ups, solved once each in a process pool and kept in a gitignored `.equity-cache.pkl`. Validated against an **independent** oracle: the 18 combo-vs-combo spots of F.2's treys fixture match to **1e-9**, AA vs KK = 0.8125548968 exactly. **Two decisions the real data forced.** EV **redistributes the pot that was actually awarded, per side-pot layer**, instead of taking ADR-018's escape hatch of heads-up-only — giving `sum(ev_won) == sum(net_won)` per hand exactly, so rake and drops need no special case. And **no adjustment where the runout never happened**: GGPoker settles an all-in on request without dealing the rest of the board, and **27,088 hands — 20% of the pool's all-ins and 18 of hero's — stop with exactly the cards betting stopped on**; an earlier revision had written equities on them, which is how the write-by-comparison backfill proved its worth by *clearing* 36 hero seats. New: `core/{cards,classify,equity,allin}.py`, `enrich()` in `ingestion/pipeline.py` (so worker and importer agree by construction), `ch/migrations/0010_made_hand.sql`, `scripts/{backfill_equity,equity_store}.py`, two dbt assertions — `assert_made_hand_is_set_exactly_where_the_cards_are` (unsampled, hold'em-scoped) and `assert_ev_won_bb_redistributes_the_pot` (one hand in 64 on **`cityHash64(hand_uid)`**, never the calendar). Hero backfilled in 46 s; **`ad730688` is the hand the feature exists for — hero held A♠A♥ all-in preflop at 81.55% and lost 101.5 bb, EV +60.78, a 162 bb swing.** | **Finish the pool backfill, then `ALTER`-free rebuild:** `uv run python -m scripts.backfill --skip-tests --rebuild-from 2023-08-29` (the `marts.decisions.made_hand` ALTER is already applied), then verify the hero fingerprint, `make dbt-test`, `make test-all`, and tick E.5 |
+| 2026-09-11 (27, web + `/v1/heuristics`) | **Plan F.11 built and browser-verified — the six training modes, and deliberately left unticked** (ADR-038). Spec §17 decided the shape: the trainers must work with **no backend**, so a spot is built from a seed rather than stored, its answer comes from `@poker/core`, and `/train` and `/progress` are public and correct with the API stopped. `@poker/core` gains `training/schedule.ts` (Leitner `[0,1,3,7,16,35]` days, clock injected — a month of review behaviour as a unit test — plus the 14-day heuristic rule). App: `app/train/` (the six modes as data, eight reference charts each labelled *no solver was asked*, seeded generators, the **browser-owned** Dexie scoring store, the run, the `/progress` aggregation), `app/heuristics/` (local-first, `/v1/heuristics` as its sync endpoint), `components/train/`, pages `/train`, `/train/[mode]`, `/progress`. Backend: `heuristics` (Alembic `e6f7a8b9c0d1`) + schemas, store and router, with `GET /candidates` as the bridge ADR-034 promised to `analyses.heuristic`. Verified in a headless Chrome of its own with every `/v1/` call refused: six modes answered, **six pot-odds spots re-derived from the §8 formulas in the harness and matching to a tenth of a point**, the drawing mode reporting *"298 combos of total error against 51 allowed"*, a heuristic written offline and dated *"next asked 2026-09-25"*, `/progress` charting 5 of 14 across 9 buckets, **3 API calls refused, 0 console errors**. One browser-found defect fixed with two regression tests: the reveal guard was never cleared between servings, so a spot that came back for review was answered but never scored. `make web-check` lint clean, 556 tests, 83 of them this step's; the heuristics slice ruff/mypy clean, 12 unit tests, 7 contracts kept. | **Run `make test-all` to close F.11** — its `/v1/heuristics` integration test has never run (the stack was another session's all session) — then commit, then F.12 |
+| 2026-09-11 (26, web only) | **Plan D.3 done — one filter, shared by every screen, carried in the URL** (ADR-037). Amended the step first: it predates phase F and asked for seven primitives F had already built in `poker-ui`, so only the two genuinely missing ones (`PositionPicker`, `ActionLine`) were added, and there. Built `app/stats/` (the registry held once per session, families, the app's first typed `FilterNode`), `app/filter/` (clauses as text, the URL codec, the wording, the model), the two stores, `useFilterUrl`, `FilterBar` + `SituationBuilder`, and `/dev/filter`. Moved `/hands` onto it and **deleted `hands/search.ts`** — four hard-coded vocabularies that had already drifted from the registry. Verified in Chrome on the real pool, read-only, with a Chrome and an API of its own (:3001/:8001, throwaway DB since dropped): 80/80 dimensions reachable, the URL reproduces the filter exactly, the report runs (767 hands), no console errors. Three defects found and fixed; the coverage test caught `made_hand` arriving from the parallel F.11 session. `make web-check` lint clean, 551 tests (90 new). | **D.3 uncommitted**; F.11 in another session; D.4–D.6 now unblocked |
+| 2026-09-11 (25, docs) | **Plan E.4 done — the scale design, out of order and documentation-only.** Wrote [POKER_SCALE.md](POKER_SCALE.md) (one node → a sharded cluster) and **ADR-036**; touched no code, no data, no containers. It corrects [ADR-025](POKER_DECISIONS.md#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant) in two places rather than restating it. **(1) `cityHash64(user_id)` cannot put the population on its own shard as the code stands** — a `--dataset population` import stamps the *importing account's* `tenant_id` on every row, so the founder's 19,802 hero hands and 9,073,994 pool hands hash to the same shard; the pool needs a **reserved tenant id**, and moving it is a replay from object storage, not an `ALTER`, because `user_id` leads the sort key. **(2) Sharding does not fix the query that motivated it** — the pool is one tenant and one dataset, so no hash divides the 1.6 s arbitrary-situation scan; the measured lever is threads (0.53 s → 0.16 s from 2 to 8 on 6.48M rows, +0.98 GiB), so the population becomes **one bigger node** and hero shards stay 4 GB / 2 vCPU. Cost table built only from figures the repo already measured (8.10 decisions/hand, 6.00 player-rows/hand, ~1.29 KB/hand, 91 s rebuild per 1M hands): **12.9 / 64.6 / 323 GB** and **2 / 9 / 44 shards** at 10M / 50M / 250M hands — the shard count from a **labelled extrapolation** of a single latency measurement, with what would have to be measured to replace it stated beside it. Also written down: writes go to the local table (a `Distributed` insert breaks both "one INSERT = one part" and the worker's commit-after-insert), dbt per shard is mandatory because `insert_overwrite` is `REPLACE PARTITION`, `uniqExact` is now a *correctness* constraint not a speed one (the initiator holds every shard's state), and a four-step migration path with rollback and verification at each step. Three doc-drift items recorded, not fixed: `limits.xml:33`'s "~69% of the 8G container" (stale from a 5.5 GB ceiling; the real figure is 58% of 4G), `profiles.yml:22-23` repeating it, and the worst-partition peak recorded as 3.06 GiB in ADR-019 but 3.17 GiB in three config files. Uncommitted. | **F.11** (unchanged — E.4 was off the critical path) |
 | 2026-09-11 (24) | **Plan F.10 done — tier 3, empirical EQR, and the §5b corpus re-parse.** Committed F.9 (`5852d14`). Tier 3 reconstructs a prior you bring by a **likelihood ratio** rather than the spec's literal estimator, which saturates at ~97% on real data because folders are never shown (ADR-035); empirical EQR sits beside it on a new `decisions.invested_bb`. Then **§5b**: `scripts/reparse.py` re-read all 2,492 objects from object storage (9,079,995 hands stored, 19,097 `pot_mismatch` failures, **0 unreadable**), and the chain was rebuilt with **no downtime** — `ALTER TABLE ... ADD COLUMN ... AFTER` plus the ordinary backfill, since `REPLACE PARTITION` only wants identical structure. **Pool showdown-seat card coverage went 17.4% → 100.0%**, pool decision coverage 1.89% → **13.35%**, and the BB flop lead went from 35 of 51 chart classes reweighted to **169 of 169**. The **hero fingerprint did not move** (.229573 / .188466 / .033835 / −1.37) — the load-bearing check, since hero exports always had their own cards. Three real bugs surfaced and were fixed: the backfill ran whole-table data tests every pass and `dbt build` skipped the anchor downstream of their failure (`--skip-tests`); an `ALTER` dirties no partition, so **both hero months silently kept `invested_bb = 0`** (`--rebuild-from`); and the assertion that should have caught that sampled by date, covering 4 months of 10 — it now samples by `cityHash64(hand_uid)`. Dead letters deduped to one generation (128,340 → 19,117; original kept as `core.parse_failures_pre_dedupe_20260911`). Verified in Chrome, read-only: tier 3 reweighted 51 of 51 (AA 4.90×, KK 4.77×, JTo 0.57×), implied 19.1% vs observed 14.7%; the **EQR panel now answers** (52.5% of pot, 8.33 bb from here) where it could only say `needs_rebuild` before; one copy bug fixed where full coverage made "the rest" describe an empty set. `make check` 420, `make test-all` 469, `make web-check` 386. Uncommitted. | **Commit F.10 + §5b, then F.11** (training modes). |
 | 2026-09-10 (23) | **Plan F.9 done — the 9-step analyzer.** Committed F.8 (`45ff8f3`). `analyses` in Postgres with **merge-by-step** saves (`/v1/analyses`), so an autosave of one step can never lose another; `PredictionGate` (the truth is fetched only after the answer is committed) and `StepperNav` in `poker-ui`; the `analyze/` module in the app (the nine questions as data, the spot the earlier steps build, every reveal computed and hand-counted in tests, Dexie autosave with an offline queue and retry); nine step components; `/analyze`; and **Analyze this node** on the replayer. Verified in Chrome against the **real** pool, read-only: all nine steps run on one of the founder's NL10 hands, a prediction committed at each, ending in a saved heuristic and `9 of 9` — **acceptance 9**; the CO folds 43.2% (n = 3,988) against an MDF of 39.8%. Four browser-found defects fixed (a stale step snapshot losing a patch; `classifyCombos` throwing on a partial board; step 8 reading its own size; step 9 asking the wrong side of the bet) and one server bug: the shared ClickHouse client refused concurrent queries because of its session id. `make check` 387, `make test-all` 429, `make web-check` 364. ADR-034. Uncommitted. | **Commit F.9, decide on the re-parse, then F.10** (tier 3 + empirical EQR). |
 | 2026-09-10 (22) | **Plan F.8 done — the pool at a node, and the parser gap behind it.** Committed F.7 (`317fab4`). Answered the plan's first question: the pool's missing showdown cards were a **parser gap** — observed GG tables print revealed cards only in the per-seat SUMMARY, which the parser skipped (752 of 752 sampled cardless showdown seats had them there). Fixed with `SEAT_SUMMARY` + `summary_seat_line`; a whole real pool file goes from 18.5% to 100% card coverage on re-parse, and §5b holds the re-parse plan for the founder to schedule. Then the step itself: `raise_to_bb` buckets, `node_filter` (a `NodeKey` as a predicate over `decisions`, the villain named only through a column that means it, the stack by registry bucket), `node_service` tiers 1 and 2 as `run_report` calls, `POST /v1/pool/node/{frequencies,showdown-range}` with `MIN_N = 100` and no numbers below it, `PoolDataBadge`, the pool column of `/ranges/compare` (per-combo weights) and the replayer's frequencies panel. Verified in Chrome against the **real** pool read-only: real nodes answered with n in the millions, the UTG-RFI showdown range drawn with its coverage caveat, a thin node gated — **acceptance 10**. Fixed `nodeKeyAt` carrying every street into the sequence. `make check` 377, `make test-all` 410, `make web-check` 323. ADR-033. Uncommitted. | **Commit F.8, decide on the re-parse, then F.9** (the 9-step analyzer). |
