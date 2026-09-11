@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import api.models_analyses  # -- registers the analyzer's table on Base.metadata
+import api.models_heuristics  # -- registers the heuristic log on Base.metadata
 import api.models_ranges  # noqa: F401  -- registers the range library's tables on Base.metadata
 from api.models_pg import Base
 from core.settings import get_settings

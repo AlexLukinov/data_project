@@ -10,6 +10,9 @@ The one Nuxt 4 app (SPA mode, ADR-024/027): the dashboard and the Range Lab. `ma
 | `/dev/components` | every `@poker/ui` component with fixtures | no |
 | `/login`, `/register` | sign in / create an account | no |
 | `/account` | the signed-in account from `GET /v1/auth/me`, sign out | yes |
+| `/train` | the six training modes (spec §16) with what each is owed a review on | no (spec §17) |
+| `/train/:mode` | one mode: `equity`, `combos`, `drawing`, `blockers`, `advantage`, `potodds` | no (spec §17) |
+| `/progress` | accuracy per mode over the last 30 days, the per-class/texture breakdown, and the heuristic log | no — the scores are local; only the log's sync needs the API |
 
 ## Auth (plan D.2)
 
@@ -34,4 +37,17 @@ app/auth/              the auth transport and session, framework-free
 app/stores/auth.ts     the Pinia store around the session
 app/composables/       useApi (authorized $fetch), useEquityService (the equity Worker)
 app/middleware/        auth.global.ts
+app/train/             the six modes as data, the seeded spot generators, the scoring store
+                       (Dexie `poker-training`), the run, and the /progress aggregation
+app/heuristics/        the heuristic log: /v1/heuristics, its browser copy, and the 14-day rule
 ```
+
+## Training (plan F.11, spec §16)
+
+- **Every trainer works with no backend at all.** A spot is built from a seed and its answer comes
+  from `@poker/core`, so `/train` and `/progress` are `public: true` and stay correct with the API
+  stopped. Only the heuristic log syncs, and it says on each row whether it has reached the server.
+- **The scoring store is browser-owned** (ADR-036), unlike every other Dexie database here, which
+  is a cache of something the server holds.
+- The review intervals are `@poker/core`'s `training/schedule.ts` — pure, clock-injected and unit
+  tested, not a timer inside a component.

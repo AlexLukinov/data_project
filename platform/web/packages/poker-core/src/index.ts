@@ -20,3 +20,4 @@ export * from './node';
 export * from './hand/index';
 export { mulberry32, randomSeed } from './random';
 export type { Random } from './random';
+export * from './training/index';

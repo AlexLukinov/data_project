@@ -22,6 +22,7 @@ from api.routers import (
     definitions,
     hands,
     hero,
+    heuristics,
     pool,
     ranges,
     reports,
@@ -91,6 +92,7 @@ app.include_router(hero.router)
 app.include_router(pool.router)
 app.include_router(ranges.router)
 app.include_router(analyses.router)
+app.include_router(heuristics.router)
 
 
 @app.exception_handler(Exception)
