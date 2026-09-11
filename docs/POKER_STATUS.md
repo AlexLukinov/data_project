@@ -6,10 +6,12 @@
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
 **Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; CI run pending a push**
-**Last updated:** 2026-09-11 (session 10, **F.11** — the six training modes, the browser-owned
-scoring store, `/progress`, spaced repetition and the heuristic log, ADR-038; **built and
-browser-verified, left unticked pending one unrun integration test**. Run in parallel with the D.3
-session — ADR-037, the shared filter model — and the E.4 doc-only session, ADR-036)
+**Last updated:** 2026-09-11 (session 13, **D.5** — the reports workbench: `StatGrid` where every
+cell carries its own `n` and a thin one is dimmed and left uncompared, `StatPicker`,
+`DefinitionPanel` generated from the registry's own AST, presets, and a saved report that reopens
+from its URL; ADR-042. **Done, verified in Chrome on the real pool read-only, ticked, uncommitted.**
+One of four sessions running in parallel — the others: the E.5 data backfill, E.2's confidence
+intervals (session 11, ADR-040, left unticked), and F.12)
 
 ---
 
@@ -18,53 +20,61 @@ session — ADR-037, the shared filter model — and the E.4 doc-only session, A
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) phase **F / D** — four parallel sessions landed 2026-09-11; next: **finish E.5's data half**, then `make test-all` to close **F.11**, then **D.5**
+### ▶ Implement [POKER_PLAN.md](POKER_PLAN.md) — **phase F is closed except F.12**; next: **D.4** and **D.6** (both unblocked by D.5), **E.1** on the stack
 
-**Four sessions ran in parallel on 2026-09-11 and are committed** (`feat/range-lab`):
-`c316fd0` E.5 code half · `4f247a6` F.11 · `47702d7` D.3 · plus this docs commit (E.4).
-`make check` green, `make web-check` 556 tests over 60 files green, licence audit unchanged.
-**D.3 and E.4 are ticked; E.5 and F.11 are deliberately still `[ ]`** — both have a verification
-that could not run while three other sessions shared the machine.
+**Everything from both rounds of parallel sessions is committed** on `feat/range-lab`:
 
-**First, and before any other ClickHouse work:** the pool equity backfill
-(`scripts/backfill_equity.py --dataset population --workers 8`) was **still running** when these
-commits were made. Let it finish. Then close E.5's data half:
+| commit | step |
+|---|---|
+| `0048fc0` | **D.7** leak→hands drill-through (ADR-041) |
+| `72ecf4d` | **D.5** reports workbench (ADR-042) |
+| `202a38b` | **E.2** confidence intervals (ADR-040) |
+| `d2abcac` | **E.5** the enrichment fix — see below, this one matters |
+| `2ce4488` `47702d7` `4f247a6` `c316fd0` | E.4 · D.3 · F.11 · E.5 code half |
 
-```bash
-cd platform
-docker compose exec -T clickhouse clickhouse-client -q \
-  "SELECT dataset, count() AS seats, countIf(made_hand_river != '') AS with_made
-   FROM core.hand_players GROUP BY dataset"        # population was 336,953 of ~2.27M at commit time
-uv run python -m scripts.backfill --skip-tests --rebuild-from 2024-01-01
-```
+**`c316fd0` shipped a data-corrupting bug and `d2abcac` is the fix.** `equity_store.write()`
+selected all 33 columns of a seat into Python and inserted them back, round-tripping
+`played_at_utc` (`DateTime64(3,'UTC')`) through an aware datetime that clickhouse-connect
+re-encoded in local time: on this UTC+3 machine **2,264,407 rows moved three hours earlier** and
+every month-crosser duplicated, because a ReplacingMergeTree cannot collapse across partitions.
+The merge now happens server-side — only the seat key and the five owned columns go to a scratch
+table and ClickHouse copies the rest. **Never run `scripts.backfill_equity` from `c316fd0`.**
+`unfinished()` was also fixed: it skipped any day *holding* a class, but `write()` inserts in
+batches, so a killed run left half-written days looking finished.
 
-**`--rebuild-from` is not optional here and leaving it off fails silently.** E.5 adds `made_hand`
-and real `ev_won_bb`, and the dirty gate is data-driven: an `ALTER ADD COLUMN` changes no source
-row, so every partition stays "clean" with the new columns empty forever. This exact bug shipped
-once already this month (§5b) and was caught only because an assertion sampled by hand.
-Then check E.5's "done means": on a hand with a preflop all-in `ev_won_bb != net_won_bb`;
-`made_hand` non-empty on every decision where hole cards are known; and the hero parity
-fingerprint **unchanged** (19,802 hands · VPIP .229573 · PFR .188466 · WTSD .033835 · −1.37
-bb/100) — if it moves, that is a regression, not a feature. Tick E.5 only then.
+**Data state verified after the fix, by query, not by report:** `core.hand_players FINAL` back to
+exactly **54,562,770** (0 shifted timestamps, 0 unfinished days), `marts.decisions` **73,679,949**
+and `marts.player_hands` **54,562,770** both unchanged, `made_hand` on **7,153,872 of 7,153,872**
+eligible decisions, hero fingerprint **bit-identical** (19,802 · .229573 · .188466 · .033835 ·
+−1.37), and the **EV line separated from the actual line for the first time: −1.37 → +0.28**.
 
-**Second, to close F.11:** it ships one test that has never met a database —
-`platform/tests/integration/test_heuristics.py`. `make test-all` drops `poker_test` on exit, so:
+**Gates over the combined tree:** `make check` **1,552** · `make web-check` **691 tests / 70
+files** · `make test-all` **1,612 passed, 6 skipped** · dbt **26 of 26** · licence audit unchanged.
+That `test-all` run is what closed **F.11** and **E.2** — both integration files confirmed
+collected and run, not inferred from the total.
 
-```bash
-cd platform && make seed && make test-all     # expect the 14 heuristics integration tests green
-```
+**Next, three lanes that can run in parallel plus one that cannot:**
 
-If they pass, tick **F.11**. If any fail, the fault is in `api/heuristic_store.py`,
-`api/routers/heuristics.py` or the Alembic migration `e6f7a8b9c0d1_heuristics.py` — all new,
-none yet exercised against Postgres.
+1. **D.4 My game** (`pages/index.vue`) — unblocked by D.5 and E.2. Use `MetricValue` for the KPI
+   tiles and reuse D.7's `LeakTable`; **audit before building**, D.3, D.6 and D.7 were all
+   half-built already. The EV line is newly worth plotting.
+2. **D.6 Pool** — unblocked by D.5, but **amend it first**: phase F already shipped the pool tier
+   stack and `/ranges/compare`, so the cohorts page and player search are probably all that remain.
+3. **E.1 MVs from the registry** — needs the stack, so exactly one session owns ClickHouse,
+   Postgres, dbt and the backfill scripts while it runs. **D.7b** (tags/notes, needs an Alembic
+   table) is its stretch.
+4. **E.3 quotas** can run as a no-stack lane, writing its integration test without running it.
 
-**Then:** **D.5** (reports workbench — `StatGrid`, `StatPicker`, `DefinitionPanel`, presets,
-save-report) is the next foundational step, because the plan has D.4 and D.6 consuming its
-components. **D.6, D.7 and D.8 must be audited against phase F before they are started** — D.3
-turned out to be half-built already (ADR-037), and the replayer, `/hands`, `/ranges` and the
-account pages mean the same is likely true of them. **F.12 and D.9 must run alone**, with no
-parallel session: F.12 touches every page and the glossary, D.9 deletes `api/static/index.html`
-and the old `/v1/stats*` adapters.
+**Solo-only from here:** **F.12**, **D.9** and **B.5b** each need the tree to themselves — F.12
+touches every page and the glossary, D.9 deletes `api/static/index.html` and the old `/v1/stats*`
+adapters, B.5b is a full `core.*` table rebuild.
+
+**Loose ends:** a throwaway account `d7-verify@example.com` (tenant 2) is on the **real** Postgres
+from D.7's browser verification and has no delete endpoint — remove it by hand.
+`platform/backups/` holds the dead-letter export (gitignored; restore command in plan §5b) and the
+table itself is dropped. Keep `platform/.equity-cache.pkl` (3.9 MB, gitignored, 69,364 solved
+match-ups) — deleting it costs ~2 h and it makes all-in equity a 34 µs lookup instead of 1.25 s.
+`make test-all` dropped `poker_test`, so re-run `make seed` before any test-environment work.
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…035) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
@@ -340,6 +350,225 @@ unchanged; the heuristics slice ruff/format/mypy clean, 12 unit tests, 7 import-
 kept.
 
 
+**Where E.2 stands (2026-09-11):** **built, gate-green, uncommitted — and deliberately still
+`[ ]`** (ADR-040). One of four parallel sessions; it touched `platform/stats/`, `poker-ui` and
+tests, and **no data, no migration, no `core/`, `scripts/`, `dbt/` or `ingestion/`**.
+
+**Why it is not ticked, and it is two reasons.** `platform/tests/integration/test_intervals.py`
+has never been run — it needs the stack, which the E.5 lane owned throughout — and the step's
+"Done means" is *"KPI tiles show ± bands"*, but the tiles are **D.4**, which this step was
+deliberately sequenced ahead of so the service and the component exist before their first
+consumer. Everything E.2 itself builds is verified; `/dev/components` renders four `MetricValue`
+states from the engine's own numbers.
+
+**The step was amended before it was built.** E.2 says "ratio stats Wilson interval". In this
+registry `ratio` is exactly one thing — the aggression factor, `(bets + raises) / calls` — and it
+is **not a proportion**: the numerator and denominator count *disjoint* row sets, the value is
+unbounded above and undefined at zero calls, and Wilson is not defined for it. The format that
+gets Wilson is **`percent`**: all 56 of them, including the four `afq_*` built from
+numerator/denominator whose row sets still nest. `ratio` and `count` get no interval, by name, in
+one function. The amendment is in the step and in ADR-040.
+
+**What landed.** `stats/interval.py` — the typed `Interval` (`low`, `high`, `n`, `level`,
+`method`), Wilson for a proportion, `100 · z · sd / sqrt(n)` for a per-100 mean, and `for_cell` as
+the single place the format-to-estimator mapping is written. `ResolvedStat.dispersion` names the
+column whose per-row spread is a stat's standard error; `plan(..., dispersion=)` refuses the
+rollup for such a stat; `stat_columns` emits `stddevSamp(x) AS <code>__sd` beside the value and
+the `n`; `ReportRequest.confidence` (`90 | 95 | 99 | null`) and `Cell.interval` carry it.
+`poker-ui` gains **`MetricValue`** and a `confidenceInterval` glossary entry. **`api/` did not
+change at all** — `POST /v1/reports/run` declares `ReportRequest` in and `ReportResult` out, so a
+field on each model is the entire wire change, which is ADR-023's layering earning its keep.
+
+**Three decisions worth remembering (ADR-040).** *Wilson, not Wald* — Wald collapses to zero width
+at p = 0, so it prints `0.00 ± 0.00, n = 3` in exactly the case that needs the warning, while
+Wilson says **0–56%**. *Intervals are opt-in* — `marts.stats_daily` stores a daily sum and count
+per stat and **no sum of squares**, so a per-100 band cannot come from the rollup at any price and
+asking for one drops that report to `player_hands`; a proportion needs only the value and `n`, so
+a KPI row of VPIP/PFR/3-bet keeps the fast path and only the winrate tile pays. And *the interval
+is a floor on the uncertainty, not a ceiling*, because both estimators assume independent draws
+while several decisions come from one hand and many hands from one session — the module docstring
+says so rather than leaving it implied.
+
+**One defect found by verification and fixed.** The per-100 band used the normal quantile at every
+`n`. Checked against Student's *t*, that band is **6.5× too narrow at n = 2** (1.15× at n = 10,
+1.04× at n = 30) — an interval six times too confident is not a conservative estimate, it is a
+wrong number wearing the uniform of a careful one, which is the exact failure this step exists to
+prevent. `MIN_N_MEAN` is now **30**, and below it a per-100 stat gets no interval at all, the same
+answer the pool gives under `MIN_N`. A proportion needs no such floor: Wilson's small-sample
+coverage is its whole virtue.
+
+**Verified without a database.** Wilson matched an **independently written** implementation across
+**444** (p, n, level) combinations to within its own rounding, and the published values for 50/100
+`(40.38, 59.62)`, 0/10 `(0, 27.75)` and 0/3 `(0, 56.15)`; bounds never left [0, 100] and never
+crossed. The `z` table is asserted against `math.erf` to 5e-13, so a typo fails the suite.
+**Injection through a custom `per100` stat was attempted four ways and refused twice over** — the
+`CODE` pattern on `Sum.sum`, then the registry dimension check — while a legitimate custom per-100
+stat does get its spread and an arithmetic numerator correctly gets none. `net_won_bb` is
+`Decimal(18, 4)` and **not Nullable**, so `count()` and `stddevSamp` see the same rows; had it been
+nullable the reported `n` and the `n` behind the error would have disagreed silently. Gates:
+`make check` green — **1,552 unit tests** (28 this step's), ruff + mypy strict clean, 7
+import-linter contracts kept, size check clean; `make web-check` typecheck clean (`vue-tsc` and
+`nuxt typecheck`), **113 `poker-ui` tests** (10 this step's), **licence audit unchanged — no new
+dependency**, because the `z` table is three constants rather than scipy.
+
+**One thing D.4 must add, deliberately left out.** `web/apps/web/app/stats/api.ts` needs
+`interval` on its `Cell` mirror and an `Interval` interface beside it. It is not in this step
+because the **D.5 lane was rewriting that same file** while this session ran, and a two-line
+addition was not worth the conflict. Nothing is blocked: `MetricValue` takes primitives
+(`value`, `low`, `high`, `n`, `unit`, `digits`, `level`, `signed`) and imports nothing from the app.
+
+**Where D.5 stands (2026-09-11):** **done, verified, uncommitted, and ticked** (ADR-042). One of four
+parallel sessions, **in the web workspace only** — no database written, no `make` target beyond
+`web-check` run, and `packages/poker-ui/src/{index.ts,glossary.ts}` never opened, because this step
+added nothing to the component library.
+
+**What the step is.** The workbench where any stat is measured for any situation and sliced any way:
+rows are a group-by dimension, columns are stats picked by category. It is built **on** D.3 rather
+than beside it — the client still holds no vocabulary of its own — and it is built **to be
+consumed**, because the plan has D.4 and D.6 using these components rather than this page.
+
+**The rule the step exists to enforce, and why it is one file.** Spec §17 says never fabricate a pool
+number, and a stat grid is where a thin sample most easily passes for a real one, because every cell
+is the same eight pixels wide. The numbers that forced the design are measured, not imagined: on the
+founder's own hands, VPIP in 5-bet pots from the BB is **6.67% against the field's 35.18% — a −28.5
+point "leak" drawn from fifteen hands**; flop c-bet decisions split by the flop's high card give
+**`raise_cbet_flop = 0.0%` on n = 3**; and `compare_to` will happily report hero's 3,245 hands
+against the pool's 9,036,302 as a delta of **−9,033,057**. `ReportRequest` has no `min_n` and the
+engine suppresses nothing, so the judgement is the client's — and it is made **once**, in
+`app/reports/cell.ts`, tested against those exact rows. Every cell shows its own `n`; under the
+threshold the value is shown but dimmed and **its delta withheld**; no observations means a dash even
+where the pool has a baseline; a `count` is never compared; and **the threshold travels in the URL**,
+because it decides what is greyed and a link that greys a cell for the sender but not the receiver
+defeats the point. Direction is coloured only where the registry commits — most stats leave
+`higher_is_better` null, and colouring those would invent a judgement the platform has not made.
+
+**What landed.** `app/reports/` — `api.ts`, `library.ts`, `cell.ts`, `columns.ts`, `describe.ts`,
+`url.ts`, `model.ts`, each with a test beside it; `composables/useReportUrl.ts` (one composable owns
+all nine query keys, because two `router.replace` writers in one tick drop each other's);
+`stores/reports.ts` (the library only — the workbench is created per screen, since D.3's whole point
+is that two screens share a situation without sharing their columns); `components/reports/` — the
+five the step names plus **`GroupByPicker`** (the grid's rows *are* a group-by, so it needs a
+control) and **`ReportWorkbench`** (a shell D.4 and D.6 may ignore); `pages/reports/[[id]].vue`.
+**`app/filter/node.ts` is the other half and lives in D.3's directory**: D.3 compiled clauses into a
+tree and a preset arrives as one, so without the inverse the grid would show a preset's numbers above
+a filter bar describing something else. D.7 already builds its drill-through on it.
+
+**Three things worth remembering.** (1) `app/stats/api.ts` was extended **additively** to the full
+server shape — it was missing `compare_to`, `cohort`, `custom` and `player_key`, so loading
+`preflop_overview` and re-running it would have **silently dropped its baseline**. (2) The
+**group-by is the half of D.3's grain trap D.3 could not cover**: `stats/router.py` checks the
+grouping exactly as it checks the filter, so `group_by: ['facing']` with `stats: ['hands']` is the
+same 400 — the picker narrows on both and names what it dropped. (3) `compare_to` and `cohort` go
+**inert rather than being cleared** when the dataset moves under them, so switching to the pool and
+back does not silently forget a setting.
+
+**Verified in Chrome against the real pool, read-only** — a headless Chrome of its own on :9224, the
+app on **:3002**, and an API of its own on **:8002** because the shared one's CORS allows only :3000;
+the other sessions' :3000 and :8000 were left running and untouched. ClickHouse reads only, with auth
+and the saved rows in `poker_test` (never a real database), and both test reports deleted afterwards.
+The server's own `preflop_overview` preset loaded and ran: **19,802 hands, 6 rows, 48 of 48 cells
+carrying `n`**, with `Fold to 3-bet 50.0% n 2` and `3-bet % 0.0% n 2` shown, dimmed and **not**
+compared. A hand-built thin report reported *"22 of 26 cells are under 100 observations"* with
+`0.0% n 3` marked and **0 thin cells carrying a delta**. **Saving it moved the address to
+`/reports/<uuid>`, and a full browser reload reproduced the name, situation, grouping, stats and
+baseline and re-ran to the identical `2,219 hands · 13 rows · 2 stats` — served *from cache*, which
+is the proof that matters: the cache key hashes the canonical request, so the reopened document is
+byte-identical to the one that was stored.** `min=1000` in a pasted link dimmed 12 of 13 cells on
+arrival. Grouping by `Facing` dropped *"Hands, VPIP"* by name and disabled Run rather than earning a
+400, then ran once a decision-grain stat was chosen. The pool dataset answered over **54,443,958
+hands** with the baseline correctly inert. `DefinitionPanel` printed fold-to-c-bet's real definition
+out of the registry's own AST — *"of the rows where Street is flop · Facing is bet · Facing a c-bet:
+yes — the share where Action is fold"* — with its typical band and its recorded caveat. **0 console
+errors, 0 failed requests.**
+
+**Four defects found in the browser and fixed:** saving remounted the page and threw the grid away
+(`NuxtPage` keys by path, so the optional-param route was not enough — pinned with
+`definePageMeta({ key: 'reports' })`); `toLocaleString()` with no locale rendered `3 245` in Chrome
+while the unit tests asserted `3,245`, so the locale is now stated as `PoolDataBadge` already states
+it; the duplicate-name guard was suppressed while *Replace* was ticked, which is **exactly** the case
+the server answers 409, because `nameTaken` already excludes the report being replaced; and the
+preset's own `hands` column was printed twice. Gates: `nuxt typecheck` clean, ESLint **0 errors**,
+**691 tests** green over 70 files, licence audit unchanged — **no new dependency**.
+
+**One known follow-up, for the E.2 lane rather than this one:** E.2 adds `ReportRequest.confidence`
+and `Cell.interval`, both additive and both uncommitted at the time of writing. D.5 deliberately does
+not request intervals — E.2's own docstring says a 40-column grid being scrolled does not want them —
+but the workbench carries `player_key`, `custom` and `limit` through a re-save and knows nothing of
+`confidence`, so a saved report created by a KPI screen would lose that field if re-saved here.
+Adding it to `Carried` in `app/reports/model.ts` is a two-line change and belongs with E.2.
+
+**Where D.7 stands (2026-09-11):** **done, verified, uncommitted, and ticked** (ADR-041). One of four
+parallel sessions, in the **web workspace only**. Like D.3 before it, the step was **audited and
+amended before a line was written**, and the audit was most of the value: D.7 was written 2026-09-09,
+and **two of its three clauses had already shipped**. The replayer is F.7's — the plan's own F.7 entry
+is titled *"Hand replayer (absorbs plan **D.7**)"* while D.7 sat `[ ]` and appeared in neither
+ordering statement, so it had been half-recorded-as-done and unscheduled for a day. The filter-bound
+list is D.3's, from the previous session. What was genuinely missing was the one thing the step is
+judged on: **nothing in the app had ever called `/v1/hero/leaks`** (`pages/index.vue` is still D.1's
+health page), so "clicking a leak" could not be performed at all.
+
+**The drill-through holds no poker knowledge, and that was the whole design problem.** A `Leak` is a
+stat **code** with a value, a baseline and a score — it carries no situation. Writing the thirty-nine
+situations out by hand ("flop, facing a bet, the bet was a c-bet") would have been exactly the drift
+ADR-037 had just finished deleting from `hands/search.ts`. It is not written anywhere: a built-in
+stat's registry entry **is** a filter tree (`countIf(situation AND action) / countIf(situation)`),
+`GET /v1/definitions` was already serializing both halves and the client was discarding them, and the
+concurrent D.5 session had just landed `nodeToClauses`, the inverse of D.3's compiler. So
+`app/hero/leaks.ts` is composition — `stat.situation` → `nodeToClauses` → `toQuery` → `/hands?f=…` —
+and it is the **first real caller** of both. A leak offers **two** links because it is two questions:
+the situation *and* the action ("the hands where you did it"), and the spot alone, whose size the row
+already knows (`Leak.n` is that denominator; the numerator is never printed as `n × value`). The four
+leaks that cannot be opened are found **structurally**, by asking `tablesFor` whether `decisions`
+survives the clauses — never as a hard-coded list of codes.
+
+**Three defects fixed with it, all inside D.7's own wording.** The hand list **dropped the date
+bounds** whenever no clause was set — `filter.active` counts clauses only and the `recent`/`pool`
+branch forwarded neither — so the two date boxes FilterBar renders on that page did nothing. A clause
+on any of the 13 hand-grain dimensions earned a **raw 400** from the compiler, because a hand search
+compiles on `marts.decisions` alone while the builder offers all 80; `app/hands/searchable.ts` now
+names the offending condition in its own words and **fires no request**. And `HandState.actor` —
+documented as *"the seat about to act"* — was `actions[index].seat` whatever kind it was, so the
+acting ring sat on a player through `post_sb`, `post_bb`, `uncalled_return` and `muck`. `actor` was
+**not** changed: `toCall` is reckoned for it and a parser-agreement test pins it. A separate `toAct`
+was added beside it, gated on the `DECISIONS` set that already sat in `poker-core/src/hand/types.ts`.
+
+**Verified in Chrome** — a headless Chrome of its own over CDP on its own profile (a parallel session
+held the shared MCP profile), the app on **:3003**, and a small **CORS-forwarding proxy on :8003**,
+because `cors_origins` allows only :3000 and restarting the shared API would have disturbed three
+other sessions. :3000 and :8000 were untouched throughout and healthy afterwards. Against the real API
+and the real registry: `/leaks` loads, 39 stats set aside under 100 opportunities, 0 console errors.
+Nine leaks rendered — **five linked**, each URL the registry's own situation
+(`fold_to_cbet_flop` → `?f=street:eq:flop;facing:eq:bet;facing_is_cbet:eq:1;action:eq:fold`;
+`steal` → `…;position:in:CO,BTN,SB;action:eq:raise`; and `check_raise_flop` picked up
+**`street_line:eq:x`**, a condition written nowhere in this session's code) — and **four refused with
+their reason** (VPIP/PFR "measured over every hand dealt in", WWSF/WTSD "counted per hand rather than
+per decision (Saw the flop)"). **Clicking the leak landed on `/hands` reading `Street is flop · Facing
+is bet · Facing a c-bet: yes · Action is fold`, with the registry's exact AST on the wire and no
+400** — the acceptance. A hand-grain dimension pasted into the URL showed the amber sentence and fired
+no request; both date branches now carry `date_from`/`date_to`; the back link from a hand reads
+`/hands?from=2026-01-01&f=street:eq:flop;…` while the hand's own URL stays `/hands/<uid>?seat=2`. A
+pasted seed hand replayed with **the ring absent at both blind posts, the uncalled return and the
+muck, and present on UTG, BTN, Hero and BTN at the four decisions checked**.
+
+**What could not be verified, and why it is not a shortcut.** The leak *numbers* are not real. Every
+read is scoped `s.user_id = {tenant_id}` (`stats/query.py`) and the pool carries the founder's own
+tenant, so a freshly registered account owns no hands — hero **or** pool — and the real endpoint
+correctly answered `hands: 0, leaks: 0, skipped: 39`. Earlier sessions got real numbers by registering
+into a fresh `poker_test` Postgres, where the first user *is* tenant 1; that needs a database this
+lane forbade, and forging a token for the founder's tenant was not on the table. So `/v1/hero/leaks`
+**alone** was stubbed at the fetch boundary with nine real stat codes and plausible NL50 figures —
+everything downstream of it (the registry, the decompiler, the URL, the search, the API's acceptance)
+is real. **Open `/leaks` once on the founder's own account** to see the true ranking.
+
+**`tags/notes` is not built, and is now plan step D.7b.** It exists nowhere in the stack — no table,
+no route, no UI — and the repo's own dividing line puts it in Postgres in as many words: *"if a human
+edits it, it lives here … A note someone typed is Postgres"* (`api/models_pg.py`). `POKER_DATA_MODEL.md`
+already specifies `hand_notes`, `hand_tags` and `player_notes`. That is an Alembic migration, which
+this lane forbade while another session owned the database, so it was **recorded and scheduled rather
+than half-built in the browser**. Storing notes as step-less rows in the already-migrated `analyses`
+table would have needed no migration and was **rejected**: notes would land in `/analyze`'s list beside
+real nine-step analyses, and `current_step`/`steps`/`node_key` would be dead columns on every note row.
+
 **Where D.3 stands (2026-09-11):** **done, verified, uncommitted** (ADR-037). Run as one of three
 parallel sessions, in the **web workspace only**. The step was **amended before being built**: D.3
 was written 2026-09-09, before the Range Lab spec and therefore before phase F was interleaved
@@ -383,7 +612,34 @@ earned the router's 400). The registry-coverage test earned its keep within the 
 **`made_hand`**, added by the parallel F.11 session, and it is now classified.
 
 **Do this:**
-1. **D.3 is done and verified, uncommitted** — commit it when the founder says so, separately from
+0. **D.5 is done, verified and uncommitted** — web workspace only, and it ticks itself (both halves
+   of its "Done means" were checked in the browser: a saved report reopened from its URL and
+   re-ran identically *from cache*, and every cell showed its `n`). The file list is
+   `scratchpad/lane-d5.files`; nothing under `platform/` outside `web/` was touched, and
+   `packages/poker-ui/` was never opened. The only shared file it modified is
+   `apps/web/app/stats/api.ts`, **additively**, and one line of `app.vue`'s nav array (another lane
+   added `/leaks` to the same array in the same round — both survived). Commit it separately from
+   the other lanes when the founder says so. **`filter/node.ts` is a shared dependency now** — D.7's
+   drill-through calls `nodeToClauses`, so the two lanes should be committed together or D.7 first.
+1. **D.7 is done, verified and uncommitted** — web only, and it ticks itself (its "Done means" was
+   performed in the browser). Commit separately from the other lanes: **new**
+   `apps/web/app/hero/{api.ts,leaks.ts,leaks.test.ts}`,
+   `apps/web/app/hands/{searchable.ts,searchable.test.ts}`,
+   `apps/web/app/components/hero/LeakTable.vue`, `apps/web/app/pages/leaks.vue`; **modified**
+   `apps/web/app/pages/hands/index.vue` (dates on every branch, the unsearchable guard, the
+   truncation note), `apps/web/app/pages/hands/[id].vue` (the back link carries the situation),
+   `apps/web/app/app.vue` (one nav link — **D.5 added its own line to this file in parallel; both
+   are present**), `packages/poker-core/src/hand/{types.ts,replay.ts}` (`toAct`),
+   `packages/poker-core/test/replay.test.ts` (two tests),
+   `packages/poker-ui/src/components/HandReplayer.vue` (one attribute). `poker-ui/src/index.ts` and
+   `glossary.ts` were **not** touched. Docs: plan (D.7 amended, ticked, D.7b added, Status, §6),
+   this file, ADR-041. The file list is also in `scratchpad/lane-d7.files`.
+2. **A throwaway account is left in the real Postgres**: `d7-verify@example.com` (tenant 2), created
+   through `POST /v1/auth/register` to sign in for the verification. There is no delete-account
+   endpoint, so **it needs removing by hand by whoever next has the database** — it owns no data.
+3. **D.7b (tags & notes) is the natural follow-up** and needs one Alembic migration; the schema and
+   the two open questions are written into the step in [POKER_PLAN.md](POKER_PLAN.md).
+4. **D.3 is done and verified, uncommitted** — commit it when the founder says so, separately from
    the other lanes' work. Web only: `apps/web/app/stats/{api,definitions,families}.ts` +
    `families.test.ts`, `definitions.test.ts`; `apps/web/app/filter/{clause,url,label,model}.ts` +
    a test beside each; `apps/web/app/stores/{definitions,filter}.ts`;
@@ -399,7 +655,7 @@ earned the router's 400). The registry-coverage test earned its keep within the 
    the F.11 session's `app/heuristics/*` and `app/train/*` — one of them, `HeuristicBody` not
    assignable to `Record<string, unknown>`, is the same interface-vs-type-alias trap `stats/api.ts`
    hit and solved).
-2. **F.10 is committed** (`775bc60`) — the paragraphs above describing it as uncommitted are
+5. **F.10 is committed** (`775bc60`) — the paragraphs above describing it as uncommitted are
    stale. Backend: `analysis/pool/{node_query,reconstruct,realization}.py` (new),
    `analysis/pool/node_service.py` (rebased on the shared query), `api/routers/pool.py`,
    `api/schemas_pool.py`; data: `dbt/poker_dwh/macros/decision_state.sql`,
@@ -418,24 +674,24 @@ earned the router's 400). The registry-coverage test earned its keep within the 
    to dbt). Docs: plan, this file, ADR-035, `CLAUDE.md`. A ready commit message is not stored in
    the repo — write one; the gates were `make check` 420, `make test-all` 469 (2 skipped),
    `make web-check` 386, licence audit unchanged.
-3. Nothing on `feat/range-lab` is pushed yet; **after a push, when the CI `web` job is green,
+6. Nothing on `feat/range-lab` is pushed yet; **after a push, when the CI `web` job is green,
    tick F.1** (it is the one step held open purely on a CI run).
-4. **D.4, D.5 and D.6 now have their filter.** The workbench is the next thing that should use it:
+7. **D.4, D.5 and D.6 now have their filter.** The workbench is the next thing that should use it:
    `filter.reportRequest({ stats, group_by })` is the whole call, `useFilterUrl()` is the whole URL
    story, and `pages/dev/filter.vue` is a working reference for both. D.5 owns the stat and
    group-by selection — they are deliberately **not** in the shared filter, so two screens can
    share a situation without sharing the columns they measure it with.
-5. **F.11 Training modes** (plan F.11, spec §16). Concretely: the six modes, the scoring store,
+8. **F.11 Training modes** (plan F.11, spec §16). Concretely: the six modes, the scoring store,
    `/progress`, spaced repetition, and the **heuristic log with its 14-day review prompt** —
    which is a query over `analyses.heuristic`, the column F.9 deliberately kept out of the steps
    JSON for exactly this. `/v1/heuristics` follows the same shape as `/v1/analyses`.
    `PredictionGate`, `scorePrediction` and the step definitions in `analyze/steps.ts` are the
    reusable pieces — the nine questions, tolerances and units are already data, not code.
    **Done means** acceptance 11.
-6. Carried over, unchanged: **B.5b**'s `core.*` rebuild; the phase-E performance note; the real
+9. Carried over, unchanged: **B.5b**'s `core.*` rebuild; the phase-E performance note; the real
    Postgres `users` table still holds old `e2e-*`/`iso-*` test accounts; on a comma-decimal
    locale `PotOddsPanel`'s number inputs display `2,5` for 2.5 (recorded for F.12).
-7. **New for F.12's §13 checklist, from D.3:** `facing_size_pct` and `size_pct` are labelled
+10. **New for F.12's §13 checklist, from D.3:** `facing_size_pct` and `size_pct` are labelled
    "(% of pot)" but stored as fractions, so the builder shows `0.75` under a label that says
    percent. The value is deliberately **not** scaled — the number typed and the number sent must
    agree — but the pair reads badly and wants either a relabelled registry entry or a percent
@@ -544,8 +800,11 @@ redoing against ~50 REAL hands once exports exist)*.
 - [x] Integration test: ingest → stats
 - [ ] F-202 ClickHouse **materialized views** — rollups are batch-built by dbt today; the MV
       is what makes them incremental (stats fresh seconds after upload, no dbt run)
-- [ ] F-309 All-in EV adjustment — columns and plumbing exist; the **equity calculator** is
-      not implemented, so `ev_won_bb` currently falls back to the actual result
+- [x] F-309 All-in EV adjustment — **done 2026-09-11 (plan E.5, ADR-039).** Exact enumeration
+      at parse time through `phevaluator`; EV redistributes the awarded pot per side-pot
+      layer. Hero EV bb/100 **+0.28** against an actual **−1.37**. `ev_won_bb` still falls
+      back to the result where there was no gamble — no all-in, no cards shown, or the
+      **27,088** hands GGPoker settled without dealing a runout
 - [ ] F-104/F-105/F-106/F-107 iPoker, WPN, partypoker, Winamax parsers
 - [x] F-402/F-404/F-405 **board texture, SPR and holding filters** — delivered by the wide-flag
       expansion; `flop_pairing`/`suitedness`/`high_card`/`connectedness`, `spr_bucket`,
@@ -595,7 +854,7 @@ Only features whose status has moved off `planned` are listed. Everything else i
 | F-801 | Ingestion API contract | ✅ done | versioned; the HUD agent attaches here |
 | F-B01 | Structured logs (+ `core.v_format_drift`) | ✅ done | F-B02 ingest-lag metric is **not** built (was wrongly listed here) |
 | F-202 | Incremental MVs | ⏳ next | rollups are batch (dbt) today |
-| F-309 | All-in EV adjustment | ⏳ partial | plumbing done, equity calculator missing |
+| F-309 | All-in EV adjustment | ✅ done | exact enumeration at parse time; per-side-pot; hero EV +0.28 vs −1.37 actual |
 | F-402/404/405 | Board texture, SPR, holding filters | ✅ done | delivered by the wide-flag expansion |
 | F-403 | Action-sequence filter | ⏳ partial | actions are counters; arbitrary lines need the DSL |
 | F-601 | Population analysis | ⏳ partial | pool aggregates extracted (`reports/pool_leaks.md`); cohort API not built |
@@ -740,8 +999,12 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-11 (33, merge) | **Committed the second parallel round and closed phase F.** Six commits on `feat/range-lab`: `d2abcac` the E.5 enrichment fix, `202a38b` E.2, `72ecf4d` D.5, `0048fc0` D.7, on top of the first round's four. **The fix came first deliberately** — `c316fd0` shipped a bug that moved 2,264,407 rows three hours earlier and duplicated every month-crosser, by round-tripping a `DateTime64(3,'UTC')` through Python; the committed tip must never be the version that corrupts data. Verified the E.5 session's claims by query rather than by report: `core.hand_players FINAL` exactly 54,562,770, decisions and player-hands unchanged, hero fingerprint bit-identical. Ran the gates nobody had run over the **combined** tree — `make check` 1,552, `make web-check` 691/70, and `make seed && make test-all` **1,612 passed, 6 skipped** — which closed **F.11** and **E.2**, whose integration tests had never met a database. Confirmed both files by `--collect-only` rather than inferring them from the total, because the total was unchanged from the E.5 session's own run and that alone proves nothing. The per-lane `scratchpad/lane-*.files` manifests made the commit split mechanical; keep that rule. | **D.4** and **D.6** in parallel (both unblocked by D.5), **E.1** as the sole stack owner, **E.3** as a no-stack lane. Then the solo-only steps: **F.12**, **D.9**, **B.5b**. |
+| 2026-09-11 (32, web only) | **Plan D.5 done — the reports workbench, and one file that decides whether a number is worth reading** (ADR-042). Rows are a group-by, columns are stats picked by category, and **every cell carries its own `n`** — the row's hand count cannot stand in for it, because a row of 2,219 flops carries cells of n = 3. The rule the step exists for is spec §17's *never fabricate a pool number*, and the numbers that forced its shape are the founder's own: **VPIP in 5-bet pots from the BB is 6.67% against the field's 35.18% — a −28.5 point "leak" from fifteen hands**; `raise_cbet_flop` is `0.0%` on **n = 3**; and `compare_to` reports hero's 3,245 hands against the pool's 9,036,302 as a delta of **−9,033,057**. `ReportRequest` has no `min_n` and the engine suppresses nothing, so the judgement is the client's and is made once, in `app/reports/cell.ts`: under the threshold a cell is dimmed and **its delta withheld**, no observations reads as a dash even where the pool has a baseline, a `count` is never compared, and **the threshold travels in the link** because it decides what is greyed. Delivered `app/reports/{api,library,cell,columns,describe,url,model}.ts` (a test beside each), `useReportUrl.ts` (one composable owns all nine query keys — two `router.replace` writers in a tick drop each other's), `stores/reports.ts`, `components/reports/` (the five named, plus `GroupByPicker` and a `ReportWorkbench` shell D.4/D.6 may ignore), `pages/reports/[[id]].vue`, and **`filter/node.ts`** — the inverse of D.3's compiler, without which a preset's numbers would sit above a filter bar describing something else; D.7 already depends on it. `stats/api.ts` extended **additively**, because it lacked `compare_to`/`cohort`/`custom`/`player_key` and a preset would have quietly lost its baseline. Also closes **the group-by half of D.3's grain trap**. Verified in Chrome on the real pool, read-only (own profile, app :3002, an API of its own on :8002; :3000/:8000 untouched; auth and saved rows in `poker_test`, both test reports deleted after): `preflop_overview` ran with **48 of 48 cells carrying n**, `Fold to 3-bet 50.0% n 2` shown but uncompared; a thin report gave *"22 of 26 cells are under 100 observations"* with **0 thin cells carrying a delta**; **a save moved the address to `/reports/<uuid>` and a full reload reproduced the report and re-ran to identical figures *from cache* — the cache key hashes the canonical request, so the reopened document is byte-identical**; grouping by `Facing` dropped "Hands, VPIP" by name instead of earning a 400; the pool answered over **54.4M hands** with the baseline inert; `DefinitionPanel` printed fold-to-c-bet's definition from the registry's own AST. **0 console errors.** Four browser-found defects fixed: a save remounted the page and lost the grid (`NuxtPage` keys by path); `toLocaleString()` disagreed with the tests about `3,245`; the duplicate-name guard was suppressed in exactly the case the server 409s; the preset's `hands` column printed twice. `make web-check`: typecheck clean, lint 0 errors, **691 tests**, licences unchanged. Uncommitted; files in `scratchpad/lane-d5.files`. | **D.4** — it composes D.7's `LeakTable` and this step's `StatGrid`; audit it against phase F first, as D.3, D.7 and D.5 all needed. **D.6** likewise. When E.2 lands, add its `confidence` to `Carried` in `app/reports/model.ts` so a re-saved KPI report keeps it. |
+| 2026-09-11 (31, web only) | **Plan D.7 audited, amended and done — a leak now opens its own hands** (ADR-041). The audit came first and carried the session: **two of D.7's three clauses had already shipped** — the replayer is F.7's (the plan's own F.7 entry says *"absorbs plan D.7"*, while D.7 sat `[ ]` and appeared in neither ordering statement) and the filter-bound list is D.3's. The missing piece was the acceptance itself: **nothing had ever called `/v1/hero/leaks`**, and a `Leak` carries only a stat code. The translation needed no poker in the client — a stat's registry entry *is* a filter tree, `/v1/definitions` was already sending it and the client was throwing it away, and D.5's new `nodeToClauses` inverts D.3's compiler — so `app/hero/leaks.ts` is composition and the first real caller of both. Two links per leak (the spot, and the spot where you did it); four leaks refused **structurally** via `tablesFor`, not by a list of codes. **Three defects fixed inside the step's own wording:** the list dropped the date bounds whenever no clause was set, a hand-grain clause earned a raw 400, and the acting ring sat on a seat through the blinds and the settling (`toAct` added beside `actor`, which a parser-agreement test pins). Verified in Chrome on its own headless profile, app on :3003 behind a CORS proxy on :8003, the other sessions' :3000/:8000 untouched: five leaks linked with the registry's own situations (`check_raise_flop` picked up `street_line:eq:x`, written nowhere in this session), four refused with their reason, **the click landed on `/hands` with the exact AST on the wire and no 400**, the guard fired no request, both date branches carried their bounds, the ring correct at every step of a pasted hand, **0 console errors**. The leak *numbers* alone were stubbed at the fetch boundary — tenancy scopes every read by `user_id`, so a new account owns no hands; everything downstream is the real registry and API. **`tags/notes` split out as new step D.7b, unbuilt**: it needs `hand_notes`/`hand_tags` in Postgres, an Alembic migration this web-only lane forbade. `make web-check` lint clean, **691 tests** (19 new), typecheck clean, licences unchanged. Uncommitted. | **D.7b** (needs the database) · then **D.4**, which composes `LeakTable.vue` into `pages/index.vue`. A throwaway account `d7-verify@example.com` needs deleting from the real Postgres by hand. |
+| 2026-09-11 (30, `stats/` + `poker-ui`, no data) | **Plan E.2 built and gate-green — confidence intervals, and deliberately left `[ ]`** (ADR-040). Sequenced ahead of D.4 on purpose: D.4's KPI tiles are the first consumer, so the service and the component exist before them. **The step was amended before it was built:** it says "ratio stats Wilson interval", but this registry's `ratio` is one thing — the aggression factor `(bets + raises) / calls`, two *disjoint* row sets, unbounded above, where Wilson is undefined. The format that gets Wilson is **`percent`** (all 56, the four `afq_*` included, whose row sets still nest); `ratio` and `count` get none, by name. Built `stats/interval.py` (typed `Interval`; Wilson for a proportion; `100 · z · sd / sqrt(n)` for a per-100 mean; `for_cell` as the one place the mapping is written), `ResolvedStat.dispersion`, `plan(..., dispersion=)`, `stat_columns` emitting `stddevSamp(x) AS <code>__sd`, `ReportRequest.confidence`, `Cell.interval`, and `poker-ui`'s **`MetricValue`** — `± band` when the two halves are equal at the precision on screen, the bounds themselves when Wilson leans. **`api/` did not change at all**: the route declares `ReportRequest` in and `ReportResult` out, so a field on each model is the whole wire change. Intervals are **opt-in** because `stats_daily` stores no sum of squares — a per-100 band costs the rollup, a proportion does not. **One defect found by verification and fixed:** the per-100 band used the normal quantile at every `n` and is **6.5× too narrow at n = 2** against Student's *t*, so `MIN_N_MEAN` is now 30 and below it there is no interval — six-times-too-confident is the failure the step exists to prevent. Verified with no database: Wilson matched an independently written implementation over **444** (p, n, level) cases and the published 50/100, 0/10, 0/3; the `z` table is asserted against `math.erf`; injection through a custom `per100` stat was tried four ways and refused twice over. `make check` green, **1,552 unit tests** (28 new), 7 contracts; `make web-check` typecheck clean, **113 `poker-ui` tests** (10 new), licence audit unchanged — no new dependency. | **E.2 uncommitted.** Run `make test-all` for `tests/integration/test_intervals.py`; tick E.2 only when **D.4** renders the tiles. D.4 owes one line: `interval` on the `Cell` mirror in `app/stats/api.ts`, left to it because D.5's lane was rewriting that file in parallel |
 | 2026-09-11 (29, merge) | **Committed the four parallel sessions** (25 docs/E.4, 26 D.3, 27 F.11, 28 E.5) as four coherent commits on `feat/range-lab`: `c316fd0` E.5 code half · `4f247a6` F.11 · `47702d7` D.3 · this docs commit. The four ran in **one working tree, not four worktrees**, so there was nothing to merge — and the append-only rule held: `poker-ui/src/index.ts` and `poker-core/src/index.ts` took additions from two different sessions with zero conflict. Gates re-run over the combined tree: **`make check` green**, **`make web-check` 556 tests over 60 files**, licence audit unchanged — which retires session 27's note that `make check` was red, that was session 28's uncommitted work seen mid-flight. Two pieces of debris removed before committing: `poker-core/_eqcheck.ts` (a scratch equity harness) and two stale `eslint-disable` directives in `fixtures/gen_made_hands.ts`. One staging mistake caught and fixed: the deletion of `hands/search.ts` was already in the index before the first commit and was swept into E.5's, making that commit delete a web module unrelated to equity; the three commits were redone from a `--soft` reset so the deletion sits in D.3 where it belongs. | **Finish E.5's data half** — the pool equity backfill was still running at commit time; when it finishes, `scripts/backfill --skip-tests --rebuild-from 2024-01-01` (**not optional**, the gate is data-driven) and check the hero fingerprint. Then `make seed && make test-all` to tick **F.11**. Then **D.5**. |
-| 2026-09-11 (28, data + `core/`) | **Plan E.5 — equity at parse time. Code complete, `make check` green (1,524 unit tests); the step stays `[ ]` until the corpus backfill and the mart rebuild are verified** (ADR-039). **The licence gate passed without adding anything:** `phevaluator` (Apache-2.0) is the Python binding of the *same* `HenryRLee/PokerHandEvaluator` the Range Lab already runs through WebAssembly (ADR-027), and it has been declared in `pyproject.toml` since the first platform commit, never imported. Nothing was taken from it; the **classifier** is a genuine port of `classify.ts` into `core/classify.py`, pinned to `tests/fixtures/made_hands.json` — 1,024 cases, all 17 classes, generated from the TypeScript reference and asserted by **both** suites (the ADR-028/031 pattern). Equity is **exact, never sampled**: 1,712,304 runouts per heads-up preflop all-in at 1.25 s, affordable because `canonical_key` folds suit relabelings and player order together — the corpus's 60,709 heads-up preflop all-ins reduce to **6,131** distinct match-ups, solved once each in a process pool and kept in a gitignored `.equity-cache.pkl`. Validated against an **independent** oracle: the 18 combo-vs-combo spots of F.2's treys fixture match to **1e-9**, AA vs KK = 0.8125548968 exactly. **Two decisions the real data forced.** EV **redistributes the pot that was actually awarded, per side-pot layer**, instead of taking ADR-018's escape hatch of heads-up-only — giving `sum(ev_won) == sum(net_won)` per hand exactly, so rake and drops need no special case. And **no adjustment where the runout never happened**: GGPoker settles an all-in on request without dealing the rest of the board, and **27,088 hands — 20% of the pool's all-ins and 18 of hero's — stop with exactly the cards betting stopped on**; an earlier revision had written equities on them, which is how the write-by-comparison backfill proved its worth by *clearing* 36 hero seats. New: `core/{cards,classify,equity,allin}.py`, `enrich()` in `ingestion/pipeline.py` (so worker and importer agree by construction), `ch/migrations/0010_made_hand.sql`, `scripts/{backfill_equity,equity_store}.py`, two dbt assertions — `assert_made_hand_is_set_exactly_where_the_cards_are` (unsampled, hold'em-scoped) and `assert_ev_won_bb_redistributes_the_pot` (one hand in 64 on **`cityHash64(hand_uid)`**, never the calendar). Hero backfilled in 46 s; **`ad730688` is the hand the feature exists for — hero held A♠A♥ all-in preflop at 81.55% and lost 101.5 bb, EV +60.78, a 162 bb swing.** | **Finish the pool backfill, then `ALTER`-free rebuild:** `uv run python -m scripts.backfill --skip-tests --rebuild-from 2023-08-29` (the `marts.decisions.made_hand` ALTER is already applied), then verify the hero fingerprint, `make dbt-test`, `make test-all`, and tick E.5 |
+| 2026-09-11 (28, data + `core/`) | **Plan E.5 done and verified on the real corpus — equity at parse time** (ADR-039). `ev_won_bb` is real and `made_hand` is filled. **The load-bearing check passed: the hero fingerprint is bit-identical** — 19,802 hands, VPIP .229573, PFR .188466, WTSD .033835, **−1.37 bb/100** — while **EV bb/100 moved −1.37 → +0.28**. That is the first time the EV line and the actual line have differed, and it answers the question F-502 exists for: the founder has been running **1.65 bb/100 below EV** over 19,802 hands. Hand `ad730688` is the emblem — A♠A♥ all-in preflop at **81.55%**, lost 101.5 bb, EV +60.78. Row counts unchanged (73,679,949 / 54,562,770); `made_hand` on **7,153,872 of 7,153,872** eligible decisions; **609,837** EV-adjusted decisions. **The licence gate passed without adding anything:** `phevaluator` (Apache-2.0) is the Python binding of the *same* `HenryRLee/PokerHandEvaluator` the Range Lab runs through WebAssembly (ADR-027), declared in `pyproject.toml` since the first platform commit and never imported. The **classifier** is a genuine port of `classify.ts`, pinned to `tests/fixtures/made_hands.json` — 1,024 cases, all 17 classes, generated from the TypeScript reference and asserted by **both** suites. Equity is **exact, never sampled**: 1,712,304 runouts per heads-up preflop all-in at 1.25 s, affordable because `canonical_key` folds suit relabelings and player order together (60,709 → **6,131** distinct match-ups; 69,364 spots cached to a gitignored `.equity-cache.pkl`), and validated to **1e-9** against F.2's independent **treys** fixture. **Two decisions the data forced:** EV redistributes the *actually awarded* pot per side-pot layer instead of taking ADR-018's heads-up-only escape hatch, so `sum(ev_won) == sum(net_won)` per hand exactly; and **no adjustment where the runout never happened** — GGPoker settles an all-in on request without dealing the board, and **27,088 hands (20% of the pool's all-ins, 18 of hero's)** stop with exactly the cards betting stopped on. **Two bugs of my own, caught only by the new dbt assertion, both fixed and written up in plan §5c:** selecting all 33 columns into Python and inserting them back round-tripped `played_at_utc` through an aware `datetime`, moving **2,264,407 rows three hours earlier** on this UTC+3 laptop and duplicating every row that crossed a month boundary (the writer now merges server-side and no timestamp enters Python); and `--resume` skipped **partially** written days, losing 1,154 seats (it now asks what is *missing*, not what is present). Repaired server-side from `core.hands` with no recomputation — `core.hand_players FINAL` is back to exactly **54,562,770** seats. Also: the §5b dead-letter backup was accepted, **exported and checksum-verified restorable**, then dropped. Gates: `make check` **1,552**, `make test-all` **1,612 passed / 6 skipped**, **26 of 26 dbt data tests green**, `poker-core` 195. Uncommitted. | **Commit E.5**; the F/D track continues where sessions 26–28 left it |
 | 2026-09-11 (27, web + `/v1/heuristics`) | **Plan F.11 built and browser-verified — the six training modes, and deliberately left unticked** (ADR-038). Spec §17 decided the shape: the trainers must work with **no backend**, so a spot is built from a seed rather than stored, its answer comes from `@poker/core`, and `/train` and `/progress` are public and correct with the API stopped. `@poker/core` gains `training/schedule.ts` (Leitner `[0,1,3,7,16,35]` days, clock injected — a month of review behaviour as a unit test — plus the 14-day heuristic rule). App: `app/train/` (the six modes as data, eight reference charts each labelled *no solver was asked*, seeded generators, the **browser-owned** Dexie scoring store, the run, the `/progress` aggregation), `app/heuristics/` (local-first, `/v1/heuristics` as its sync endpoint), `components/train/`, pages `/train`, `/train/[mode]`, `/progress`. Backend: `heuristics` (Alembic `e6f7a8b9c0d1`) + schemas, store and router, with `GET /candidates` as the bridge ADR-034 promised to `analyses.heuristic`. Verified in a headless Chrome of its own with every `/v1/` call refused: six modes answered, **six pot-odds spots re-derived from the §8 formulas in the harness and matching to a tenth of a point**, the drawing mode reporting *"298 combos of total error against 51 allowed"*, a heuristic written offline and dated *"next asked 2026-09-25"*, `/progress` charting 5 of 14 across 9 buckets, **3 API calls refused, 0 console errors**. One browser-found defect fixed with two regression tests: the reveal guard was never cleared between servings, so a spot that came back for review was answered but never scored. `make web-check` lint clean, 556 tests, 83 of them this step's; the heuristics slice ruff/mypy clean, 12 unit tests, 7 contracts kept. | **Run `make test-all` to close F.11** — its `/v1/heuristics` integration test has never run (the stack was another session's all session) — then commit, then F.12 |
 | 2026-09-11 (26, web only) | **Plan D.3 done — one filter, shared by every screen, carried in the URL** (ADR-037). Amended the step first: it predates phase F and asked for seven primitives F had already built in `poker-ui`, so only the two genuinely missing ones (`PositionPicker`, `ActionLine`) were added, and there. Built `app/stats/` (the registry held once per session, families, the app's first typed `FilterNode`), `app/filter/` (clauses as text, the URL codec, the wording, the model), the two stores, `useFilterUrl`, `FilterBar` + `SituationBuilder`, and `/dev/filter`. Moved `/hands` onto it and **deleted `hands/search.ts`** — four hard-coded vocabularies that had already drifted from the registry. Verified in Chrome on the real pool, read-only, with a Chrome and an API of its own (:3001/:8001, throwaway DB since dropped): 80/80 dimensions reachable, the URL reproduces the filter exactly, the report runs (767 hands), no console errors. Three defects found and fixed; the coverage test caught `made_hand` arriving from the parallel F.11 session. `make web-check` lint clean, 551 tests (90 new). | **D.3 uncommitted**; F.11 in another session; D.4–D.6 now unblocked |
 | 2026-09-11 (25, docs) | **Plan E.4 done — the scale design, out of order and documentation-only.** Wrote [POKER_SCALE.md](POKER_SCALE.md) (one node → a sharded cluster) and **ADR-036**; touched no code, no data, no containers. It corrects [ADR-025](POKER_DECISIONS.md#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant) in two places rather than restating it. **(1) `cityHash64(user_id)` cannot put the population on its own shard as the code stands** — a `--dataset population` import stamps the *importing account's* `tenant_id` on every row, so the founder's 19,802 hero hands and 9,073,994 pool hands hash to the same shard; the pool needs a **reserved tenant id**, and moving it is a replay from object storage, not an `ALTER`, because `user_id` leads the sort key. **(2) Sharding does not fix the query that motivated it** — the pool is one tenant and one dataset, so no hash divides the 1.6 s arbitrary-situation scan; the measured lever is threads (0.53 s → 0.16 s from 2 to 8 on 6.48M rows, +0.98 GiB), so the population becomes **one bigger node** and hero shards stay 4 GB / 2 vCPU. Cost table built only from figures the repo already measured (8.10 decisions/hand, 6.00 player-rows/hand, ~1.29 KB/hand, 91 s rebuild per 1M hands): **12.9 / 64.6 / 323 GB** and **2 / 9 / 44 shards** at 10M / 50M / 250M hands — the shard count from a **labelled extrapolation** of a single latency measurement, with what would have to be measured to replace it stated beside it. Also written down: writes go to the local table (a `Distributed` insert breaks both "one INSERT = one part" and the worker's commit-after-insert), dbt per shard is mandatory because `insert_overwrite` is `REPLACE PARTITION`, `uniqExact` is now a *correctness* constraint not a speed one (the initiator holds every shard's state), and a four-step migration path with rollback and verification at each step. Three doc-drift items recorded, not fixed: `limits.xml:33`'s "~69% of the 8G container" (stale from a 5.5 GB ceiling; the real figure is 58% of 4G), `profiles.yml:22-23` repeating it, and the worst-partition peak recorded as 3.06 GiB in ADR-019 but 3.17 GiB in three config files. Uncommitted. | **F.11** (unchanged — E.4 was off the critical path) |

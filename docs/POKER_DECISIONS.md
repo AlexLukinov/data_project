@@ -1615,3 +1615,242 @@ needs `--rebuild-from`, exactly as `macros/incremental.sql` says for a bare `ALT
 `ev_won_bb` stays NULL wherever the adjustment does not apply, and `hand_arrays.sql`'s existing
 `coalesce(ev_won_bb, net_won_bb)` means those hands read as the actual result, unchanged.
 ADR-035's postflop bucketing can now move from `hand_class` to `made_hand`.
+
+---
+
+## ADR-040 — Wilson for proportions, the standard error of the mean for bb/100, and no interval at all for a ratio
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** E.2
+
+**Context.** Every pool and hero number in this product is a sample, and the founder makes real
+money decisions from them (spec §17). A bb/100 of −1.37 over 19,802 hands and the same figure over
+200 hands are not the same claim, and until now the UI presented them identically. Plan goal 4 of
+[POKER_PLAN.md](POKER_PLAN.md) §1 already asks for "every number with its sample size" and
+[F-312](POKER_FEATURES.md) calls confidence bands a genuine differentiator, because most trackers
+show point estimates with false precision. `Cell` has carried `n` since phase C; E.2 is what turns
+that `n` into a statement about how much the number is worth.
+
+**Decision.** Four parts, three of them forced by what the registry actually contains.
+
+*The estimator is chosen by the stat's `format`, and the mapping lives in one function*
+(`stats/interval.py:for_cell`). A `percent` stat is a Bernoulli proportion and gets a **Wilson
+score interval**; a `per100` stat is the mean of a per-hand amount and gets the **standard error
+of the mean**, `100 · z · sd / sqrt(n)`; `ratio` and `count` get nothing. Nothing else in the
+engine needs to know which is which.
+
+*Wilson, not Wald.* The Wald interval `p ± z·sqrt(p(1−p)/n)` collapses to zero width at p = 0 and
+p = 1, so "folded to a 4-bet 0% of the time, ±0.00, n = 3" is exactly the output it produces in
+exactly the case the founder needs warning about. Wilson never degenerates, never leaves [0, 1],
+and leans away from the ends — which is why `MetricValue` prints the bounds rather than a single
+`±` whenever the two halves differ at the precision on screen. The repo already contained a Wald
+half-width, in `poker-core/src/equity/montecarlo.ts`, where it is correct: Monte-Carlo equity
+never sits at p = 0 or p = 1 with a handful of samples.
+
+*The plan step is amended: "ratio stats Wilson interval" means the `percent` format.* E.2 was
+written before the registry was read closely. In this registry `ratio` is one thing — the
+aggression factor, `(bets + raises) / calls` — and it is **not a proportion**: the numerator and
+denominator count *disjoint* row sets, the value is unbounded above and undefined at zero calls.
+Wilson is not defined for it. All four `af_*` stats therefore get no interval, and all 56 `percent`
+stats do, including the four `afq_*` that are built from `numerator`/`denominator` rather than
+`situation`/`action` but whose row sets still nest. A correct AF interval exists — Wilson on
+`aggressive / (aggressive + calls)` mapped back by `af = p/(1−p)` — but that transform is not in
+the codebase and inventing it here would be a second, unrequested feature.
+
+*Asking for a per-100 interval costs the rollup, and that is why intervals are opt-in.*
+`marts.stats_daily` stores a daily sum and a daily count per stat and **no sum of squares**, so
+the per-hand spread a mean's standard error needs cannot be recovered from it at any price. The
+request therefore carries `confidence: 90 | 95 | 99 | null`, defaulting to `null`; when it is set,
+`stats.router.plan` refuses the rollup for any stat with a `dispersion` column and
+`stats.query.stat_columns` emits `stddevSamp(x) AS <code>__sd` beside the value and the `n`.
+Proportions are unaffected — Wilson needs only the value and `n`, both of which the rollup already
+sums exactly — so a KPI row of VPIP, PFR and 3-bet keeps the fast path and only the winrate tile
+pays. A 40-column grid being scrolled asks for no interval and is unchanged, byte for byte.
+
+**Consequences.**
+
+- `api/` did not change at all. `POST /v1/reports/run` declares `ReportRequest` in and
+  `ReportResult` out, so a field on each model is the whole wire change — ADR-023's layering
+  earning its keep. The v1 adapters, `analysis/hero` and `analysis/pool` are untouched.
+- Adding a field to `ReportRequest` changes `canonical()` and therefore every report cache key.
+  The cache is Redis and self-healing; saved reports store the document, and a stored document
+  without the key still validates because the field is defaulted.
+- **The interval is a floor on the uncertainty, not a ceiling, and the module docstring says so.**
+  Both estimators assume independent draws. Several decisions come from one hand, many hands from
+  one session, one session against a correlated pool — so the true interval is *wider* than the
+  one printed, by an amount the aggregates cannot reveal. This is still a large improvement on a
+  bare point estimate; it is not a licence to read the last decimal.
+- `z` is tabulated for three levels rather than computed. The inverse normal CDF needs a numerical
+  routine, the app venv has no scipy or numpy on purpose, and three levels is the whole product
+  need. The tabulated values are asserted against `math.erf` in the unit tests, so a typo fails.
+- **A per-100 stat under 30 hands gets no interval at all**, and this was a defect found by
+  checking the implementation against Student's *t* rather than by reasoning about it. `z` is the
+  normal quantile; at 95% the correct quantile at n = 2 is *t* = 12.706 against z = 1.960, so the
+  band the first implementation printed was **6.5× too narrow** (1.15× at n = 10, 1.04× at n = 30).
+  An interval six times too confident is not a conservative estimate — it is a wrong number
+  wearing the uniform of a careful one, which is precisely what E.2 exists to stop. `MIN_N_MEAN`
+  is therefore 30, where the normal approximation is worth having, and below it the engine does
+  what it does everywhere else: says nothing rather than something fabricated (spec §17). Student's
+  *t* itself was still not adopted — its quantile needs the same numerical routine the *z* table
+  avoids, and a bb/100 over fewer than 30 hands is not a number anyone should act on regardless.
+  A proportion has no equivalent floor: Wilson's good small-sample coverage is exactly its virtue,
+  and `0% of 3 opportunities → 0–56%` is the most valuable thing this feature prints.
+- `ROUNDING` moved from `stats/query.py` to `stats/definitions.py`: a bound must be rounded
+  exactly as the value it brackets, and both modules now read one table.
+- The interval carries its own `n`, duplicating the cell's. Deliberate: a client holding only the
+  interval still knows what it rests on, which is the §17 promise in one object.
+- The **baseline** cell has no interval of its own. `ReportRequest.baseline()` drops `confidence`,
+  because only the baseline's `value` and `n` are attached to a cell and carrying the level would
+  drag a whole-pool per-100 query off the rollup to compute bounds nobody reads. A screen that
+  wants the pool's interval asks for the pool's own report.
+
+---
+
+## ADR-041 — A leak drills through by its own registry situation; hand notes wait for their table
+
+**Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** D.7 (and D.7b)
+
+**Context.** D.7's Done means is one sentence — "clicking a leak opens the matching hands" — and
+when the step was reached nothing in it could be performed. There was no leaks surface in the app
+at all: `pages/index.vue` was still D.1's health page and no code called `/v1/hero/leaks`. Worse,
+a `Leak` (`analysis/hero/leaks.py`) is deliberately thin — a stat code, the hero's value, the
+baseline's, a delta and `|delta| * sqrt(n)` as a score. It carries **no situation**, so there is
+nothing on the row to hand to a hand list.
+
+The obvious move was to write the mapping by hand: `fold_to_cbet_flop` means street = flop, facing
+a bet, the bet was a c-bet. That is precisely the drift ADR-037 had just finished deleting, where
+`hands/search.ts` kept four copies of registry enums and one had already gone stale. Thirty-nine
+stats' worth of hand-written situations would have been the same mistake at ten times the size,
+and wrong the first time a definition was tuned in `stats/registry/stats/*.yaml`.
+
+**Decision.**
+
+- **A leak's situation is the registry's, read at runtime.** Every built-in stat already carries
+  its own filter tree — `situation` + `action`, the `countIf(situation AND action) / countIf(situation)`
+  pair of `stats/definitions.py` — and `GET /v1/definitions` serializes the whole `Stat` model, so
+  the trees are already on the wire and were being thrown away by the client. The drill-through is
+  therefore composition of things that exist: `stat.situation` → `nodeToClauses` (D.5's inverse of
+  D.3's compiler) → `encodeClauses` → `/hands?ds=hero&f=…`, read back by the `useFilterUrl()` the
+  list already calls. **No second URL grammar, no new endpoint, no vocabulary in the client.** When
+  a definition changes, the link changes with it, because both sides are the same YAML.
+- **A leak offers two links, because a leak is two questions.** The row's own link is the
+  situation **and** the action — the hands where you did the leaky thing, which is what you want to
+  watch — and a second, quieter link is the situation alone, the whole spot, whose size the row can
+  state exactly because `Leak.n` *is* that denominator. Neither count is derived: the numerator is
+  never computed as `n × value` and printed, it is whatever the list comes back with.
+- **A leak that cannot be searched says so, and is recognised structurally.** `hand_search_sql`
+  compiles every filter against `marts.decisions` alone, and 13 of the 80 dimensions are not on
+  that table, so four of the thirty-nine ranked stats cannot become a hand search: `vpip` and `pfr`
+  (`situation: {all: []}` with an action on `did_vpip`/`did_pfr`) and `wwsf`/`wtsd` (`saw_flop`) are
+  all `player_hands`-only. They are detected by asking D.3's own `tablesFor()` whether `decisions`
+  survives the clause list — **never by a hard-coded list of four codes**, which would rot the day a
+  dimension is added to a second table. The row then explains itself instead of earning a 400, and
+  an empty clause list is refused for the same reason: a link with no `f` would silently inherit
+  whatever situation the store already held, which is a wrong answer shown confidently.
+- **The leaks list lands in D.7, not D.4.** D.7 is the step judged on clicking a leak, so it owns
+  the thing being clicked; D.4 keeps My game's KPI tiles, `WinningsChart` and sessions and composes
+  `LeakTable.vue` into `pages/index.vue`.
+- **Hand notes and tags wait for their table (D.7b).** They exist nowhere in the stack, and the
+  repo's own dividing line puts them in Postgres in as many words — "*if a human edits it, it lives
+  here … A note someone typed is Postgres*" (`api/models_pg.py`) — with the tables already specified
+  in `POKER_DATA_MODEL.md` (`hand_notes`, `hand_tags`, `player_notes`). That is an Alembic
+  migration, and the session that reached D.7 was web-only by instruction while a parallel session
+  owned the database. So the clause is split into its own step with its schema written down, rather
+  than shipped as half a feature.
+
+**Alternatives.** *Store hand notes as step-less rows in `analyses`* — no migration at all, since
+that table already carries `hand_uid`, a `tags` JSONB list and free text, with CRUD at
+`/v1/analyses`. Rejected: notes would appear in `/analyze`'s list beside real nine-step analyses,
+`current_step`, `steps` and `node_key` would be dead columns on every note row, and the schema
+would stop saying what a row is. *A browser-owned Dexie note store*, following ADR-038's precedent
+for the training scoring store — rejected because that precedent rests on spec §17 requiring the
+trainers to work with no backend, which notes do not, and because ADR-038's store holds *derived*
+practice history while a note is the only thing on the screen a person typed and cannot recover.
+*Hand-written situations per leak* — the ADR-037 drift, above. *Teaching `/v1/hero/leaks` to take a
+filter* so a leak could be scoped before it is clicked — a backend change outside the lane, and not
+needed: the leak is scoped by dates and cohort, and the situation is the stat's own.
+
+**Consequences.** The leak→hands path has no logic of its own to keep in step with the backend:
+add a stat to the leak preset and it becomes clickable with no client change, and add a dimension
+to `decisions` and one of the four dead leaks comes alive by itself. `app/hero/leaks.ts` depends on
+`app/filter/node.ts` and `app/filter/clause.ts` — a lane boundary D.7 consumed and did not edit,
+which is also the first real caller `nodeToClauses` has. Two silent-wrong-answer defects the same
+audit turned up are fixed with it, both inside D.7's own wording: the hand list dropped the date
+bounds whenever no clause was set (the two date boxes FilterBar renders did nothing), and
+`HandState.actor` — documented as "the seat about to act" — named the next action's seat whatever
+it was, so the acting ring sat on a player during `post_sb`, `uncalled_return`, `muck` and `show`;
+it is now gated on the `DECISIONS` set that already sat beside it in `poker-core/src/hand/types.ts`.
+The cost of the split is that D.7 ships a hands area with no annotation of any kind, and the
+founder cannot mark a hand for review until D.7b runs.
+
+---
+
+## ADR-042 — Every cell carries its own `n`; a thin one is dimmed and left uncompared; the threshold travels in the link
+
+**Status:** accepted · 2026-09-11 · plan step D.5
+
+**Context.** Spec §17 says *never fabricate a pool number*: below the sample threshold, show
+"insufficient data". Phase F obeys that one figure at a time — `analysis/pool/node_query.py`
+refuses to print a frequency under `MIN_N = 100`, and `PoolDataBadge` says *"insufficient data —
+41 of the 100 needed"*. A stat grid is the case that rule was written for and the hardest place to
+apply it, because every cell is the same eight pixels wide: `0.0%` over three observations sits in
+the same column as `41.0%` over eleven thousand and looks exactly as confident.
+
+The engine makes this worse rather than better, and the numbers are measured, not imagined. On the
+founder's own hands, grouping by position and pot type, VPIP in 5-bet pots from the big blind is
+`6.67%` against the field's `35.18%` — a **−28.5 point leak drawn from fifteen hands**. Grouping
+flop c-bet decisions by the flop's high card gives `raise_cbet_flop = 0.0%` on **n = 3**. And
+`compare_to` compares anything it is given: hero's 3,245 hands against the pool's 9,036,302 comes
+back as a delta of **−9,033,057**, which is arithmetic rather than information. `ReportRequest` has
+no `min_n` field and `stats/` suppresses nothing — a `Cell` with `n: 2` is returned with its value —
+so the judgement is the client's to make, and it is the client's to make *once*.
+
+**Decision.**
+
+1. **Every cell shows its own `n`**, in the cell and never only in a tooltip. The row's hand count
+   is not a substitute: a row of 2,219 flops carries cells of n = 3, because each stat counts only
+   the decisions where its own situation arose.
+2. **Under the threshold, the value is still shown but marked, and its delta is withheld.** Hiding
+   the value would move the guessing elsewhere; drawing the delta would dress noise as a finding.
+3. **No observations, no number** — `value: null` reads as a dash even where the pool has a
+   baseline for that row, which it usually does.
+4. **A `count` is never compared**, whatever its sample.
+5. **The threshold is part of the link** (`min=` in the URL, default 100 — the floor
+   `node_query.py` and `analysis/hero/presets.yaml` already use). It decides which cells are
+   greyed, so it is part of what the link *says*; a link that greys a cell for the sender and not
+   for the receiver defeats the point of greying it. `0` is offered and means "show me everything,
+   I know why".
+6. **Direction is coloured only where the registry commits.** Most stats leave `higher_is_better`
+   null — is a 42% fold-to-c-bet good? it depends on the board and on whom — and colouring those
+   would invent a judgement the platform has not made.
+
+All six live in `app/reports/cell.ts`, which is the only place that decides whether a number is
+worth reading, and is tested against rows taken from the founder's real database. A per-cell
+`PoolDataBadge` was considered and rejected: it is the right control for one headline figure, and
+13 rows by 8 columns of badges would be a hundred paragraphs where the report wants a hundred
+numbers.
+
+**Consequences.** D.4 and D.6 inherit the rule by using `StatGrid`, rather than each re-deciding
+what "enough" means. A screen that wants a different floor passes a different `minN`, and the link
+it produces carries it. E.2's confidence intervals are complementary and deliberately not requested
+here — its own docstring says a 40-column grid being scrolled does not want them — but a saved
+report created by a KPI screen with `confidence` set will lose that field if it is re-saved from
+the workbench, because D.5 carries `player_key`, `custom` and `limit` through untouched but knows
+nothing of `confidence`; adding it to `Carried` is E.2's to do when it lands.
+
+**Also decided here, smaller but load-bearing.**
+
+- **The tree must come back into clauses** (`app/filter/node.ts`). D.3 compiled clauses into a
+  filter tree; a preset and a saved report arrive as a tree, so opening one without the inverse
+  would show a preset's numbers above a filter bar describing something else. Nested `all` nodes
+  are flattened — AND is associative, and D.3's own compiler emits one for every two-bound bucket,
+  so refusing nesting would have made every saved report with a stack or sizing bucket uneditable.
+  An `any` or a `not` cannot be a clause list: the tree is then kept **verbatim**, sent unchanged,
+  and the screen says the builder is not what is being asked.
+- **The group-by is the other half of D.3's grain trap.** `stats/router.py` checks the group-by
+  exactly as it checks the filter, so `group_by: ['facing']` with `stats: ['hands']` is the same
+  400. The picker narrows on the situation *and* the grouping, and names the stats it dropped.
+- **`compare_to` and `cohort` go inert rather than being cleared** when the dataset moves under
+  them, so switching to the pool and back does not silently forget a setting the founder chose.
+- **One composable owns the whole report URL.** Two composables each writing with `router.replace`
+  in the same tick compute their next query from a `route.query` the other has not landed in yet,
+  and the second drops the first's keys.
