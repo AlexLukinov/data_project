@@ -47,3 +47,7 @@ export { cardLabel, num, percent, suitName } from './format';
 export { GLOSSARY, GLOSSARY_KEYS, REQUIRED_TERMS } from './glossary';
 export type { GlossaryEntry, GlossaryKey } from './glossary';
 export { EVEN_RANGE_MARGIN, NUT_EDGE, explainEqr, explainMdf, explainNutAdvantage, explainPotOdds, explainRangeAdvantage } from './explain';
+export { default as PositionPicker } from './components/PositionPicker.vue';
+export { default as ActionLine } from './components/ActionLine.vue';
+export { ACTION_LETTERS, ACTION_WORDS, formatLine, isActionLine, lineWords, parseLine } from './line';
+export type { ActionLetter } from './line';

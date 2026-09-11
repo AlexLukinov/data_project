@@ -5,6 +5,7 @@
  */
 
 import type { Fetcher } from '../auth/api';
+import type { FilterNode } from '../stats/api';
 
 export type Dataset = 'hero' | 'population';
 
@@ -63,8 +64,8 @@ export interface HandDetail {
   actions: HandAction[];
 }
 
-/** A filter tree as `stats/ast.py` defines it — whatever the Reports workbench produced. */
-export type FilterNode = Record<string, unknown>;
+/** The filter tree of `stats/ast.py`, shared with the reports engine (`~/stats/api`). */
+export type { FilterNode };
 
 export interface HandSearchBody {
   dataset?: Dataset;
