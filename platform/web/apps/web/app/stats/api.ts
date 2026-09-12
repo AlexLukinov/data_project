@@ -129,6 +129,9 @@ export interface DefinitionsResponse {
 export const MAX_GROUP_BY = 4;
 export const MAX_STATS = 40;
 
+/** The confidence levels the engine offers, as whole percents (`stats/interval.py` `Level`). */
+export type ConfidenceLevel = 90 | 95 | 99;
+
 /**
  * A report request. Only the fields a screen actually sets are optional here; the server
  * defaults the rest. `dataset: 'population'` must travel with `hero_only: false` — the pair is
@@ -149,10 +152,35 @@ export type ReportRequest = {
   compare_to?: 'population' | null;
   /** Scopes a population report, or scopes the baseline of a hero one (hero vs regs). */
   cohort?: CohortSpec | null;
+  /**
+   * Put a confidence interval on every cell whose format has one (plan E.2).
+   *
+   * Opt-in, and not free: a per-100 band needs the per-hand spread, which `marts.stats_daily`
+   * does not store, so asking for one takes that report off the rollup (`stats/router.py`).
+   * A handful of KPI tiles should ask; a forty-column grid being scrolled should not.
+   */
+  confidence?: ConfidenceLevel | null;
   limit?: number;
 };
 /* A type alias, not an interface: the fetcher takes `Record<string, unknown>` as a body, and
    only an alias carries the implicit index signature that assignment needs. */
+
+/**
+ * A confidence interval around a cell's value, in that cell's own printed units
+ * (`stats/interval.py`). Both bounds or nothing: the server never sends half of one.
+ *
+ * `method` says which estimator produced it, and the two are not interchangeable to read —
+ * `wilson` is asymmetric near 0% and 100% on purpose, so collapsing it to a single `±` throws
+ * away the shape exactly where the sample is thinnest. `MetricValue` handles that distinction.
+ */
+export interface Interval {
+  low: number;
+  high: number;
+  /** The sample the interval rests on. Repeats the cell's own `n`, so neither travels alone. */
+  n: number;
+  level: ConfidenceLevel;
+  method: 'wilson' | 'normal';
+}
 
 export interface Cell {
   value: number | null;
@@ -160,6 +188,14 @@ export interface Cell {
   baseline: number | null;
   baseline_n: number | null;
   delta: number | null;
+  /**
+   * Present only when the request named a `confidence` level **and** the format has an
+   * estimator: `percent` gets Wilson from n = 1, `per100` a normal band from n = 30, and
+   * `ratio`/`count` never get one. A baseline cell never carries an interval either —
+   * `ReportRequest.baseline()` strips `confidence` — so a compared tile has a band on the
+   * hero side alone.
+   */
+  interval?: Interval | null;
 }
 
 export interface ReportRow {

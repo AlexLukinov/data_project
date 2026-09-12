@@ -4,12 +4,13 @@ import { onMounted } from 'vue';
 import { useAuthStore } from '~/stores/auth';
 
 const links = [
-  { to: '/', label: 'Home' },
+  { to: '/', label: 'My game' },
   { to: '/lab', label: 'Range Lab' },
   { to: '/ranges', label: 'Ranges' },
   { to: '/leaks', label: 'Leaks' },
   { to: '/hands', label: 'Hands' },
   { to: '/reports', label: 'Reports' },
+  { to: '/pool', label: 'The pool' },
   { to: '/analyze', label: 'Analyze' },
   { to: '/train', label: 'Train' },
   { to: '/progress', label: 'Progress' },

@@ -90,3 +90,45 @@ describe('MetricValue', () => {
     expect(text(w, 'metric-value')).toBe('1.5');
   });
 });
+
+// Appended by plan D.4, MetricValue's first real consumer: a row of KPI tiles reads at one
+// precision, so the trimming that is right for a lone figure is wrong for a grid of them.
+describe('MetricValue — fixed decimals', () => {
+  it('trims trailing zeros by default, as every existing caller expects', () => {
+    const w = mount(MetricValue, { props: { value: 22.96, digits: 1 } });
+    expect(text(w, 'metric-number')).toBe('23');
+  });
+
+  it('keeps them when asked, so 22.96 does not read as less precise than its own band', () => {
+    const w = mount(MetricValue, { props: { value: 22.96, digits: 1, fixed: true } });
+    expect(text(w, 'metric-number')).toBe('23.0');
+  });
+
+  it('pads the band to the same precision as the value', () => {
+    const w = mount(MetricValue, { props: { value: 23, low: 22.4, high: 23.6, digits: 1, fixed: true } });
+    expect(text(w, 'metric-number')).toBe('23.0');
+    expect(text(w, 'metric-band')).toBe('± 0.6');
+  });
+
+  it('pads asymmetric bounds too', () => {
+    const w = mount(MetricValue, { props: { value: 56.57, low: 52.8, high: 60.3, digits: 1, fixed: true } });
+    expect(text(w, 'metric-bounds')).toBe('52.8 – 60.3');
+  });
+
+  it('groups a hand count, which is the number a reader scans', () => {
+    // The tile printed `19802` while its own support line two rows below said `n = 19,802`.
+    const w = mount(MetricValue, { props: { value: 19802, n: 19802, digits: 0, fixed: true } });
+    expect(text(w, 'metric-number')).toBe('19,802');
+    expect(text(w, 'metric-n')).toBe('n = 19,802');
+  });
+
+  it('uses the minus sign the grid, the tables and the winnings axis use', () => {
+    const w = mount(MetricValue, { props: { value: -1.374, digits: 2, fixed: true, signed: true } });
+    expect(text(w, 'metric-number')).toBe('−1.37');
+  });
+
+  it('still signs a positive, and does not touch a bare zero', () => {
+    expect(text(mount(MetricValue, { props: { value: 0.281, digits: 2, fixed: true, signed: true } }), 'metric-number')).toBe('+0.28');
+    expect(text(mount(MetricValue, { props: { value: 0, digits: 2, fixed: true, signed: true } }), 'metric-number')).toBe('0.00');
+  });
+});

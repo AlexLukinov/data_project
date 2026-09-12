@@ -40,16 +40,48 @@ const props = withDefaults(
     level?: number;
     /** Print a leading `+` on a positive value. A winrate reads better signed. */
     signed?: boolean;
+    /**
+     * Print the number the way every other measured figure on the platform is printed: fixed
+     * decimals, grouped thousands, and a real minus sign.
+     *
+     * `num` does none of the three, which is right for a figure standing alone — `2.4`, not
+     * `2.40` — and wrong for a *row* of figures. A VPIP of 22.96 trimmed to `23` sits beside a
+     * PFR of `18.9` having dropped a significant digit, and claims less precision than the
+     * `± 0.6` printed beside it. A hand count renders `19802` where `reports/cell.ts` writes
+     * `19,802` and this component's own `n = 19,802` two lines below. And `-1.37` uses a
+     * hyphen where the grid, the tables and the winnings axis all use `−`.
+     *
+     * Opt-in, so every existing caller reads exactly as it did before.
+     */
+    fixed?: boolean;
   }>(),
-  { low: null, high: null, n: null, unit: '', digits: 2, level: 95, signed: false },
+  { low: null, high: null, n: null, unit: '', digits: 2, level: 95, signed: false, fixed: false },
 );
 
 /** `—` is the package's "no number" sentinel, from `format.num`. */
 const NO_VALUE = '—';
 
+/**
+ * One number: trimmed by `num`, or printed in the platform's own form. `—` either way for
+ * anything that is not finite, which is `num`'s sentinel and this component's.
+ *
+ * The locale is stated rather than inherited, for the reason `reports/cell.ts` records: an
+ * unqualified `toLocaleString` renders `19 802` in Chrome on this machine and `19,802` under
+ * Node, so the tests would assert a rendering the founder never sees.
+ */
+function figure(value: number, digits: number, fixed: boolean): string {
+  if (!fixed) return num(value, digits);
+  if (!Number.isFinite(value)) return NO_VALUE;
+  const text = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return value < 0 ? `−${text}` : text;
+}
+
 const shown = computed(() => {
   if (props.value === null) return NO_VALUE;
-  const text = num(props.value, props.digits);
+  const text = figure(props.value, props.digits, props.fixed);
   return props.signed && props.value > 0 ? `+${text}` : text;
 });
 
@@ -65,15 +97,15 @@ const halves = computed(() => {
 const band = computed(() => {
   const pair = halves.value;
   if (pair === null) return null;
-  const below = num(pair.below, props.digits);
-  const above = num(pair.above, props.digits);
+  const below = figure(pair.below, props.digits, props.fixed);
+  const above = figure(pair.above, props.digits, props.fixed);
   return below === above ? above : null;
 });
 
 const bounds = computed(() =>
   halves.value === null || band.value !== null
     ? null
-    : `${num(props.low as number, props.digits)} – ${num(props.high as number, props.digits)}`,
+    : `${figure(props.low as number, props.digits, props.fixed)} – ${figure(props.high as number, props.digits, props.fixed)}`,
 );
 
 const count = computed(() => (props.n === null ? '' : props.n.toLocaleString('en-US')));

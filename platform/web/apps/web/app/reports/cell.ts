@@ -26,7 +26,7 @@
  */
 
 import { valueLabel } from '../filter/label';
-import type { Cell, Stat, StatFormat } from '../stats/api';
+import type { Cell, ConfidenceLevel, Stat, StatFormat } from '../stats/api';
 
 /**
  * The sample a cell needs before its delta is worth drawing.
@@ -58,6 +58,19 @@ export interface CellView {
   deltaSense: 'good' | 'bad' | '';
   /** Why this cell is marked, for the title attribute and the screen reader. */
   note: string;
+  /**
+   * The confidence interval's bounds in the value's own units, or `null` where the server sent
+   * none (plan E.2). Both or neither, always — a lone bound is dropped rather than half-drawn,
+   * because `MetricValue` would silently render a tile that merely *looks* like it has no band.
+   *
+   * A **thin** cell keeps its interval deliberately. Thin is exactly the case the interval
+   * exists for: `0.0%` over three observations is a Wilson span of 0–56%, and withholding the
+   * band there would hide the warning while still printing the number. What thinness withholds
+   * is the *delta*, which measures the handful rather than the play.
+   */
+  low: number | null;
+  high: number | null;
+  level: ConfidenceLevel | null;
 }
 
 const DASH = '—';
@@ -127,6 +140,7 @@ export function cellView(cell: Cell | undefined, stat: Stat, minN: number = MIN_
   const empty = cell.value === null || cell.n === 0;
   const thin = !empty && cell.n < minN;
   const compare = comparable(cell, format, thin, empty);
+  const band = bounds(cell, empty);
   return {
     text: formatValue(empty ? null : cell.value, format),
     n: cell.n,
@@ -137,7 +151,23 @@ export function cellView(cell: Cell | undefined, stat: Stat, minN: number = MIN_
     deltaText: compare ? formatDelta(cell.delta!, format) : '',
     deltaSense: compare ? sense(cell.delta!, stat.higher_is_better) : '',
     note: note(empty, thin, cell.n, minN),
+    ...band,
   };
+}
+
+/**
+ * The interval as two finite bounds, or three nulls. A partial or non-finite interval is
+ * discarded here rather than passed on: `MetricValue` drops the whole support line when one
+ * bound is unusable, so a half-sent interval would render as a tile that quietly looks like it
+ * never had one. Deciding it in this one place is the same argument as `thin` — no screen can
+ * forget the rule if no screen owns it.
+ */
+function bounds(cell: Cell, empty: boolean): Pick<CellView, 'low' | 'high' | 'level'> {
+  const none = { low: null, high: null, level: null };
+  const interval = cell.interval;
+  if (empty || interval === null || interval === undefined) return none;
+  if (!Number.isFinite(interval.low) || !Number.isFinite(interval.high)) return none;
+  return { low: interval.low, high: interval.high, level: interval.level };
 }
 
 /** A stat the server did not answer for this row. Distinct from one it answered with no data. */
@@ -152,6 +182,9 @@ function missing(stat: Stat): CellView {
     deltaText: '',
     deltaSense: '',
     note: `${stat.label} was not measured for this row`,
+    low: null,
+    high: null,
+    level: null,
   };
 }
 
