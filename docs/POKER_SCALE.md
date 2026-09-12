@@ -34,6 +34,8 @@ step ([docker-compose.yml:51-63](../platform/docker-compose.yml#L51-L63)).
 | Spill thresholds | 900 MB group-by / sort | [limits.xml:41-42](../platform/infra/clickhouse/limits.xml#L41-L42) | switch to the external algorithm while there is still room |
 | Join | `grace_hash,partial_merge,hash`, right side ≤ 400 MB | [limits.xml:49-50](../platform/infra/clickhouse/limits.xml#L49-L50) | ClickHouse builds the **right** side in memory |
 | CPU limit | **none** | `deploy.resources.limits` has only `memory` | see the caveat below |
+| Per-**tenant** query ceiling | 1.5 GB / 60 s / 400M rows read | [stats/budget.py](../platform/stats/budget.py) | a tenant is refused by its own settings profile before it can threaten the server's 2.5 GB (E.3, [ADR-043](POKER_DECISIONS.md#adr-043)) |
+| Per-tenant hourly quota | 3,600 queries / 10G rows / 1,800 s | [stats/budget.py](../platform/stats/budget.py) | "stops one heavy user degrading everyone" (F-208), enforced by ClickHouse's own quota |
 
 **Two caveats to carry into every figure below.**
 
@@ -49,8 +51,12 @@ step ([docker-compose.yml:51-63](../platform/docker-compose.yml#L51-L63)).
    **5.5 GB of 8 GB** gives, so that comment dates from when the ceiling itself was 5,500,000,000
    in an 8 GB container. Against today's values it is 2.5 GB of a 4 GiB cap = **58%**. The
    **values** are current, the **comments** are not, and a cost table built from those comments
-   would size every node at twice the real figure. *(Doc-drift item, not fixed here — this session
-   is documentation-only.)*
+   would size every node at twice the real figure. *(Doc-drift item, recorded here in E.4 because
+   that session was documentation-only. **`limits.xml:33` was corrected in E.3** — the step that
+   owns `infra/clickhouse/` — which also added the per-tenant budget to the list of things that
+   must stay in step, making it four files rather than three; see
+   [ADR-043](POKER_DECISIONS.md#adr-043). `profiles.yml:22-23` still repeats the stale sentence:
+   it belongs to the dbt project, which E.3 was not allowed to touch.)*
 
 ---
 

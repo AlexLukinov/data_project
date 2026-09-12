@@ -33,11 +33,11 @@ not a change I've made.
 | [021](#adr-021--the-stat-registry-is-data-and-every-consumer-is-generated-from-it) | The stat registry is data, and every consumer is generated from it | ✅ planned (C) |
 | [022](#adr-022--filters-and-custom-stats-are-a-typed-json-ast-not-a-text-dsl) | Filters and custom stats are a typed JSON AST, not a text DSL | ✅ planned (C) |
 | [023](#adr-023--strict-module-layering-enforced-in-ci-with-storage-behind-protocols) | Strict module layering enforced in CI, with storage behind Protocols | ✅ planned (B) |
-| [024](#adr-024--nuxt-4-app-in-spa-mode-with-one-shared-filter-model-and-two-entry-points) | Nuxt 4 app in SPA mode, one shared filter model, two entry points | ✅ planned (D) |
+| [024](#adr-024--nuxt-4-app-in-spa-mode-one-shared-filter-model-two-entry-points) | Nuxt 4 app in SPA mode, one shared filter model, two entry points | ✅ planned (D) |
 | [025](#adr-025--freshness-and-scale-materialized-views-generated-from-the-registry-then-shard-by-tenant) | Freshness and scale: MVs generated from the registry, then shard by tenant | ✅ planned (E) |
 | [026](#adr-026--hero-analysis-and-pool-analysis-are-separate-modules-as-in-hand2note) | Hero analysis and pool analysis are separate modules, as in Hand2Note | 🔒 |
 | [027](#adr-027--range-lab-is-a-typescript-workspace-of-framework-free-packages-behind-one-nuxt-app-with-a-licence-allowlist-in-ci) | Range Lab: framework-free TS packages behind one Nuxt app; licence allowlist in CI | 🔒 |
-| [028](#adr-028--a-node-is-a-predicate-over-decisions-nodekey-is-defined-once-and-buckets-live-in-the-registry) | A node is a predicate over `decisions`; `NodeKey` defined once; buckets live in the registry | ✅ |
+| [028](#adr-028--a-node-is-a-predicate-over-decisions-nodekey-is-defined-once-buckets-live-in-the-registry) | A node is a predicate over `decisions`; `NodeKey` defined once; buckets live in the registry | ✅ |
 | [029](#adr-029--hand-histories-are-parsed-server-side-only) | Hand histories are parsed server-side only | 🔒 |
 | [030](#adr-030--charts-in-poker-ui-are-hand-drawn-svg-not-a-chart-library) | Charts in `poker-ui` are hand-drawn SVG, not a chart library | ✅ |
 | [031](#adr-031--the-range-library-the-server-is-the-record-versions-are-append-only-nodekey-lands-with-it-importers-are-pure-functions) | The range library: server is the record, versions append-only, `NodeKey` lands with it, importers are pure functions | ✅ |
@@ -47,6 +47,15 @@ not a change I've made.
 | [035](#adr-035--tier-3-estimates-a-likelihood-ratio-not-a-frequency-and-reports-its-own-error-eqr-is-split-between-the-pool-and-the-engine) | Tier 3 estimates a likelihood ratio, not a frequency, and reports its own error; EQR is split between the pool and the engine | ✅ |
 | [036](#adr-036--shard-by-cityhash64user_id-with-a-reserved-tenant-for-the-pool-buy-threads-before-shards) | Shard by `cityHash64(user_id)` with a reserved tenant for the pool; buy threads before shards | ✅ planned (E) |
 | [039](#adr-039--all-in-ev-redistributes-the-pot-that-was-actually-awarded-per-side-pot-and-only-where-the-runout-happened) | All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened | ✅ |
+| [037](#adr-037--one-filter-object-flat-and-registry-driven-carried-in-the-url-as-text) | One filter object, flat and registry-driven, carried in the URL as text | ✅ |
+| [038](#adr-038--the-scoring-store-is-browser-owned-a-spot-is-a-seed-and-the-drawing-mode-is-scored-on-the-metric-the-spec-names-not-on-the-gates) | The scoring store is browser-owned; a spot is a seed; and the drawing mode is scored on the metric the spec names, not on the gate's | ✅ |
+| [040](#adr-040--wilson-for-proportions-the-standard-error-of-the-mean-for-bb100-and-no-interval-at-all-for-a-ratio) | Wilson for proportions, the standard error of the mean for bb/100, and no interval at all for a ratio | ✅ |
+| [041](#adr-041--a-leak-drills-through-by-its-own-registry-situation-hand-notes-wait-for-their-table) | A leak drills through by its own registry situation; hand notes wait for their table | ✅ |
+| [042](#adr-042--every-cell-carries-its-own-n-a-thin-one-is-dimmed-and-left-uncompared-the-threshold-travels-in-the-link) | Every cell carries its own `n`; a thin one is dimmed and left uncompared; the threshold travels in the link | ✅ |
+| [043](#adr-043--the-query-budget-is-a-clickhouse-user-per-tenant-not-an-if-in-the-api-requests-are-budgeted-separately-in-redis) | The query budget is a ClickHouse user per tenant, not an `if` in the API; requests are budgeted separately, in Redis | ✅ |
+| [044](#adr-044--the-rollups-materialized-view-is-generated-from-the-registry-and-writes-to-its-own-table-never-to-the-dbt-anchor) | The rollup's materialized view is generated from the registry and writes to its own table, never to the dbt anchor | ✅ |
+| [045](#adr-045--my-game-is-composed-from-four-calls-and-the-winnings-curve-is-borrowed-from-a-route-d9-deletes) | My game is composed from four calls, and the winnings curve is borrowed from a route D.9 deletes | ✅ |
+| [046](#adr-046--the-pool-page-composes-d5s-parts-behind-a-locked-filteraccess-regs-vs-fish-is-two-runs-a-player-is-found-by-substring-not-prefix) | The pool page composes D.5's parts behind a locked `FilterAccess`; "regs vs fish" is two runs; a player is found by substring, not prefix | ✅ |
 
 ---
 
@@ -1854,3 +1863,375 @@ nothing of `confidence`; adding it to `Carried` is E.2's to do when it lands.
 - **One composable owns the whole report URL.** Two composables each writing with `router.replace`
   in the same tick compute their next query from a `route.query` the other has not landed in yet,
   and the second drops the first's keys.
+
+---
+
+## ADR-043 — The query budget is a ClickHouse user per tenant, not an `if` in the API; requests are budgeted separately, in Redis
+
+**Status:** accepted · **Date:** 2026-09-11 · **Plan step:** E.3 · **Features:** F-208, F-706
+**Supersedes nothing.** Extends [ADR-023](#adr-023) (layering) and the sizing recorded in
+[ADR-019](#adr-019) and [ADR-036](#adr-036) / [POKER_SCALE.md](POKER_SCALE.md) §1.
+
+### The decision
+
+A tenant's **query cost** is bounded by ClickHouse itself: each tenant gets a ClickHouse **user**,
+assigned a per-tier **settings profile** whose ceilings are `CONST`, and its own hourly **quota**.
+A tenant's **request count** is bounded in the API, by Redis, per address on the unauthenticated
+auth routes and per tenant on the analytics routes. Two mechanisms, because they are two different
+promises.
+
+### Why the budget cannot live in the API
+
+The plan's "Done means" for E.3 says the over-budget query must be *"rejected by ClickHouse, not
+by the API"*, and that phrasing is the whole decision. An `if` in `api/` is a limit for callers
+that arrive through `api/`. Everything else holding the database credential — the parser worker, a
+`dbt` run, `scripts/backfill.py`, a psql-equivalent at a prompt, the next service, a bug — reaches
+the same tables by another road and never passes the check. A budget with a bypass is not a budget;
+it is a convention. So it is declared to the server, which has no other road.
+
+`CONST` on every ceiling is the second half of that: the connection cannot raise its own limit
+(the attempt is `SETTING_CONSTRAINT_VIOLATION`), so even a compromised API process cannot buy
+itself more of the node. `readonly = 2` beside it means the report connection cannot write at all,
+which is defence in depth next to `GRANT SELECT` on `marts` alone.
+
+### Why a user per tenant, rather than one user and a keyed quota
+
+ClickHouse can key one quota by `client_key` and account per key with a single user, which is
+cheaper and needs no DDL at runtime. It was rejected for one reason: **the limits would then be
+identical for everyone**. F-208 is written *per tier*, F-704 (billing) is what will choose a
+tier, and a tier is only meaningful if it can be assigned to one tenant and not another. A user
+per tenant also makes the budget testable at all — the integration test puts one tenant on a
+narrow budget and shows the other answering the same query at the same moment, which a shared
+quota object cannot express.
+
+The cost is real and accepted: about six idempotent DDL statements per tenant per process, run
+lazily on that tenant's first query and cached, plus one connection per active tenant (bounded,
+oldest closed first).
+
+### The three things that were got wrong first, and what they taught
+
+- **The fallback was too wide.** Provisioning failure falls back to the shared admin connection
+  on purpose — a budget is a fairness mechanism, not the isolation boundary (isolation is the
+  `user_id` filter in `stats/query.py`, untouched by any of this), and refusing every report
+  because the access DDL was rejected trades a small problem for an outage. But the first version
+  caught the *connection* too, so a tenant whose quota was spent would fail to authenticate,
+  fall back to the admin connection, and get an unbudgeted one: reconnect and the hour starts
+  again. Only the DDL falls back now. A refusal at authentication propagates, because that
+  refusal **is** the budget working.
+- **The seam already existed.** `run_report(request, tenant_id, *, run=...)` has taken an
+  injectable runner since phase C, and every analysis module threads it. So the whole change to
+  the read path is `run or tenancy.runner_for(tenant_id)` in four places; no router signature
+  moved, and `api/` gained no query-layer knowledge. ADR-023's layering earning its keep for the
+  second time (E.2 was the first).
+- **The driver refuses a `CONST` setting before the wire.** clickhouse-connect reads
+  `system.settings` at connection and raises `ProgrammingError("Setting … is readonly")` client
+  side rather than letting the server answer 452. That is fine, but it means a test asserting
+  "the ceiling cannot be raised" would otherwise be asserting something about the *driver*. The
+  server-side proof is the rejection of the over-budget query itself, corroborated by the
+  `readonly` column of `system.settings` as the tenant sees it.
+
+### What the numbers are, and where they came from
+
+`stats/budget.py` holds them, derived from figures already measured in this repo rather than
+chosen: 1.5 GB per query (above the 0.98 GiB heaviest measured pool scan, below the 2.5 GB
+server-wide ceiling), 60 s (the measured pool-wide arbitrary situation is 1.6 s), 400M rows read
+(about 5× today's 73.7M-row `decisions`, so an honest full scan passes and a runaway join does
+not), 1M result rows (the engine caps a report at 10,000), 4 concurrent queries (the server allows
+16), and hourly 3,600 queries / 10G rows / 1,800 s. They are a first cut whose job is to be a
+lever, not a prediction. **`infra/clickhouse/limits.xml` is now one of four files that must stay
+in step** — the container cap, the caches, the server-wide ceiling, and these — and its stale
+"~69% of the 8G container" comment, recorded as doc drift by E.4, is corrected in this step.
+
+### Why the request budget is separate, and stays in Redis
+
+Counting requests is not bounding work, and the two have different failure modes. The Redis
+limiter **fails open** and its counters live in a cache running `allkeys-lru`, so they can be
+evicted: acceptable for fairness, and not acceptable for accounting — which is exactly why the
+accounting half is the ClickHouse quota and not a second Redis counter. Within the limiter,
+buckets are split per route family: `/v1/auth/refresh` was unlimited before this step and could
+not simply be given sign-in's bucket, because a browser that refreshes all day would then spend
+the budget whose purpose is to stop credential stuffing, and lock its own user out.
+
+`TENANT_REQUESTS_PER_MINUTE` is a module constant rather than a setting because `core/settings.py`
+was owned by a parallel session in this round; it is read in one place and should be promoted to
+`Settings` when `core/` is next open. Per-tenant *ingest* limits, the other half of F-706's
+sentence, are deferred: uploads have a 200 MB per-file cap and no volume accounting, and a real
+ingest quota wants the storage accounting that F-704 will need anyway.
+
+### Two corrections, found when the integration tests were first run (2026-09-12)
+
+**Connecting to a tenant must not re-tier it.** The first implementation called
+`ensure(tenant_id)` on every connection-cache miss, and `ensure` ends in
+`ALTER USER … SETTINGS PROFILE poker_budget_standard`. So a tenant put on any other tier went back
+to the standard one the moment it next connected, and the tier — the thing `Budget.name` exists
+for — survived only until the next reconnect. All four of `test_quotas.py`'s assertions failed on
+it. The statements that *bind* a tenant to a tier (`ALTER USER … SETTINGS PROFILE`,
+`ALTER QUOTA … MAX`) are now separated from the ones that merely keep it able to connect, and a
+cache miss sends only the latter; a tenant that does not exist yet has no tier to preserve and
+still gets the full list. The invariant is asserted directly in a unit test, because it is not
+visible from reading either function alone.
+
+**A quota does not count a query that reads no table.** ClickHouse charges the `queries` counter
+for a query that goes through a storage; `SELECT 1` is folded to a constant and is free. Measured
+on 25.8: twenty-five `SELECT 1`s left the counter at 1 — the one the driver's own handshake spends
+on `system.settings` — while a single read of a mart moved it. This is useful (a health check
+costs nothing) and it is a trap for anyone writing a test or a monitor that expects to exhaust a
+quota by looping on a trivial query.
+
+---
+
+## ADR-044 — The rollup's materialized view is generated from the registry and writes to its own table, never to the dbt anchor
+
+**Status:** accepted · **Date:** 2026-09-12 · **Plan step:** E.1 · **Features:** F-202
+**Discharges the reservation in [ADR-003](#adr-003).** Implements the first half of
+[ADR-025](#adr-025). Constrained throughout by [ADR-019](#adr-019) (the incremental gate).
+
+### The decision
+
+`marts.stats_daily` gets a second producer — a pair of ClickHouse materialized views — under
+three conditions, each of which turned out to be forced rather than chosen:
+
+1. **One renderer emits both.** `scripts/rollup_sql.py: select_body()` writes the SELECT list;
+   the dbt model wraps it in `ref()` + the dirty-partition gate, the view wraps it in
+   `CREATE MATERIALIZED VIEW ... TO`, and `scripts/mv_sync.py` uses it a third time for the
+   backfill. Drift is not guarded against, it is unwritable.
+2. **The views write to `marts.stats_daily_mv`, not to `marts.stats_daily`.**
+3. **The views are fenced by a boundary row** and everything below it is backfilled.
+
+### Why the view may not write into `marts.stats_daily`, which is the load-bearing finding
+
+`marts.stats_daily` is the incremental chain's anchor. `dirty_partitions()` marks a day dirty
+when `max(core.hands.parsed_at)` for it exceeds the `max(src_parsed_at)` already built for it —
+a **strict** `>`. And `parsed_at` is stamped **once per ingest batch** (`ingestion/loader.py`)
+precisely so the four core tables agree to the millisecond, then flows unchanged into
+`src_parsed_at`. So a view writing its own rows into the anchor makes the two sides of the
+comparison equal at the instant a batch lands:
+
+    src_max = T  ·  built_max = T  ·  T > T is false  →  the day is CLEAN, for ever
+
+This is structural, not a race. The consequence is that `marts.decisions` and
+`marts.player_hands` are **never built for those hands**, while the rollup shows them — and
+`stats/router.py` sends a report to the rollup or to the fact tables depending on the stats it
+asks for, so the same question answered two ways would return two different numbers, silently
+and permanently. It is a worse version of the `player_hand_flags` anchor bug ADR-019 records.
+
+Two further mechanics make a shared table untenable even if the watermark were solved.
+`SummingMergeTree` **does not sum `DateTime64`** — verified live: two rows for one key summed
+their counter 5+7=12 while `src_parsed_at` kept the *first-inserted* value, so a collapsed
+watermark is insertion-order dependent and therefore non-deterministic. And `REPLACE PARTITION`
+**deletes** whatever the view had written into a partition it rebuilds, which rules out storing
+the boundary as a row inside the rollup: it would be destroyed by the very mechanism it exists
+to coordinate with. Hence `_meta.mv_boundaries`.
+
+A separate target has a second virtue that decided the shape of the test: the two producers'
+rows sit side by side and can be compared directly, which is exactly what ADR-003 asks for.
+
+### Why the views are not created by the numbered migration
+
+Two reasons, and they point the same way. `api/provision.py` runs the migrations **before**
+`build_empty_marts()`, so `marts.decisions` does not exist when migrations run and a migration
+naming it fails on every fresh environment. And the migration runner is append-only: it skips a
+version it has already applied, so a **regenerated** file would never reach the database and the
+view would keep the previous registry's logic while the dbt model moved on — the exact drift this
+step exists to prevent. So the split is by what the file *holds*: the two tables hold data and
+live in `ch/migrations/0011_mv_stats_daily.sql`; the views are pure derived DDL and live in
+`ch/views/stats_daily_mv.sql`, re-applied unconditionally by `scripts/mv_sync.py --refresh`.
+Dropping a view never touches a row of its target, so re-applying is free.
+
+### The boundary-marker backfill
+
+A materialized view is forward-only and `POPULATE` drops whatever lands while it runs, so:
+write the boundary `T = now + margin` **into the future**, create the view fenced by
+`src_parsed_at >= T`, wait for `T` to pass, then backfill `< T` with an ordinary
+`INSERT ... SELECT`, one day-partition at a time (ADR-019's memory budget applies unchanged).
+No interleaving leaves a gap or an overlap. `marts.stats_daily_mv` is therefore a **complete**
+rollup — backfill below the boundary, view above it — not an increment, which is what lets the
+reconciliation assert equality with a full dbt rebuild rather than something weaker about a delta.
+
+### What this does NOT deliver, stated plainly
+
+E.1's "Done means" is *"an upload is visible in stats without a dbt run"*, and **it is not met.**
+An MV fires only on a plain `INSERT` into its source table. dbt writes the marts with
+`ALTER TABLE ... REPLACE PARTITION`, a part-level swap that triggers no view — verified live on
+this build: the source went 2 → 5 rows and the view never saw the 3 — and the adapter confirms it
+(`get_create_table_as_sql` into `__dbt_new_data_*`, then `replace partition`). Nothing outside dbt
+inserts into `marts.*`; the ingest path stops at `core.*`. So the views are correct and **inert**
+until something plain-inserts decisions, which is why they are created in the test environment and
+deliberately **not** on the real database.
+
+Attaching them to `core.*` instead was considered and rejected: those tables are
+`ReplacingMergeTree`, so a re-parse — which this repo does, 9.07M hands of it in September — would
+double every counter; the rollup's keys (`site`, `stake_level`, `game_type`, `table_format`) live
+on `core.hands` rather than `core.hand_players`; and 47 of the 57 cached stats are decision-grain
+and need per-hand action context an insert block cannot see.
+
+The remaining work is the hot path — a generated `INSERT INTO marts.decisions` for
+just-ingested hands — filed as **E.1b**. It carries a lost-update race of its own: a hand
+inserted between dbt's temp-table build (t0) and its partition swap (t1) lands in the partition
+about to be dropped, and the watermark then says the day is fresh. That needs a guard, and it is
+why the hot path is a step rather than a footnote here.
+
+### Consequences
+
+`make gen` writes two more files; `make gen-check` fails if either drifts.
+`tests/test_rollup_sql.py` asserts the view and the model select the same columns without a
+database, and `tests/integration/test_mv_reconciliation.py` compares the two tables over 113
+counters and 11 group keys in both directions, with traffic driven through the view in 12
+separate insert blocks so partial aggregation is exercised. Reads are unchanged: nothing unions
+`stats_daily_mv` yet, which is E.1b's to decide.
+
+---
+
+## ADR-045 — My game is composed from four calls, and the winnings curve is borrowed from a route D.9 deletes
+
+**Date:** 2026-09-12 · **Status:** accepted · **Plan step:** D.4 · **Supersedes:** nothing
+
+### Context
+
+Plan §2.7 lists `GET /v1/hero/overview` returning "KPIs (with CI), timeline series (actual / EV /
+showdown / non-showdown / moving average), sessions". `api/routers/hero.py` has never had it: the
+hero router is `leaks`, `sessions` and `presets`, and nothing else. D.4 is the step that needs all
+three of those things, so the gap had to be closed one way or another.
+
+Three facts decided how:
+
+1. **The KPI numbers are a report.** `POST /v1/reports/run` with `group_by: []`,
+   `compare_to: 'population'` and E.2's `confidence: 95` answers all eight tiles in one call, with
+   the field's value and a Wilson or normal band in every cell that can carry one. An overview
+   endpoint would have been a second way to ask the same question, which is the duplication
+   ADR-022 exists to prevent.
+2. **The winnings curve is not a report and cannot become one.** The registry has **no day
+   dimension** among its eighty — dates are WHERE-clause scope in `stats/query.py`, never a
+   group-by — so `/v1/reports/run` cannot produce a time series at any price. The only one in the
+   API is `GET /v1/stats/timeline`, a v1 adapter whose own module docstring says *"Deleted in plan
+   D.9"*. It already returns exactly the four cumulative series this step needs.
+3. **Sessions and leaks already have their routes**, and they take dates and a cohort only.
+
+### Decision
+
+**My game composes four calls rather than waiting for an overview endpoint**, and the page loads
+them independently so each panel owns its own failure — a slow pool baseline cannot keep the
+sessions off the screen.
+
+**The winnings curve is built on the condemned adapter, behind a boundary.** `heroApi.winnings()`
+calls `/v1/stats/timeline` and maps it into this module's own `WinningsPoint` (`net`, `ev`,
+`showdown`, `nonShowdown`). No consumer above it — not the chart, not its geometry module, not its
+tests — knows a v1 field name. **D.9 therefore changes one function body**, and the obligation is
+written into D.9's step rather than left for whoever finds the 404.
+
+The alternative was to add `GET /v1/hero/winnings` in this step. It was rejected on scope, not on
+merit: D.4 ran as one of four parallel sessions in the web workspace, a backend route is another
+lane's ground, and a route added here would have had to be added *again* properly when the day
+dimension question is settled. Registering a `day` dimension is the better long-term answer and is
+a registry decision, not a UI one.
+
+**There is no filter bar on My game, only dates.** Of the four panels, two accept dates and a
+cohort and one accepts dates and four coarse dimensions. A situation filter whose clauses three of
+the four silently ignored is what `pages/leaks.vue` already calls *"a worse lie than no filter
+bar"*. The dates come from D.3's shared store, so a leak and the hands its drill-through opens
+always answer over the same months.
+
+**`/` is no longer public.** D.1 left it a `/health` page and it was the one route the global auth
+middleware did not guard; a page that reads the founder's own hands cannot be that route. The
+health check survives as a strip at the foot of the dashboard, which is where "is the database
+answering?" belongs on a page made of numbers.
+
+### Consequences
+
+- D.9 cannot simply delete the `/v1/stats*` adapters — it must move the timeline first. That is now
+  written into the step.
+- A KPI request with `confidence` costs the daily rollup on the two per-100 stats, because
+  `stats_daily` stores no sum of squares (`stats/router.py`). Eight tiles is the case E.2's own
+  docstring says is worth it; a forty-column grid is not, and the workbench does not ask.
+- The four-call layout means four cache keys rather than one, so a date change re-runs four
+  queries. Measured on the founder's 19,802 hands against the 54.4M-row pool, a cold load is one
+  call per panel and the page is complete in a second.
+- `Cell.interval` and `ReportRequest.confidence` now exist on the TypeScript side, which E.2
+  deliberately left for its first consumer to add.
+
+## ADR-046 — The pool page composes D.5's parts behind a locked `FilterAccess`; "regs vs fish" is two runs; a player is found by substring, not prefix
+
+**Status:** accepted · 2026-09-12 · plan D.6 (amended before it was built)
+
+**Context.** D.6 was written on 2026-09-09, before the Range Lab spec, before phase F was
+interleaved into phase D, and before D.5 built the workbench D.6 is supposed to consume. Audited
+against the code first, as D.3 and D.7 were: three of its four clauses were missing **in the web
+lane only** — every backend they need already shipped in phase C — and the fourth was already done.
+
+**Decisions.**
+
+1. **The ranges clause is struck, because phase F closed it.** `HandMatrix` does not exist; the
+   grid is `RangeMatrix`, whose docstring says so, and `/ranges/compare` already draws the pool
+   column through it. D.6's own acceptance — "the ranges page adds no new grid code" — was true
+   before this step started. Building a pool-ranges page would have produced the second grid the
+   clause exists to prevent. The pool workbench links to `/ranges/compare` instead.
+
+2. **The page composes D.5's parts; it does not mount `ReportWorkbench` and does not fork
+   `StatGrid`.** D.5 called that component "the shell D.4 and D.6 may ignore" and it is hero-shaped
+   three ways: one prop (`savedId`), an `openFirstPreset()` that lands on a *hero* preset, and a
+   bare `<FilterBar />` carrying the dataset toggle this page must not offer. So `pages/pool/`
+   mounts `StatGrid`, `StatPicker`, `GroupByPicker` and `DefinitionPanel` directly. ADR-042 already
+   made the no-fork rule a decision of record; this is the first step to inherit it.
+
+3. **The dataset lock is structural, not a setting.** Rather than writing `population` into the
+   shared Pinia filter on mount — which would leave the hand list showing pool hands afterwards,
+   and which the URL would silently undo, since `filter/url.ts` reads any missing or unknown `ds`
+   as `hero` — the page wraps the store in a `FilterAccess` whose `dataset` **is** `population` and
+   whose every emitted request says so. The shared store is never written to. This matters because
+   `analysis/pool/service.py` refuses a body that is not `population` and `stats/request.py`
+   refuses `population` beside `hero_only`: a page that let the URL win would 400 on an ordinary
+   link. `FilterBar`'s existing `datasets?: boolean` seam hides the toggle; no D.5 file changed.
+
+   **The first version of this was wrong, and the way it was wrong is the point.** "Wrap the store"
+   was written as *the shared store is never written to*, and it was not: `applyRequest` does
+   `filter.load({ dataset: request.dataset ?? 'hero', … })`, so opening a pool preset stamped
+   `population` onto the store `/hands` and `/reports` share — visiting the pool quietly changed
+   what the hand list answered, in a lane that had congratulated itself on isolation. The lock is
+   therefore **bidirectional**: `load` keeps the dataset the store already had, and
+   `reportRequest` forces `population` on the way out. The clauses and the dates still pass through
+   untouched, because those *should* follow a person between pages; the dataset should not, because
+   on this page it was never a choice. A unit test would not have caught it — the seam looked right
+   in isolation — so it is pinned by both a test on `load` and a browser check that walks
+   `/hands` → `/pool` → `/hands`.
+
+4. **"Regs vs fish" is two runs, joined on the row key, with no difference drawn.** `ReportRequest`
+   carries one `cohort` and `compare_to` is refused for any dataset but hero, so there is no
+   pool-vs-pool baseline to ask for. `pool/compare.ts#align` puts both answers over the same rows —
+   a bucket one cohort never reached becomes an **empty** row, which `cell.ts` already reads as "no
+   observations, no number" — and stops there. Subtracting the two would have been one line and
+   would have been a *second* comparison with its own second answer to what "enough" means, in a
+   file the grid does not consult. The two samples are shown; the reader does the subtraction.
+   The cohorts themselves are the server's: `GET /v1/pool/presets` has been returning `regs` and
+   `fish` on every page load, and `reports/library.ts` was dropping them on the floor.
+
+5. **A player is found by substring, and that is a defect worked around, not a preference.**
+   `GET /v1/pool/players` compiles to `startsWith(player_key, …)`, but **every** key in the corpus
+   is namespaced `ggpoker:<name>` — so the purpose-built route answers "no such player" to every
+   real opponent typed by name, which is an assertion of absence that is false. Measured against
+   the live API: `prefix=A`, `V`, `Vill`, `P`, `1` each returned 0 rows, while
+   `player_key LIKE '%mango%'` returned five real names. The search therefore goes through the
+   ordinary report path as a `like`, which keeps the site namespace out of the client entirely.
+   **The lower-casing is a measured fact, not a guess:** of all 94,276 distinct keys, none contains
+   an upper-case character, so lowering the typed text makes the search case-insensitive in effect
+   and would stop matching — rather than match wrongly — if that ever changed. `GET /v1/pool/players`
+   should gain an `ilike`/substring mode or drop its namespace; recorded as a backend follow-up.
+
+6. **Spec §17 is met per surface, and the third of its three words is bounded by the running
+   system.** Sample size is on **every** cell, always, through `cell.ts` unchanged; tier is
+   `PoolDataBadge`'s, where a figure comes from the node tiers; confidence is `MetricValue` on
+   headline figures. The grid deliberately does **not** ask for `confidence`: ADR-042 decided that,
+   `stats/request.py` warns a per-100 interval leaves the daily rollup, and on a 54M-hand
+   population that is a different order of query. Worth recording because it was nearly missed —
+   the API process on :8000 **predates E.2** (its own `openapi.json` has no `confidence`, no
+   `Interval`), and `ReportRequest` is `extra='forbid'`, so a grid that asked for intervals would
+   have 422'd against the very server the founder is running.
+
+7. **The page is `pages/pool/`, not `pages/pool.vue`.** Three routes under one area; in Nuxt a
+   sibling `pool.vue` beside a `pool/` directory becomes a parent layout needing its own
+   `<NuxtPage />`, which is not what the clause meant.
+
+**Consequences.** Cohort **create/edit/delete** is split out as **D.6b**: the six routes and the
+table exist, but they write rows to Postgres and this lane was read-only against the live API by
+instruction — the same split, for the same reason, as D.7b. The cohorts page therefore lists and
+applies cohorts and says plainly that a shipped cohort has no stored membership list, rather than
+inventing one from a report the engine was never asked.
