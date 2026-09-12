@@ -14,13 +14,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.settings import get_settings
+from stats import tenancy
 from stats.compiler import Compiler, Params
 from stats.definitions import Table
 from stats.errors import RegistryError, ReportError
 from stats.query import PHYSICAL, scope
 from stats.registry import Registry, registry
 from stats.request import HandSearch
-from stats.service import Runner, clickhouse_runner
+from stats.service import Runner
 
 DECISIONS: Table = "decisions"
 """The only table a hand search reads: it is the one with a row per decision."""
@@ -73,7 +74,7 @@ def find_hands(
     reg: Registry | None = None,
 ) -> list[HandRef]:
     """The hands and seats that match, newest first. Never cached: the list is a browse."""
-    runner = run or clickhouse_runner
+    runner = run or tenancy.runner_for(tenant_id)
     columns, rows = runner(*hand_search_sql(search, tenant_id, reg))
     index = {name: i for i, name in enumerate(columns)}
     return [HandRef(hand_uid=str(r[index["hand_uid"]]), seat=int(r[index["seat"]])) for r in rows]

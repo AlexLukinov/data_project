@@ -53,8 +53,11 @@ class NoCache:
 @pytest.fixture
 def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     fake = FakeRunner()
-    monkeypatch.setattr("stats.service.clickhouse_runner", fake)
-    monkeypatch.setattr(stats_router, "clickhouse_runner", fake)
+    # `stats.tenancy.runner_for` is the one seam every read path resolves its runner through
+    # (plan E.3), so patching it covers the engine, the analysis modules and the v1 adapters at
+    # once. `stats_router` binds `runner_for` by name at import, hence the second patch.
+    monkeypatch.setattr("stats.tenancy.runner_for", lambda tenant_id: fake)
+    monkeypatch.setattr(stats_router, "runner_for", lambda tenant_id: fake)
     monkeypatch.setattr(stats_router, "cache", NoCache())
     monkeypatch.setattr(reports_router, "report_cache", lambda: None)
     return fake

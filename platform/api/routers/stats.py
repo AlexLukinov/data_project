@@ -11,10 +11,11 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api import cache
 from api.deps import CurrentUserDep
+from api.ratelimit import tenant_rate_limit
 from api.schemas import (
     CustomStatsRequest,
     StatsResponse,
@@ -26,10 +27,11 @@ from stats.ast import All, Leaf, Node
 from stats.errors import RegistryError, ReportError
 from stats.registry import registry
 from stats.request import DATASET_HERO, Dataset, ReportRequest, ReportResult
-from stats.service import clickhouse_runner, run_report
+from stats.service import run_report
+from stats.tenancy import runner_for
 from stats.timeline import build_timeline
 
-router = APIRouter(prefix="/v1/stats", tags=["stats"])
+router = APIRouter(prefix="/v1/stats", tags=["stats"], dependencies=[Depends(tenant_rate_limit)])
 
 FilterList = Annotated[list[str] | None, Query()]
 COARSE = ("site", "stake_level", "position", "game_type")
@@ -202,6 +204,6 @@ def timeline(
         sql, params = build_timeline(request, user.tenant_id, registry())
     except (ReportError, RegistryError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    payload = _timeline_payload(clickhouse_runner(sql, params)[1])
+    payload = _timeline_payload(runner_for(user.tenant_id)(sql, params)[1])
     cache.set_json(key, payload.model_dump(mode="json"))
     return payload

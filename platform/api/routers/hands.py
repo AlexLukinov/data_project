@@ -14,19 +14,20 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from starlette.concurrency import run_in_threadpool
 
 from api import hand_query
 from api.deps import CurrentUserDep, SessionDep, hero_names_for
 from api.hand_parse import PasteError, detail_from_hand, detect_site, one_hand
+from api.ratelimit import tenant_rate_limit
 from api.schemas import HandDetail, HandSummary
 from api.schemas_hands import HandParseIn
 from stats.errors import ReportError
 from stats.hands import find_hands
 from stats.request import HandSearch
 
-router = APIRouter(prefix="/v1/hands", tags=["hands"])
+router = APIRouter(prefix="/v1/hands", tags=["hands"], dependencies=[Depends(tenant_rate_limit)])
 
 
 @router.get("", response_model=list[HandSummary])

@@ -8,15 +8,18 @@ answer (unknown stat, a dimension the stat's table lacks) is a 400 that names th
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from api import cache
 from api.deps import CurrentUserDep
+from api.ratelimit import tenant_rate_limit
 from stats.errors import RegistryError, ReportError
 from stats.request import ReportRequest, ReportResult
 from stats.service import Cache, run_report
 
-router = APIRouter(prefix="/v1/reports", tags=["reports"])
+router = APIRouter(
+    prefix="/v1/reports", tags=["reports"], dependencies=[Depends(tenant_rate_limit)]
+)
 
 
 def report_cache() -> Cache | None:

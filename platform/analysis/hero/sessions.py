@@ -13,10 +13,11 @@ from datetime import date, datetime
 from typing import Any
 
 from core.settings import get_settings
+from stats import tenancy
 from stats.ast import _Strict
 from stats.query import PHYSICAL, scope
 from stats.request import DATASET_HERO, ReportRequest
-from stats.service import Runner, clickhouse_runner
+from stats.service import Runner
 
 DEFAULT_GAP_MINUTES = 30
 SECONDS_PER_MINUTE = 60
@@ -91,7 +92,7 @@ def sessions(
     run: Runner | None = None,
 ) -> SessionsResult:
     """The hero's sessions in the range, oldest first."""
-    runner = run or clickhouse_runner
+    runner = run or tenancy.runner_for(tenant_id)
     columns, rows = runner(
         *sessions_query(tenant_id, gap_minutes=gap_minutes, date_from=date_from, date_to=date_to)
     )

@@ -10,7 +10,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.concurrency import run_in_threadpool
 
 from analysis.hero.leaks import LeaksResult, find_leaks, presets
@@ -19,11 +19,12 @@ from analysis.pool.baselines import BaselineProvider, PopulationBaseline
 from analysis.presets import Preset
 from api import cache
 from api.deps import CurrentUserDep, SessionDep
+from api.ratelimit import tenant_rate_limit
 from api.routers.pool import cohort_spec, load_cohort
 from stats.errors import RegistryError, ReportError
 from stats.service import Cache
 
-router = APIRouter(prefix="/v1/hero", tags=["hero"])
+router = APIRouter(prefix="/v1/hero", tags=["hero"], dependencies=[Depends(tenant_rate_limit)])
 
 MAX_GAP_MINUTES = 24 * 60
 MinN = Annotated[int | None, Query(ge=1)]

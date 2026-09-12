@@ -6,23 +6,29 @@ Resolves the stats, asks the router for one or two plans, runs one parameterized
 plan, merges the rows on the group key, optionally attaches a population baseline to every
 cell, and caches the answer under the tenant's namespace. The database client and the cache
 are injectable so every step is unit-tested without either.
+
+**The default runner is the tenant's own connection**, not the process-wide admin one
+(`stats/tenancy.py`, plan E.3): the query's cost ceiling is then a ClickHouse settings profile
+and quota belonging to that tenant, so an over-budget report is refused by the server. Passing
+`run=` still bypasses all of it, which is what every unit test does.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from ingestion.clickhouse import clickhouse
+from stats import tenancy
 from stats.interval import DISPERSION_SUFFIX, Level, for_cell
 from stats.query import HANDS_ALIAS, build_query
 from stats.registry import Registry, registry
 from stats.request import Cell, ReportRequest, ReportResult, ReportRow, StatMeta
 from stats.resolve import ResolvedStat, dimensions_used, resolve_stats
 from stats.router import plan
+from stats.tenancy import Rows as Rows
+from stats.tenancy import Runner as Runner
 
-Rows = tuple[list[str], Sequence[Sequence[Any]]]
-Runner = Callable[[str, Mapping[str, Any]], Rows]
 GroupKey = tuple[Any, ...]
 
 
@@ -39,7 +45,11 @@ class Cache(Protocol):
 
 
 def clickhouse_runner(sql: str, params: Mapping[str, Any]) -> Rows:
-    """Run one query on the process-wide client."""
+    """Run one query on the process-wide admin client, under no tenant budget.
+
+    Kept for the paths that are not a tenant's report -- schema probes and the migration runner --
+    and as the fallback inside `tenancy.client_for`. A report uses `tenancy.runner_for`.
+    """
     result = clickhouse().query(sql, parameters=dict(params))
     return list(result.column_names), result.result_rows
 
@@ -67,7 +77,7 @@ def run_report(
 ) -> ReportResult:
     """Answer a report for one tenant. `tenant_id` comes from the token, never the request."""
     reg = reg or registry()
-    runner = run or clickhouse_runner
+    runner = run or tenancy.runner_for(tenant_id)
     key = request.cache_key(tenant_id)
     if cache is not None:
         hit = cache.get_json(key)

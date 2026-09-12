@@ -10,12 +10,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from clickhouse_connect.driver.exceptions import DatabaseError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.db import clickhouse
+from api.ratelimit import RETRY_AFTER_SECONDS
 from api.routers import (
     analyses,
     auth,
@@ -31,6 +33,7 @@ from api.routers import (
     uploads,
 )
 from core.settings import DEFAULT_JWT_SECRET, Settings, get_settings
+from stats import tenancy
 
 # Structured JSON logs from day one. Retrofitting correlation ids across five services later
 # is painful; adding them now costs nothing. See docs/POKER_OBSERVABILITY.md.
@@ -93,6 +96,34 @@ app.include_router(pool.router)
 app.include_router(ranges.router)
 app.include_router(analyses.router)
 app.include_router(heuristics.router)
+
+
+@app.exception_handler(DatabaseError)
+async def clickhouse_refused(request: Request, exc: Exception) -> JSONResponse:
+    """Turn a ClickHouse refusal into a status, without repeating what the server said.
+
+    A budget rejection (plan E.3) is not a server fault and not the caller's syntax error: the
+    query was well formed and cost more than this account is allowed, so it gets a status that
+    says so. Anything else is a 500 -- an unknown table or a dead server must not be reported to
+    the caller as "you asked for too much".
+
+    The server's own message is never forwarded either way. A ClickHouse exception body contains
+    the SQL that failed, which names every table, column and filter value in it.
+    """
+    refusal = tenancy.rejection(exc) if isinstance(exc, DatabaseError) else None
+    if refusal is None:
+        log.exception("clickhouse error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    log.warning(
+        "clickhouse refused a query on %s %s: %s",
+        request.method,
+        request.url.path,
+        refusal.clickhouse,
+    )
+    headers = {"Retry-After": RETRY_AFTER_SECONDS} if refusal.status_code == 429 else None
+    return JSONResponse(
+        status_code=refusal.status_code, content={"detail": refusal.detail}, headers=headers
+    )
 
 
 @app.exception_handler(Exception)

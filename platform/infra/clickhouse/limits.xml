@@ -24,16 +24,30 @@
   DBT_CH_MAX_MEMORY raises the ceiling for dbt's sessions only (see dbt/poker_dwh/profiles.yml),
   so ad-hoc queries stay bounded by the values below even during a rebuild.
 
+  **This profile is the SERVER-WIDE floor, not the per-tenant budget.** It bounds every client,
+  including dbt and the migration runner, and it is the ceiling a tenant's own budget must stay
+  under. The per-tenant settings profiles and quotas are created at runtime, from
+  stats/budget.py, because a tenant is not a thing a static file can enumerate (plan E.3,
+  ADR-043). Four files now have to stay in step, not three: the container cap in
+  docker-compose.yml, the caches in small-node.xml, this ceiling, and the numbers in
+  stats/budget.py, which must all be lower than this one.
+
   NOTE: an XML comment may not contain a double hyphen. Spell command flags out in prose here
   rather than pasting them literally, or the server refuses to start with a SAXParseException.
 -->
 <clickhouse>
     <profiles>
         <default>
-            <!-- Ceiling for one query, ~69% of the 8G container. Must stay well below the
-                 container limit so a runaway query is rejected cleanly instead of Docker
-                 OOM-killing the server. Verified: the worst partition rebuild peaks at
-                 3.17 GiB, so this leaves real headroom rather than sitting on the edge. -->
+            <!-- Ceiling for one query: 2.5 GB, which is ~58% of the 4 GiB container cap above.
+                 Must stay well below that cap so a runaway query is rejected cleanly instead of
+                 Docker OOM-killing the server. Verified: the worst partition rebuild peaks at
+                 3.17 GiB, so this leaves real headroom rather than sitting on the edge.
+
+                 The comment here used to read "~69% of the 8G container", which was true of a
+                 5.5 GB ceiling in an 8 GB container and has been wrong since both shrank; the
+                 figure was carried into docs/POKER_SCALE.md (E.4) as a known doc-drift item and
+                 is corrected here in E.3. dbt/poker_dwh/profiles.yml repeats the same stale
+                 sentence and is NOT fixed, because that file belongs to the dbt project. -->
             <max_memory_usage>2500000000</max_memory_usage>
 
             <!-- Spill to disk instead of failing. Held at half the query ceiling so the

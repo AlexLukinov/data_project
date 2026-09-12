@@ -54,9 +54,10 @@ class FakeRunner:
 @pytest.fixture
 def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     fake = FakeRunner()
-    monkeypatch.setattr("stats.service.clickhouse_runner", fake)
-    monkeypatch.setattr("stats.cohort.clickhouse_runner", fake)
-    monkeypatch.setattr("analysis.hero.sessions.clickhouse_runner", fake)
+    # One seam for all three: since plan E.3 the engine, the cohort query and the session query
+    # all resolve their default runner through `stats.tenancy.runner_for`, and each imports the
+    # module rather than the function so this patch reaches every one of them.
+    monkeypatch.setattr("stats.tenancy.runner_for", lambda tenant_id: fake)
     monkeypatch.setattr(hero_router, "report_cache", lambda: None)
     monkeypatch.setattr(hero_router, "baseline_provider", lambda: PopulationBaseline(run=fake))
     monkeypatch.setattr(pool_router, "report_cache", lambda: None)

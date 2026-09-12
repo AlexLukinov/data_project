@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import PokerAccount, RefreshToken, User
-from api.ratelimit import auth_rate_limit
+from api.ratelimit import auth_rate_limit, refresh_rate_limit
 from api.schemas import (
     LoginRequest,
     PokerAccountRequest,
@@ -98,7 +98,7 @@ async def login(body: LoginRequest, response: Response, session: SessionDep) -> 
     return await _issue(response, session, user)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse, dependencies=[Depends(refresh_rate_limit)])
 async def refresh(
     response: Response,
     session: SessionDep,

@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,13 +32,14 @@ from analysis.pool.service import pool_report, presets
 from api import cache, hand_query
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import Cohort
+from api.ratelimit import tenant_rate_limit
 from api.schemas import HandSummary
 from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, EstimateIn, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
 from stats.request import CohortSpec, ReportRequest, ReportResult
 from stats.service import Cache, validate_request
 
-router = APIRouter(prefix="/v1/pool", tags=["pool"])
+router = APIRouter(prefix="/v1/pool", tags=["pool"], dependencies=[Depends(tenant_rate_limit)])
 
 Prefix = Annotated[str, Query(min_length=1, max_length=64)]
 Limit = Annotated[int, Query(ge=1, le=cohort_service.MAX_MEMBERS)]
