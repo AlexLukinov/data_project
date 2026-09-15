@@ -1,4 +1,4 @@
-"""`/v1/hero/*`: the My game area (plan §2.8, ADR-026) -- leaks, sessions, presets.
+"""`/v1/hero/*`: the My game area (plan §2.8, ADR-026) -- leaks, sessions, winnings, presets.
 
 Thin: tenancy from the token, the baseline through the `BaselineProvider` seam, and the work
 handed to `analysis.hero` in the thread pool (the ClickHouse client is blocking).
@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from analysis.hero.leaks import LeaksResult, find_leaks, presets
 from analysis.hero.sessions import DEFAULT_GAP_MINUTES, SessionsResult, sessions
+from analysis.hero.winnings import WinningsResult, winnings
 from analysis.pool.baselines import BaselineProvider, PopulationBaseline
 from analysis.presets import Preset
 from api import cache
@@ -81,6 +82,31 @@ def hero_sessions(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.get("/winnings", response_model=WinningsResult)
+def hero_winnings(
+    user: CurrentUserDep, date_from: date | None = None, date_to: date | None = None
+) -> WinningsResult:
+    """The hero's winnings by day as running totals: actual, all-in EV, showdown, non-showdown.
+
+    Cached under the tenant's `stats:` namespace, which the parser worker drops when an upload
+    lands (ADR-047), so the curve is as fresh as the last upload rather than the cache TTL.
+    """
+    store = report_cache()
+    key = cache.stats_key(
+        user.tenant_id, "hero_winnings", {"date_from": date_from, "date_to": date_to}
+    )
+    hit = store.get_json(key) if store is not None else None
+    if hit is not None:
+        return WinningsResult.model_validate(hit)
+    try:
+        result = winnings(user.tenant_id, date_from=date_from, date_to=date_to)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if store is not None:
+        store.set_json(key, result.model_dump(mode="json"))
+    return result
 
 
 @router.get("/presets", response_model=list[Preset])

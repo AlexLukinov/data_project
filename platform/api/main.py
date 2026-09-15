@@ -7,14 +7,12 @@ Docs: http://localhost:8000/docs
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from clickhouse_connect.driver.exceptions import DatabaseError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from api.db import clickhouse
 from api.ratelimit import RETRY_AFTER_SECONDS
@@ -29,7 +27,6 @@ from api.routers import (
     ranges,
     reports,
     saved,
-    stats,
     uploads,
 )
 from core.settings import DEFAULT_JWT_SECRET, Settings, get_settings
@@ -42,8 +39,6 @@ logging.basicConfig(
     format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
 )
 log = logging.getLogger("api")
-
-STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def refuse_unsafe_config(settings: Settings) -> None:
@@ -86,7 +81,6 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(uploads.router)
-app.include_router(stats.router)
 app.include_router(hands.router)
 app.include_router(definitions.router)
 app.include_router(reports.router)
@@ -155,12 +149,3 @@ async def health() -> dict[str, Any]:
         log.exception("health check: clickhouse unreachable")
         checks["clickhouse"] = "error"
     return {"status": "ok" if all(v == "ok" for v in checks.values()) else "degraded", **checks}
-
-
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-    @app.get("/", include_in_schema=False)
-    async def dashboard() -> FileResponse:
-        """Serve the minimal dashboard."""
-        return FileResponse(STATIC_DIR / "index.html")

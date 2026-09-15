@@ -19,7 +19,7 @@ make install                  # uv sync
 make dbt-install              # dbt in its OWN venv — its pins clash with the app's
 make up                       # ClickHouse + Postgres + Kafka + Redis + MinIO, waits for health
 make seed                     # migrations + sample hands through the REAL pipeline + dbt build
-make api                      # http://localhost:8000  (dashboard at /, OpenAPI at /docs)
+make api                      # http://localhost:8000  (OpenAPI at /docs; the UI is `make web`)
 ```
 
 Demo login: `demo@example.com` / `demo-password-123`
@@ -80,7 +80,7 @@ parser/      parse(raw_text, site) -> CanonicalHand + site registry    ← the R
 ingestion/   object storage, Kafka, ClickHouse loader, worker
 stats/       the stat registry (YAML), filter AST, compiler, router, report service
 analysis/    hero/ (leaks, sessions) and pool/ (reports, players, cohorts, baselines) + presets
-api/         FastAPI: auth, uploads, reports, hero, pool, saved objects, hands + the demo dashboard
+api/         FastAPI: auth, uploads, reports, hero, pool, saved objects, hands
 web/         the JavaScript workspace (ADR-027): packages/poker-core (poker maths, pure TS),
              poker-workers (the equity Worker), poker-ui (Vue components), apps/web (the Nuxt SPA:
              dashboard + Range Lab) — `make web`, `make web-check`, LICENSES.md

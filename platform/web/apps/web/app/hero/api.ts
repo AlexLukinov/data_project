@@ -123,19 +123,20 @@ export interface HeroApi {
   winnings(filters?: WinningsFilters): Promise<Winnings>;
 }
 
-/** The wire shape of `GET /v1/stats/timeline`, kept private — see `winnings()`. */
-interface TimelineResponse {
+/** The wire shape of `GET /v1/hero/winnings` (`analysis/hero/winnings.py`), kept private — see `winnings()`. */
+interface WinningsResponse {
+  hands: number;
+  bb_per_100: number | null;
+  ev_bb_per_100: number | null;
   points: {
     day: string;
+    /** That day's hands alone; the four sums beside it are the running totals. */
     hands: number;
-    cumulative_bb: number;
+    cumulative_net_bb: number;
     cumulative_ev_bb: number;
     cumulative_showdown_bb: number;
     cumulative_nonshowdown_bb: number;
   }[];
-  total_hands: number;
-  bb_per_100: number | null;
-  ev_bb_per_100: number | null;
 }
 
 function query(filters: Record<string, string | number | undefined>): string {
@@ -152,31 +153,25 @@ export function createHeroApi(fetch: Fetcher): HeroApi {
     sessions: (filters = {}) => fetch<SessionsResult>(`/v1/hero/sessions${query(filters)}`),
 
     /**
-     * The winnings series.
+     * The winnings series, from `GET /v1/hero/winnings` (plan D.9a, ADR-052).
      *
-     * **This is the one call in the hero client that does not go to `/v1/hero`, and that is a
-     * recorded debt rather than an oversight.** There is no hero winnings route: the only time
-     * series in the API is the v1 adapter `GET /v1/stats/timeline`, whose own module docstring
-     * says it is "Deleted in plan D.9". `POST /v1/reports/run` cannot stand in — the registry
-     * has no day dimension among its eighty, so a report cannot group by time at all.
-     *
-     * So the shape is translated here, at the boundary, into this module's own `WinningsPoint`:
-     * every consumer above depends on the hero client and never on a condemned route's field
-     * names, and D.9 changes this function body and nothing else. Plan D.9 carries the
-     * obligation; see ADR-045.
+     * The wire names are translated here, at the boundary, into this module's own
+     * `WinningsPoint`, so no consumer above knows them. That boundary is what let D.9a move the
+     * curve off the retired `GET /v1/stats/timeline` by changing this function body and nothing
+     * else (ADR-045).
      */
     winnings: async (filters = {}) => {
-      const raw = await fetch<TimelineResponse>(`/v1/stats/timeline${query({ ...filters, dataset: 'hero' })}`);
+      const raw = await fetch<WinningsResponse>(`/v1/hero/winnings${query(filters)}`);
       return {
         points: raw.points.map((point) => ({
           day: point.day,
           hands: point.hands,
-          net: point.cumulative_bb,
+          net: point.cumulative_net_bb,
           ev: point.cumulative_ev_bb,
           showdown: point.cumulative_showdown_bb,
           nonShowdown: point.cumulative_nonshowdown_bb,
         })),
-        hands: raw.total_hands,
+        hands: raw.hands,
         bbPer100: raw.bb_per_100,
         evBbPer100: raw.ev_bb_per_100,
       };

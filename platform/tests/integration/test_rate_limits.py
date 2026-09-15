@@ -13,9 +13,6 @@ Two axes, because they are keyed differently and for different reasons:
   shared address would otherwise throttle another, and one tenant across many addresses would
   not be throttled at all.
 
-**NOT YET RUN.** Written in the E.3 session of 2026-09-11, which deliberately had no access to
-the stack. Run it with `make up && make seed && make test-all`.
-
 Requires the stack: `make up && make test-all`.
 """
 
@@ -35,6 +32,7 @@ pytestmark = pytest.mark.integration
 
 TRANSPORT = ASGITransport(app=app)
 PASSWORD = "a-long-enough-password"
+REPORT = "/v1/reports/run"
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -112,13 +110,19 @@ async def test_refreshing_does_not_spend_the_sign_in_budget(
 async def test_one_tenants_request_budget_does_not_throttle_another(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The analytics limiter is keyed on the tenant, so a shared address is not a shared budget."""
+    """The analytics limiter is keyed on the tenant, so a shared address is not a shared budget.
+
+    Probed through the report engine, the most expensive analytics route (it replaced
+    `GET /v1/stats` in plan D.9a); an empty body is a valid report, so every refusal is the budget.
+    """
     monkeypatch.setattr(ratelimit, "TENANT_REQUESTS_PER_MINUTE", 2)
     _clear_limiter_keys()
     async with AsyncClient(transport=TRANSPORT, base_url="http://test") as c:
         busy, quiet = await _token(c, "e3-busy"), await _token(c, "e3-calm")
-        statuses = [(await c.get("/v1/stats", headers=_auth(busy))).status_code for _ in range(3)]
-        untouched = await c.get("/v1/stats", headers=_auth(quiet))
+        statuses = [
+            (await c.post(REPORT, json={}, headers=_auth(busy))).status_code for _ in range(3)
+        ]
+        untouched = await c.post(REPORT, json={}, headers=_auth(quiet))
     _clear_limiter_keys()
 
     assert statuses == [200, 200, 429], statuses

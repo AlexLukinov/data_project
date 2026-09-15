@@ -114,7 +114,7 @@ dbt-docs: $(DBT) ## Generate and serve dbt lineage docs
 
 # ── run ──────────────────────────────────────────────────────────────────────
 .PHONY: api
-api: ## Run the API (http://localhost:8000 — dashboard at /, docs at /docs)
+api: ## Run the API (http://localhost:8000 — OpenAPI at /docs; the UI is `make web`)
 	$(UV) uvicorn api.main:app --reload --port 8000
 
 .PHONY: worker

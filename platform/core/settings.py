@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     """Only `dev` tolerates the placeholder JWT secret and an insecure refresh cookie."""
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     """Browser origins allowed to call the API with credentials. Explicit list, never `*`:
-    the refresh cookie travels with these requests. The same-origin dashboard at `/` needs
-    no entry. The Nuxt dev server (POKER_PLAN.md phase D) is the default."""
+    the refresh cookie travels with these requests. The Nuxt dev server (POKER_PLAN.md phase D)
+    is the default."""
 
     # -- ClickHouse ------------------------------------------------------------
     clickhouse_host: str = "localhost"

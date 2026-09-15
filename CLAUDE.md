@@ -191,7 +191,7 @@ Redis 6380 · MinIO 9010/9011**.
 | `make migrate` | Alembic (Postgres) + `ch/migrations/*.sql` (ClickHouse) |
 | `make seed` | provision the **test** databases + load the 8-hand corpus there + build dbt there |
 | `make dbt-build` / `make dbt-test` | run the dbt models / tests against the real marts |
-| `make api` / `make worker` | FastAPI on :8000 (dashboard `/`, docs `/docs`) / Kafka parser worker |
+| `make api` / `make worker` | FastAPI on :8000 (docs `/docs`; the UI is `make web`) / Kafka parser worker |
 | `make check` | lint + typecheck + import-linter + generated-file check + size check + unit tests — what CI runs |
 | `make test-all` | includes integration tests, in the test environment (needs `make up`) |
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |

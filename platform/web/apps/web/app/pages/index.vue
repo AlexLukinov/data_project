@@ -10,8 +10,8 @@
  * where a dashboard full of numbers is exactly where "is the database answering?" belongs.
  *
  * **Why there is no filter bar, only dates.** Of the four panels, `/v1/hero/leaks` and
- * `/v1/hero/sessions` accept dates and a cohort, and the winnings series accepts dates and four
- * coarse dimensions. A situation filter whose clauses three of the four silently ignored is
+ * `/v1/hero/sessions` accept dates and a cohort, and `/v1/hero/winnings` accepts dates only
+ * (ADR-052). A situation filter whose clauses three of the four silently ignored is
  * what `pages/leaks.vue` calls "a worse lie than no filter bar". The dates come from the shared
  * store (plan D.3), so they travel into the drill-through links `LeakTable` builds and a leak
  * and its hands always answer over the same months.

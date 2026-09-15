@@ -1,14 +1,16 @@
-"""The v2 API surface without a database: definitions, reports, and the v1 adapters.
+"""The v2 API surface without a database: definitions, reports, and the winnings curve.
 
 The authenticated user is injected through FastAPI's dependency overrides, the ClickHouse
 runner is a fake that records every query, and the cache is disabled -- so these assert on
-what the routes send to the engine and how they shape what comes back.
+what the routes send to the engine and how they shape what comes back. The probes that used to
+go through the v1 adapters (`/v1/stats*`, retired in plan D.9a) now go through their successors.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Mapping
+from datetime import date
 from typing import Any
 
 import pytest
@@ -16,8 +18,8 @@ from httpx import ASGITransport, AsyncClient
 
 from api.deps import CurrentUser, current_user
 from api.main import app
+from api.routers import hero as hero_router
 from api.routers import reports as reports_router
-from api.routers import stats as stats_router
 
 TENANT = 7
 
@@ -42,24 +44,15 @@ class FakeRunner:
         return ["vpip", "vpip__n", "hands", "hands__n", "__hands"], [(24.5, 1000, 1000, 1000, 1000)]
 
 
-class NoCache:
-    def get_json(self, key: str) -> Any | None:
-        return None
-
-    def set_json(self, key: str, value: Any) -> None:
-        return None
-
-
 @pytest.fixture
 def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     fake = FakeRunner()
     # `stats.tenancy.runner_for` is the one seam every read path resolves its runner through
-    # (plan E.3), so patching it covers the engine, the analysis modules and the v1 adapters at
-    # once. `stats_router` binds `runner_for` by name at import, hence the second patch.
+    # (plan E.3), so patching it covers the engine, the analysis modules and the winnings curve
+    # at once.
     monkeypatch.setattr("stats.tenancy.runner_for", lambda tenant_id: fake)
-    monkeypatch.setattr(stats_router, "runner_for", lambda tenant_id: fake)
-    monkeypatch.setattr(stats_router, "cache", NoCache())
     monkeypatch.setattr(reports_router, "report_cache", lambda: None)
+    monkeypatch.setattr(hero_router, "report_cache", lambda: None)
     return fake
 
 
@@ -136,57 +129,92 @@ async def test_bad_reports_are_named_not_executed(
     assert runner.calls == []
 
 
-async def test_v1_stats_adapter_keeps_the_dashboard_shape(
+async def test_a_report_is_scoped_to_the_tenant_and_the_hero_seat_by_default(
     client: AsyncClient, runner: FakeRunner
 ) -> None:
-    grouped = await client.get("/v1/stats?group_by=position&stats=vpip")
-    assert grouped.status_code == 200, grouped.text
-    assert grouped.json()["groups"] == [
-        {"position": "BTN", "vpip": 30.0, "vpip__n": 400, "hands_total": 400}
-    ]
-    flat = await client.get("/v1/stats?stats=vpip&stats=hands&site=pokerstars")
-    assert flat.status_code == 200, flat.text
-    body = flat.json()
-    assert body["hands"] == 1000
-    assert body["stats"][0] == {"code": "vpip", "label": "VPIP", "value": 24.5, "sample": 1000}
+    """The scoping `GET /v1/stats` was held to, asked of the route that replaced it."""
+    site = {"dim": "site", "op": "in", "value": ["pokerstars"]}
+    res = await client.post("/v1/reports/run", json={"stats": ["vpip", "hands"], "filter": site})
+    assert res.status_code == 200, res.text
+    assert res.json()["hands"] == 1000
     sql, params = runner.calls[-1]
     assert "s.site IN {p" in sql and ["pokerstars"] in params.values()
     assert params["tenant_id"] == TENANT and "s.is_hero = 1" in sql
 
 
-async def test_v1_adapter_binds_free_text_and_refuses_bad_enums(
+async def test_a_report_binds_free_text_and_refuses_a_bad_enum(
     client: AsyncClient, runner: FakeRunner
 ) -> None:
     payload = "'; DROP TABLE core.hands; --"
-    res = await client.get("/v1/stats", params={"stake_level": payload})
+    stake = {"dim": "stake_level", "op": "in", "value": [payload]}
+    res = await client.post("/v1/reports/run", json={"filter": stake})
     assert res.status_code == 200, res.text
     sql, params = runner.calls[-1]
     assert payload not in sql and [payload] in params.values()
-    res = await client.get("/v1/stats", params={"site": payload})
+    site = {"dim": "site", "op": "in", "value": [payload]}
+    res = await client.post("/v1/reports/run", json={"filter": site})
     assert res.status_code == 400 and "not a value of 'site'" in res.text
+    assert len(runner.calls) == 1, "a refused filter must never reach ClickHouse"
 
 
-async def test_v1_timeline_adapter(client: AsyncClient, runner: FakeRunner) -> None:
-    res = await client.get("/v1/stats/timeline?dataset=hero")
+async def test_the_winnings_curve_is_running_totals_of_the_heros_own_hands(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    res = await client.get("/v1/hero/winnings?date_from=2026-01-01")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["total_hands"] == 150
-    assert [p["cumulative_bb"] for p in body["points"]] == [12.5, 10.0]
+    assert body["hands"] == 150
+    assert body["points"] == [
+        {"day": "2026-01-01", "hands": 100, "cumulative_net_bb": 12.5, "cumulative_ev_bb": 10.0,
+         "cumulative_showdown_bb": 20.0, "cumulative_nonshowdown_bb": -7.5},
+        {"day": "2026-01-02", "hands": 50, "cumulative_net_bb": 10.0, "cumulative_ev_bb": 11.0,
+         "cumulative_showdown_bb": 15.0, "cumulative_nonshowdown_bb": -5.0},
+    ]  # fmt: skip
     assert body["bb_per_100"] == round(100 * 10.0 / 150, 2)
+    assert body["ev_bb_per_100"] == round(100 * 11.0 / 150, 2)
     sql, params = runner.calls[-1]
-    assert "stats_daily" in sql and "GROUP BY day" in sql and params["tenant_id"] == TENANT
+    assert "stats_daily" in sql and "GROUP BY day" in sql
+    assert params["tenant_id"] == TENANT and params["dataset"] == "hero" and "s.is_hero = 1" in sql
+    assert params["date_from"] == date(2026, 1, 1)
 
 
-async def test_v1_custom_counters_are_gone(client: AsyncClient, runner: FakeRunner) -> None:
-    res = await client.post(
-        "/v1/stats/custom",
-        json={"custom": [{"code": "x", "numerator": "vpip_action", "denominator": "hands"}]},
-    )
-    assert res.status_code == 400 and "/v1/reports/run" in res.text
-    plain = await client.post(
-        "/v1/stats/custom", json={"stats": ["vpip"], "group_by": ["position"]}
-    )
-    assert plain.status_code == 200 and plain.json()["groups"][0]["position"] == "BTN"
+async def test_the_winnings_curve_cannot_be_pointed_at_another_tenant_or_the_pool(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    """The curve takes dates and nothing else: a forged scope is ignored, never obeyed."""
+    forged = "tenant_id=1&user_id=1&dataset=population&hero_only=false&player_key=villain"
+    res = await client.get(f"/v1/hero/winnings?{forged}")
+    assert res.status_code == 200, res.text
+    sql, params = runner.calls[-1]
+    assert params == {"tenant_id": TENANT, "dataset": "hero"}
+    assert "s.is_hero = 1" in sql and "player_key" not in sql
+
+
+async def test_the_winnings_curve_refuses_a_backwards_range(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    res = await client.get("/v1/hero/winnings?date_from=2026-09-02&date_to=2026-09-01")
+    assert res.status_code == 400 and "date_from is after date_to" in res.text
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/v1/stats"),
+        ("GET", "/v1/stats/timeline"),
+        ("POST", "/v1/stats/custom"),
+        ("GET", "/"),
+        ("GET", "/static/index.html"),
+    ],
+)
+async def test_the_retired_v1_surface_is_gone(
+    client: AsyncClient, runner: FakeRunner, method: str, path: str
+) -> None:
+    """Plan D.9a (ADR-052): the v1 adapters and the static dashboard are deleted, not hidden."""
+    res = await client.request(method, path)
+    assert res.status_code == 404, res.text
+    assert runner.calls == []
 
 
 async def test_unauthenticated_requests_are_rejected() -> None:
@@ -195,6 +223,7 @@ async def test_unauthenticated_requests_are_rejected() -> None:
         assert (await c.get("/v1/definitions")).status_code == 401
         assert (await c.post("/v1/reports/run", json={})).status_code == 401
         assert (await c.get("/v1/saved/reports")).status_code == 401
+        assert (await c.get("/v1/hero/winnings")).status_code == 401
 
 
 async def test_a_confidence_level_travels_the_wire_with_no_adapter(
