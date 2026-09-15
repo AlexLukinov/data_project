@@ -15,11 +15,11 @@ So it proves three separate things:
 Then the quota half -- an hour's consumption rather than one query's cost -- and the HTTP
 translation of a refusal. F-706's Redis-side request budgets are `test_rate_limits.py`.
 
-**NOT YET RUN.** Written in the E.3 session of 2026-09-11, which deliberately had no access to
-the stack -- another session owned the database layer for the whole of it. Run it with
-`make up && make seed && make test-all`, and tick plan step E.3 only then. The first thing to
-check if it fails at `tenancy.ensure` is whether the configured ClickHouse user may create users
-and `GRANT SELECT`: compose gives it that with `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"`.
+Written in the E.3 session of 2026-09-11 with no access to the stack; first run on merge, where it
+found a real bug (a reconnect re-tiered the tenant) and one in itself (`SELECT 1` is free against a
+quota) -- both at the end of ADR-043. The first thing to check if it fails at `tenancy.ensure` is
+whether the configured ClickHouse user may create users and `GRANT SELECT`: compose gives it that
+with `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"`.
 
 Requires the stack: `make up && make test-all`.
 """
