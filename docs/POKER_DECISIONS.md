@@ -1564,7 +1564,7 @@ database's `now()`, and `review_due_at` compares the two. So answering "still tr
 review **earlier** than the one just answered, by however far the clocks disagreed: the integration test
 saw 0.22 s while Docker Desktop's VM ran ahead of the host, and two production machines can disagree by
 seconds. `confirmed_at` is now `func.now()`, which the router's refresh reads back — one clock for both
-ends of the rule (`1d8be0e`). The store's database-free unit test asserts the clock; the round trip
+ends of the rule (`c36faa4`). The store's database-free unit test asserts the clock; the round trip
 stays in `tests/integration/test_heuristics.py`.
 
 ## ADR-039 — All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened
@@ -3106,8 +3106,8 @@ Gates: `make web-check` green (typecheck, ESLint, **1,015 tests / 99 files**, li
 
 **Context.** CI has never run. Four findings, each confirmed against the tree before anything changed:
 
-1. **Wrong place.** The workflow was committed at `platform/.github/workflows/ci.yml` (`64ea6cf`,
-   extended by F.1 in `e74c148`). GitHub reads workflows only from `.github/workflows/` at the
+1. **Wrong place.** The workflow was committed at `platform/.github/workflows/ci.yml` (`bd097d8`,
+   extended by F.1 in `021e9c7`). GitHub reads workflows only from `.github/workflows/` at the
    repository root, and the git root is `ru_de/`, one level up. As far as GitHub was concerned,
    the repository had no workflow.
 2. **Wrong trigger.** `on: push: branches: [main]` plus `pull_request`. The work lives on
@@ -3177,7 +3177,7 @@ Gates: `make web-check` green (typecheck, ESLint, **1,015 tests / 99 files**, li
    more. **`timeout-minutes`** 20 / 20 / 60 guard against a hang; the integration value is loose
    because no full `make test-all` duration had been recorded. Tighten it after the first run.
 
-**Verified before any push** — in a git worktree of `856c06d` with only this lane's four files
+**Verified before any push** — in a git worktree of `93d32ae` with only this lane's four files
 applied, and no `.venv`, `.venv-dbt`, `node_modules`, caches or ignored files:
 
 - `make install`: CPython 3.12.14, 77 packages.
@@ -3223,7 +3223,7 @@ first runs showed:
    the merge's push.
 
 **The first runs (2026-09-15, at the founder's request).** Lane D's four code files were committed
-alone as `7e4cfeb` and `feat/range-lab` was pushed. The round-5 docs, this ADR included, and the
+alone as `5c3b55f` and `feat/range-lab` was pushed. The round-5 docs, this ADR included, and the
 other lanes' work stayed in the working tree.
 
 - **Run 34955622749:** quality ✓ and web ✓ — the first time CI had passed anything — and integration
@@ -3237,7 +3237,7 @@ other lanes' work stayed in the working tree.
     still running — usually true under Docker Desktop's VM, and lost on a fast Linux runner. The
     18 s, and the failure-only `docker compose logs` step parsing the file successfully, fit that
     and nothing else examined.
-- **Fix, `3a4b2ea`:** `minio-init` has `profiles: ["init"]`, so `up --wait` leaves it out, and
+- **Fix, `88625fd`:** `minio-init` has `profiles: ["init"]`, so `up --wait` leaves it out, and
   `make up` runs `docker compose run --rm minio-init` once the stack is healthy. A failed bucket
   creation still fails the target. `run` replaces `container_name` with a generated name
   (pkg/compose/run.go), so a leftover `poker-minio-init` cannot collide. The rule held: the target

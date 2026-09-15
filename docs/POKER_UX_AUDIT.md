@@ -8,7 +8,7 @@ three issues [POKER_STATUS.md](POKER_STATUS.md) had already recorded for F.12 ·
 would change.
 
 > **Read-only.** No product code was changed and no page was edited; nothing was seeded or
-> tested. Every finding cites `file:line` as of the working tree on 2026-09-14 (HEAD `2f9a939`,
+> tested. Every finding cites `file:line` as of the working tree on 2026-09-14 (HEAD `4927a8e`,
 > plus two other lanes' uncommitted D.6b and D.7b files, which nothing here depends on). Line
 > numbers drift as files change — the *finding* is the durable part, as in
 > [POKER_AUDIT.md](POKER_AUDIT.md).
@@ -651,7 +651,7 @@ four dual/compound expressions, over 805 non-private packages; no GPL/AGPL/LGPL/
 The four MPL-2.0 hits are the `lightningcss` prebuilt binaries `LICENSES.md:23` flags; `node-forge`
 (BSD-3 or GPL-2, used under BSD-3), `spdx-ranges`, `spdx-exceptions` and `caniuse-lite` are each
 still present and still justified in `LICENSES.md`. No dependency has changed since the file was
-last committed (`951107a`).
+last committed (`3bd5f46`).
 
 **Residuals, documentation-level:**
 - `platform/web/package.json:20` puts `MPL-2.0` in `--onlyAllow` unconditionally, so a *new*
