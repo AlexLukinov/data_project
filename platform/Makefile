@@ -5,7 +5,9 @@
 .DEFAULT_GOAL := help
 
 COMPOSE := docker compose
-UV      := uv run
+# --frozen: every run uses uv.lock as written and never re-locks, here and in CI alike (ADR-054).
+# After editing pyproject.toml by hand, run `uv lock`.
+UV      := uv run --frozen
 DBT_DIR := dbt/poker_dwh
 DBT     := .venv-dbt/bin/dbt
 
@@ -58,13 +60,18 @@ logs: ## Tail stack logs
 
 # ── install ──────────────────────────────────────────────────────────────────
 .PHONY: install
-install: ## Install Python deps (app + dev)
-	uv sync --group dev
+install: ## Install Python deps (app + dev) exactly as uv.lock pins them
+	uv sync --frozen
 
 .PHONY: dbt-install
 dbt-install: ## Install dbt into its OWN venv (its pins clash with the app's — same lesson as the lab)
 	uv venv .venv-dbt --python 3.12
 	VIRTUAL_ENV=.venv-dbt uv pip install "dbt-core~=1.9" "dbt-clickhouse~=1.8"
+
+# The dbt binary as a prerequisite, so a fresh clone's `make seed` or `make test-all` installs dbt
+# instead of failing on a missing .venv-dbt (api/provision.py runs it too).
+$(DBT):
+	$(MAKE) dbt-install
 
 # ── migrations ───────────────────────────────────────────────────────────────
 .PHONY: migrate
@@ -84,7 +91,7 @@ ch-migrate: ## Apply ClickHouse SQL migrations
 
 # ── data ─────────────────────────────────────────────────────────────────────
 .PHONY: seed
-seed: ## Provision the TEST databases, load the sample corpus into them, build dbt there
+seed: $(DBT) ## Provision the TEST databases, load the sample corpus into them, build dbt there
 	$(TEST_ENV) $(UV) python -m api.provision
 	$(TEST_ENV) $(UV) python -m scripts.seed
 	$(TEST_ENV) $(DBT) build --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
@@ -92,15 +99,15 @@ seed: ## Provision the TEST databases, load the sample corpus into them, build d
 	@echo ">> To serve them: $(TEST_ENV) make api"
 
 .PHONY: dbt-build
-dbt-build: ## Run dbt (models + tests)
+dbt-build: $(DBT) ## Run dbt (models + tests)
 	$(DBT) build --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
 
 .PHONY: dbt-test
-dbt-test: ## Run dbt tests only
+dbt-test: $(DBT) ## Run dbt tests only
 	$(DBT) test --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
 
 .PHONY: dbt-docs
-dbt-docs: ## Generate and serve dbt lineage docs
+dbt-docs: $(DBT) ## Generate and serve dbt lineage docs
 	$(DBT) docs generate --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
 	$(DBT) docs serve --project-dir $(DBT_DIR) --profiles-dir $(DBT_DIR)
 
@@ -142,7 +149,7 @@ test: ## Run unit tests (no stack required)
 	$(UV) pytest -q -m "not integration"
 
 .PHONY: test-all
-test-all: ## Run every test, including integration, against the TEST databases (needs `make up`)
+test-all: $(DBT) ## Run every test, including integration, against the TEST databases (needs `make up`)
 	$(TEST_ENV) $(UV) pytest -q
 
 .PHONY: lint
@@ -184,4 +191,4 @@ size-baseline: ## Rewrite the size baseline after fixing or deliberately baselin
 	$(UV) python -m scripts.check_sizes --update-baseline
 
 .PHONY: check
-check: lint typecheck lint-arch gen-check size-check test ## Everything CI runs
+check: lint typecheck lint-arch gen-check size-check test ## What the CI `quality` job runs

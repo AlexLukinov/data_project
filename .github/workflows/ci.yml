@@ -1,0 +1,97 @@
+# CI for the poker platform (ADR-054).
+#
+# Every job calls make targets and restates none of them, so this file cannot drift from
+# platform/Makefile: `make check` is the quality gate, `make web-check` the web gate, `make seed`
+# and `make test-all` the integration gate -- the commands a developer runs. If a target cannot
+# run here as written, change the target, never a copy of it in this file.
+#
+# Unit tests run with no services — the parser, the canonical model, the validator and the
+# query compiler are all pure functions, which is deliberate: the parts most likely to hold a
+# correctness bug are the parts that need no infrastructure to test.
+#
+# The integration job brings up the real stack, because the seams between components are
+# where the remaining bugs live.
+#
+# One source per tool version: Python in platform/.python-version, Node in platform/web/.nvmrc,
+# packages in platform/uv.lock and platform/web/package-lock.json, uv itself in UV_VERSION below.
+
+name: ci
+
+on:
+  # Every branch, so a feature branch is checked on each push without opening a pull request.
+  push:
+    branches: ["**"]
+  # Pull requests into main, so the merge result is checked as well as the branch head.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same ref supersedes the run still testing the old commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing in this workflow writes to the repository.
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.5"
+
+defaults:
+  run:
+    working-directory: platform
+
+jobs:
+  quality:
+    # Lint, format, types, module boundaries, generated files, size limits, unit tests.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: make install
+      - run: make check
+
+  web:
+    # The JavaScript workspace (ADR-027): typecheck, lint, Vitest, and the licence audit that
+    # fails on any copyleft dependency, direct or transitive.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: platform/web/.nvmrc
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+      - run: make web-install
+      - run: make web-check
+
+  integration:
+    # `make seed` and `make test-all` set the TEST environment themselves (Makefile TEST_ENV), and
+    # the integration conftest refuses to start without it.
+    runs-on: ubuntu-24.04
+    # A guard against a hung stack, not a budget: no full `make test-all` duration has been
+    # recorded yet. Tighten it once a real run has one.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: make install
+      - run: make up
+      - run: make seed
+      - name: make test-all
+        # Includes the tenant-isolation suite, which actively tries to break isolation.
+        # If that ever passes-by-failing-to-run, the build must go red.
+        run: make test-all
+      - name: Stack logs on failure
+        if: failure()
+        # Diagnostics, not a gate. `make logs` follows the logs (-f) and would never return.
+        run: docker compose logs --no-color --tail=200
