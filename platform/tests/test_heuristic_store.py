@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.sql import functions
 
 from api.heuristic_store import apply_update, due_cutoff, out
 from api.models_heuristics import Heuristic
@@ -68,14 +69,20 @@ def test_the_sql_cutoff_says_the_same_thing_as_the_derived_date() -> None:
     assert (review_due_at(None, WRITTEN) <= now) is (due_cutoff(now) >= WRITTEN)
 
 
-def test_answering_still_true_stamps_the_review_and_pushes_the_next_one_out() -> None:
+def test_answering_still_true_stamps_the_review_with_the_database_clock() -> None:
+    """The stamp is the database's `now()` -- the clock `created_at` comes from.
+
+    Stamped from this process, a review could land *earlier* than the one just answered, by
+    however far the two clocks disagreed (0.22 s, found at the round-5 merge). That the answer
+    pushes the next review out is the rule in
+    `test_an_answered_heuristic_counts_from_the_answer_not_from_the_writing`, and the round trip
+    through a real database is `tests/integration/test_heuristics.py`.
+    """
     row = _row()
     apply_update(row, HeuristicUpdate(status="confirmed"))
 
     assert row.status == "confirmed"
-    assert row.confirmed_at is not None
-    assert out(row).review_due_at > review_due_at(None, WRITTEN)
-    assert out(row).is_due is False
+    assert isinstance(row.confirmed_at, functions.now)
 
 
 def test_retiring_a_heuristic_is_also_an_answer_and_also_resets_the_clock() -> None:

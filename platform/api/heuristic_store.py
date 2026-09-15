@@ -87,6 +87,11 @@ def apply_update(row: Heuristic, body: HeuristicUpdate) -> None:
     answering "still true?" -- with yes, no, or "retired" -- is itself the review, so it resets
     the fourteen-day clock. A rewrite that leaves `status` out does not, because correcting the
     wording of a lesson is not the same as having re-examined it.
+
+    **The stamp is the database's `now()`, never this process's clock**, because the schedule
+    compares it with `created_at`, which the database stamps. Two clocks let a review move
+    *earlier* by however far they disagree -- measured at 0.22 s between Docker Desktop's VM and
+    the host, and seconds between two production machines. The router's refresh reads it back.
     """
     if body.text is not None:
         row.text = body.text.strip()
@@ -102,7 +107,7 @@ def apply_update(row: Heuristic, body: HeuristicUpdate) -> None:
         row.tags = list(body.tags)
     if body.status is not None:
         row.status = body.status
-        row.confirmed_at = datetime.now(UTC)
+        row.confirmed_at = func.now()
 
 
 async def delete(session: AsyncSession, user_id: uuid.UUID, row_id: uuid.UUID) -> None:
