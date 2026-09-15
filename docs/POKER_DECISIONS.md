@@ -56,6 +56,9 @@ not a change I've made.
 | [044](#adr-044--the-rollups-materialized-view-is-generated-from-the-registry-and-writes-to-its-own-table-never-to-the-dbt-anchor) | The rollup's materialized view is generated from the registry and writes to its own table, never to the dbt anchor | ✅ |
 | [045](#adr-045--my-game-is-composed-from-four-calls-and-the-winnings-curve-is-borrowed-from-a-route-d9-deletes) | My game is composed from four calls, and the winnings curve is borrowed from a route D.9 deletes | ✅ |
 | [046](#adr-046--the-pool-page-composes-d5s-parts-behind-a-locked-filteraccess-regs-vs-fish-is-two-runs-a-player-is-found-by-substring-not-prefix) | The pool page composes D.5's parts behind a locked `FilterAccess`; "regs vs fish" is two runs; a player is found by substring, not prefix | ✅ |
+| [047](#adr-047--the-hot-path-renders-the-dbt-models-own-sql-for-one-batch-provenance-not-a-lock-guards-dbts-swap-the-fresh-rollup-serves-only-what-dbt-has-not-built) | The hot path renders the dbt models' own SQL for one batch; provenance, not a lock, guards dbt's swap; the fresh rollup serves only what dbt has not built | ✅ |
+| [048](#adr-048--a-tag-filter-is-an-id-list-not-a-registry-dimension-a-note-lives-in-postgres-on-a-hand-that-lives-in-clickhouse-and-ownership-is-decided-at-the-edge) | A tag filter is an id list, not a registry dimension; a note lives in Postgres on a hand that lives in ClickHouse, and ownership is decided at the edge | ✅ |
+| [049](#adr-049--the-cohort-form-is-a-small-vocabulary-of-its-own-offers-what-the-registry-marks-cached-and-shows-a-refusal-in-the-servers-words) | The cohort form is a small vocabulary of its own, offers what the registry marks cached, and shows a refusal in the server's words | ✅ |
 
 ---
 
@@ -2235,3 +2238,470 @@ table exist, but they write rows to Postgres and this lane was read-only against
 instruction — the same split, for the same reason, as D.7b. The cohorts page therefore lists and
 applies cohorts and says plainly that a shipped cohort has no stored membership list, rather than
 inventing one from a report the engine was never asked.
+
+---
+
+## ADR-047 — The hot path renders the dbt models' own SQL for one batch; provenance, not a lock, guards dbt's swap; the fresh rollup serves only what dbt has not built
+
+**Status:** accepted · **Date:** 2026-09-14 · **Plan step:** E.1b · **Features:** F-202
+Closes the sentence [ADR-044](#adr-044) left open ("an upload is visible in stats without a dbt
+run"). Constrained by [ADR-019](#adr-019) (the incremental gate is the chain's spine) and
+[ADR-003](#adr-003) (dbt owns the definitions). Composes with [ADR-036](#adr-036) (sharding).
+
+### The decision
+
+1. **The hot path is the dbt models, rendered a second time.** `scripts/hot_path_sql.py` renders
+   `macros/hand_arrays.sql`, `macros/decision_state.sql`, `models/marts/player_hands.sql` and
+   `models/intermediate/int_board_by_street.sql` with Jinja, exactly as dbt does, with two stubs:
+   `dirty_partitions(column)` becomes *"this tenant, this batch stamp, these partitions"*, and
+   `ref('int_board_by_street')` becomes that model inlined, because the just-ingested hands are not
+   in the intermediate table yet. `make gen` writes the result to `ch/hot_path/{decisions,
+   player_hands}.sql` and `make gen-check` fails if it drifts. The derivation is written once, in
+   the dbt macros; nothing about a decision is expressed twice.
+2. **A batch is identified by its stamp, not by its hand ids.** `parsed_at` is stamped once per
+   ingest batch (ADR-044 relies on that already), flows into every staging view as
+   `src_parsed_at`, and is the one column every call site of the gate has in the same form —
+   `hand_uid` is the hex string in staging and `FixedString(16)` after `hand_arrays()`, so a
+   predicate on it would have to change shape by call site. The batch's partitions are passed
+   too, for the same pruning the gate gets: `staging.stg_hands FINAL` filtered by stamp alone is
+   **1,116 ms** on the founder's 9M-hand tenant; with the partition, **3.8 ms**.
+3. **Every fact row says who wrote it.** `marts.decisions` and `marts.player_hands` gain a last
+   column `built_by` ∈ {`dbt`, `hot`} (`macros/provenance.sql`; `'hot'` in the hot-path render).
+   That column is the race guard — see below — and it costs nothing at query time.
+4. **The hot path is idempotent by an anti-join, and off for bulk paths.** The INSERT skips a
+   hand already present in the target for the batch's partitions, so a Kafka redelivery inserts
+   nothing and fires no view twice. `hand_sink(hot_path=False)` is what `scripts/import_archive.py`
+   and `scripts/reparse.py` build: a 9M-hand import would otherwise run the derivation 1,800 times
+   for hands that `scripts/backfill.py` is about to derive anyway, and neither path needs
+   second-fresh stats.
+5. **Reads take each (tenant, dataset, day) from exactly one rollup.** `stats/query.py` reads the
+   rollup as a UNION ALL of `marts.stats_daily` for the slices dbt has built and
+   `marts.stats_daily_mv` for the slices where the view holds a newer stamp than dbt's rollup —
+   the read-side twin of the dbt gate, over the two rollups only. Nothing is ever counted from
+   both. The router is unchanged.
+6. **`marts.stats_daily_mv.src_parsed_at` becomes `SimpleAggregateFunction(max, DateTime64)`**
+   (migration `0012`), so the stamp survives a `SummingMergeTree` merge as the maximum. ADR-044
+   measured the plain column keeping the *first-inserted* value; verified again here (5+7 summed
+   to 12 with the January stamp kept; with the aggregate type the March stamp is kept).
+7. **Provisioning creates the views** (`api/provision.py` runs `scripts.mv_sync --create`, now
+   idempotent), so a fresh environment is never read through a union with an empty half. The
+   worker invalidates the tenant's report cache after a batch, without which "fresher" would be
+   invisible for `stats_cache_ttl_seconds` (300 s).
+
+### Question 1 — the lost-update race, stated precisely, and why the answer is a column
+
+dbt's `insert_overwrite` builds a temp table at *t0* and swaps the partition at *t1*; the two fact
+tables are siblings and are built one after the other, so there are two such windows. The hot path
+inserts a batch *B* (stamp *tB*) into `decisions` at *tH* and into `player_hands* at *tH'*. The
+gate then asks whether `max(core.hands.parsed_at)` for the day exceeds `max(src_parsed_at)` in
+`stats_daily`, per partition.
+
+The per-partition watermark already makes an *all-or-nothing* loss self-healing: if the swap wipes
+*B* from both tables, the rollup's stamp for the day stays below *tB* and the next pass rebuilds it.
+The silent case is a **half** loss, and there are three of them:
+
+| | `decisions` | `player_hands` | rollup built at t2 sees | old gate |
+|---|---|---|---|---|
+| A: t1 < tH, tH' < t1' | keeps *B* | wiped | *B*'s decision half, stamp *tB* | **clean** — hand-grain half never built |
+| B: tH < t1, t1' < tH' | wiped | keeps *B* | *B*'s hand half, stamp *tB* | **clean** — decision half never built |
+| C: t1 < tH < t2 < tH' | keeps *B* | keeps *B* | *B*'s decision half only | **clean** — rollup permanently half |
+
+In every row the rollup's per-day maximum carries *tB* because one branch contributed it, the
+strict `>` reads *tB > tB* as false, and nothing is red. There is a fourth: the anti-join and the
+insert are one statement but not atomic against a concurrent `REPLACE PARTITION`, so a swap that
+lands between them leaves *B* **twice** in a fact table — dbt's rows and the hot rows — with the
+gate clean.
+
+Two guards were considered and rejected. *A lock* (dbt's `on-run-start` hook, honoured by the
+worker) has a check-then-insert window of its own and turns a dbt crash into a stalled worker.
+*Anchoring the gate on the fact tables too* — `anchors: [decisions, player_hands, stats_daily]`,
+which `anchor_built()` already supports — catches A and B but **not C** (both facts carry *tB*),
+and costs **320 ms + 258 ms** per gate evaluation on the real corpus (`max(src_parsed_at)` per
+partition over 73.7M and 54.6M rows; the rollup's is 27 ms).
+
+The guard is provenance. Hot-path rows are `built_by = 'hot'`; dbt-built rows are `'dbt'`; the
+generated rollup model aggregates `built_by = 'dbt'` rows only; and the gate gains a second clause:
+**a partition holding any `'hot'` row is dirty**. Re-running the table:
+
+- A, B, C: a hot row survives somewhere, so the partition is dirty regardless of stamps, and the
+  rollup's stamp comes from dbt-derived rows only, so it never reads *tB* until dbt has derived
+  *B* itself. The next pass replaces all three partitions and the hot rows with them.
+- The duplicate: the partition holds hot rows → dirty → the next `REPLACE PARTITION` removes them.
+- All-wiped, and the ordinary case (hot rows, dbt idle): dirty by stamp, as before.
+- A partition dbt has built from a snapshot that included *B*, after which the hot rows were
+  swapped away: clean, correct, and the view target already holds *B* once.
+
+So the invariant is *"a partition reads clean only when everything in it was derived by dbt from a
+snapshot that included every hand in it"*, which is what ADR-019 always meant. The clause costs
+one scan of a `LowCardinality` column per fact table (**69 ms** measured on 73.7M rows with a
+stand-in column); the hot path never writes `stats_daily`, so it still cannot advance the anchor.
+On the real tables the column is added with `DEFAULT 'dbt'`, which `REPLACE PARTITION` from a
+temp table without the default accepts (verified live); the default is kept, because removing it
+makes rows in old parts read `''`.
+
+**Upgrading an environment whose marts predate this ADR** — the real database was upgraded this way
+on 2026-09-15; a fresh one needs none of it, because dbt creates both columns. In this order, once,
+with nothing ingesting:
+
+```
+cd platform && make ch-migrate                    # 0012: the view target, aggregate-max watermark
+# then, in clickhouse-client -- metadata only, existing rows read 'dbt':
+ALTER TABLE marts.decisions    ADD COLUMN IF NOT EXISTS built_by LowCardinality(String) DEFAULT 'dbt' AFTER src_parsed_at;
+ALTER TABLE marts.player_hands ADD COLUMN IF NOT EXISTS built_by LowCardinality(String) DEFAULT 'dbt' AFTER src_parsed_at;
+uv run python -m scripts.mv_sync --create         # boundary, views, backfill
+uv run python -m scripts.mv_sync --verify         # must report 0 / 0
+```
+
+Nothing here needs a backup: 0012 drops only `marts.stats_daily_mv`, which is derived from the fact
+tables and rebuilt by `--create`, and the two `ADD COLUMN`s change no stored row.
+
+### Question 2 — where the union lives
+
+The E.1b step asked whether reads union the view in the router or behind a `Distributed`/`merge()`
+table. Neither. `merge()` and a `Merge` engine are plain unions and would count a hand twice
+(ADR-044 made `stats_daily_mv` a *complete* rollup, so it overlaps `stats_daily` almost entirely).
+A database-side `VIEW` holding the disjoint union cannot be tenant-scoped: the dirty set is a
+subquery, predicates are not pushed into it, and a per-tenant user (ADR-043) is granted `marts.*`
+only — which also rules out reading `core.hands` for the signal at all. A parameterized view would
+work on 25.8 but needs the tenant as a literal, which `stats/query.py`'s second rule forbids.
+
+So the union is built by the query builder, as the rollup's FROM expression, one level below the
+router: the router still picks the logical table `stats_daily`; how that table is *read* is the
+builder's. It composes with ADR-036 unchanged — a `Distributed` over each rollup is the `PHYSICAL`
+swap it already names, and the dirty set is per shard because dbt and its anchor are per shard.
+
+The dirty set is one scalar, computed once per query:
+
+    WITH (SELECT groupArray((dataset, day)) FROM <view's max stamp per (dataset, day)>
+          LEFT JOIN <rollup's max stamp per (dataset, day)> ... WHERE fresh_max > built_max) AS dirty
+    SELECT ... FROM (
+        SELECT * EXCEPT (src_parsed_at) FROM marts.stats_daily    AS r WHERE r.user_id = {tenant} AND NOT has(dirty, (r.dataset, r.day))
+        UNION ALL
+        SELECT * EXCEPT (src_parsed_at) FROM marts.stats_daily_mv AS f WHERE f.user_id = {tenant} AND     has(dirty, (f.dataset, f.day))
+    ) AS s WHERE s.user_id = {tenant} AND s.dataset = {dataset} ...
+
+`has()` rather than `IN`: ClickHouse evaluates an identical `IN (subquery)` twice in one query
+(measured: 12M rows read for a 3M table) and refuses `NOT IN <scalar alias>`; the scalar is cached
+and `has()` takes it as a constant. The outer date range is pushed into both branches, so partition
+pruning is what it was (EXPLAIN: 10 of 180 parts and 6 of 91). Per (dataset, day) rather than per
+day, so a hero upload never routes the same day's *population* slice through the view target,
+whose population slice is only as fresh as its last backfill (bulk imports run without the hot
+path). Cost on the pool tenant: the two per-day maxima are **38 ms** each; a hero tenant's are
+milliseconds.
+
+### What this does not deliver, stated plainly
+
+- **A re-parse leaves the view target stale for the days it touches** — a materialized view is
+  insert-only and never sees dbt's `REPLACE PARTITION`. Reads are bounded, not wrong: a stale
+  (dataset, day) is served from the view only while it is dirty, and from dbt's rollup as soon as
+  the pass lands. The repair is `scripts/mv_sync.py --recreate` after a re-parse or a bulk
+  import, once `scripts/backfill.py` has caught up, and `--verify` says whether it is needed.
+- **One residual double count.** A hot-path insert swapped away by dbt *and* then redelivered by
+  Kafka inserts the batch again (the anti-join sees an empty target) and the view counts it a
+  second time. Two independent rare events; bounded the same way, repaired the same way. A claim
+  ledger keyed by `(user_id, hand_uid)` would close it and was left out as a table for a race that
+  needs two failures at once.
+- **A hand ingested while dbt is mid-pass is fresh only after the next pass** in the A/B/C
+  interleavings: the view has it, but the day is dirty by provenance, and a dirty day is served
+  from the view — so in fact it *is* visible; what waits for the next pass is the fact tables'
+  completeness, which only uncached reports see.
+
+### Alternatives
+
+*Read `stats_daily_mv` alone* — simplest, but every re-parse would silently and permanently move
+production numbers away from dbt's, and ADR-003 says dbt owns the definitions; the disjoint union
+keeps dbt's rollup authoritative wherever it exists. *An increment table dropped on each dbt
+build* — contradicts ADR-044's complete-rollup amendment and reintroduces the same race on the
+drop. *`dbt compile` for the hot-path SQL* — needs the dbt venv and a live connection inside
+`make gen`, which CI does not have. *A `hand_uid IN (...)` batch predicate* — changes type across
+call sites (item 2). *`stats_daily_mv.src_parsed_at` in the ORDER BY* — exact too, but grows a row
+per batch per group and breaks the "sort key = group keys" contract the tests pin.
+
+### Two things implementation found
+
+**Planning, not execution, is the hot path's cost.** The decisions derivation for a two-hand
+batch took 3.2 s, of which `EXPLAIN` alone -- no rows read -- was 3,240 ms under ClickHouse
+25.8's analyzer and 182 ms under the legacy one (`enable_analyzer = 0`); execution is ~170 ms
+either way. The cost is planning `decision_state()`'s hundred-odd lambda expressions, which dbt
+pays once per pass and never notices and which the worker would pay once per batch. So the
+decisions statement runs with `enable_analyzer = 0` (`ingestion/hot_path.py: SETTINGS`), the
+player_hands statement on the default: it plans in under 200 ms, and the legacy analyzer refuses
+its `ARRAY JOIN ... AS seat` beside `seat AS seat`. A speed setting, not a semantic one -- the
+integration test compares the rows with dbt's, which plans with the server default. Measured
+after: 246 ms and 320 ms for the two statements on the test corpus.
+
+**The stamp predicate is exact only for the batch the loader has just written -- which is the
+only batch the hot path ever derives.** Re-deriving the founder's newest hero batch (647 hands,
+5,198 decisions) from the real staging views matched dbt's rows on 60 of 78 columns and differed
+on every seat attribute, because only 3,519 of that batch's 3,882 `core.hand_players` rows still
+carry the batch stamp: the E.5 equity backfill of 2026-09-11 re-stamped the rest. So the hot
+path is not a repair tool for old batches, and the loader's invariant that the four core tables
+share one stamp (`tests/test_loader_rows.py`) is what it rests on. Bound the same way, a Kafka
+redelivery re-stamps the core rows while the hot rows keep the stamp they were derived under;
+the newer stamp is exactly what makes the partition dirty, and dbt's rebuild carries it.
+
+**The `stats_daily_mv` created by 0011 is dropped by 0012**, views first. On the real database
+it was empty and had no views; on any other, `api/provision.py` re-creates and re-backfills
+through `--create`, which is now idempotent (present views are left alone) so provisioning can
+call it every time.
+
+### Consequences
+
+Two new generated files, one new migration, one new dependency (`jinja2`, BSD-3), `make gen`
+runs a third generator. `tests/test_hot_path_sql.py` pins the render without a database;
+`tests/integration/test_hot_path.py` proves a hand ingested through the worker is in a report
+with no dbt run, that the hot-path rows equal dbt's row for row (`EXCEPT` both ways on the same
+hands), that a partition with a hot row is dirty when the stamps say clean, and that the report is
+byte-identical after dbt. `tests/integration/test_mv_reconciliation.py` passes unchanged in its
+assertions; its fixture now calls `recreate`, so the backfill path is still exercised with data.
+On the real database: `0012` applied, `built_by` added to both fact tables, the views created and
+the target backfilled over 160 partitions, and `--verify` reports zero disagreement both ways.
+
+---
+
+## ADR-048 — A tag filter is an id list, not a registry dimension; a note lives in Postgres on a hand that lives in ClickHouse, and ownership is decided at the edge
+
+**Date:** 2026-09-14 · **Status:** accepted · **Plan step:** D.7b · **Supersedes:** nothing
+
+### Context
+
+D.7b is the third clause of D.7 — "tags/notes" — split out on 2026-09-11 (ADR-041) because it is the
+one clause that existed nowhere in the stack and needs a migration. Audited before building, as the
+last four D steps had to be: unlike D.3, D.6, D.7 and D.6b, **it really was unbuilt** — no table, no
+route, no client, no panel; the only hits for "note" under `api/` were the range library's
+per-version note and the analyzer's step takeaways, neither of which is a note *on a hand*. The plan
+left two things to settle before building, and the first of them is the decision this ADR exists
+for.
+
+Two facts shape everything here. **A hand is a ClickHouse row and stays one** — `core.hands`, keyed
+`(user_id, hand_uid)`, rebuilt from raw text whenever the parser improves. **A note is a Postgres
+row**, by the dividing line `api/models_pg.py` states in as many words ("*a note someone typed is
+Postgres*"): it is edited one row at a time, which is the question ClickHouse hates. So the two
+halves of "a note on a hand" live in different databases, joined by nothing but the 32-character
+hex `hand_uid` every URL already carries.
+
+### Decisions
+
+1. **The tag filter is an id-list intersection, carried as `?tag=`, and the stat registry does not
+   learn the word "tag".** A registry dimension is a *column on a ClickHouse mart*: the compiler
+   renders it into SQL, the rollup generator sums over it, `make gen` writes it into the dbt
+   models, the builder offers it in every report and group-by. A tag is none of those things — it
+   is a human-edited Postgres row that changes between two reports — so a `tag` dimension would
+   either need the compiler to reach into Postgres mid-render (a cross-store join inside the one
+   module that must stay pure), or need every tag edit copied into ClickHouse (single-row updates
+   into a MergeTree, and a re-parse would drop them), and it would surface as a group-by that no
+   mart can answer. Instead the hands router looks the tag up in Postgres and hands the matching
+   `hand_uid`s to the ClickHouse query as a restriction: `hand_uid IN {only}` on `core.hands` for
+   the two plain lists, and on the decision mart — whose key is the 16 raw bytes — a subquery,
+   `s.hand_uid IN (SELECT toFixedString(unhex(x), 16) FROM (SELECT arrayJoin({only_hand_uids}) AS
+   x))`. **That form was the browser's correction, not the first draft's:** the first version
+   wrote `IN arrayMap(x -> unhex(x), {only_hand_uids})`, which the unit test accepted and the real
+   server refused with `UNSUPPORTED_METHOD` — ClickHouse's `IN` takes a constant or a table
+   expression, and a function over a bound array is neither — so `/hands?tag=bluff&f=street:eq:flop`
+   answered 500 while the plain lists, whose `IN {only}` *is* a constant, worked. The scenario's own
+   check had passed on the `OPTIONS` preflight; it now asserts the `POST`. **The search document is
+   untouched:**
+   `only_hand_uids` is a keyword on `hand_search_sql`, deliberately *not* a field of `HandSearch`,
+   because that document is a situation and an id list is not one. A tag nobody has used answers
+   `[]` without asking ClickHouse at all. The list is bounded by the user's own tagged hands and
+   travels as a bound array parameter, never interpolated.
+
+2. **Ownership is decided at the HTTP edge, against ClickHouse, with the same 404 as the hand
+   itself.** There is no foreign key from `hand_notes` to the hand, because the hand is in another
+   database. So every route under `/v1/hands/{uid}/` hangs off one dependency, `owned_hand`, which
+   asks `core.hands` whether this tenant has this `hand_uid` (a point lookup on the sort key) and
+   answers "Hand not found" otherwise — for another tenant's hand and for a hand that does not
+   exist alike, because the response must not reveal that a hand exists at all, which is the rule
+   `GET /v1/hands/{uid}` already keeps. Reads get the same check as writes; a special case for
+   reads would have been one more rule to remember for the cost of one point query. The pool's
+   hands carry the founder's tenant (ADR-036's finding), so they can be annotated too.
+
+3. **A tag has one spelling, decided in one place.** `normalize_tag` — trimmed, lower-cased, inner
+   whitespace collapsed, refused in words when nothing is left or more than forty characters is —
+   is applied on every road a tag travels: the `POST` body, the `DELETE` path and the `?tag=`
+   query. So `Bluff`, ` bluff ` and `BLUFF` are one row, `?tag=Bluff` finds the hands tagged
+   `bluff`, and the chip on the hand reads as the server spells it. The client keeps only a mirror
+   of the rule to grey the Add button for a tag already on the hand; the server stays the authority.
+
+4. **The cap is on the vocabulary, not on the hand.** `MAX_DISTINCT_TAGS = 500` per user: the
+   501st *distinct* tag is refused with a sentence, while a tag already in use goes on any number
+   of hands. Five hundred is already past what a tag list can be browsed at; a per-hand cap would
+   have been a second constant guarding a case the first one already bounds.
+
+5. **A blank note removes the row.** A note that says nothing is not a note, and an empty row would
+   list the hand as annotated. `PUT` with whitespace deletes and answers the same shape as a hand
+   never written on (`body: ""`, `updated_at: null`), so the panel needs no separate delete.
+
+6. **`HandSummary` carries `tags`, attached by the routers.** Every list row shows its tags, so the
+   three list routes (`GET /v1/hands`, `POST /v1/hands/search`, `GET /v1/pool/hands`) decorate their
+   rows in one Postgres query over the page's `hand_uid`s. The field defaults to an empty list, so
+   a row read straight off ClickHouse (`summary_from_row`, unchanged) is still valid.
+
+7. **`player_notes` and colour labels (F-508) wait.** They key on `player_key`, not `hand_uid`;
+   their surface is the pool's players page, not the replayer; and nothing in this step consumes
+   them. Bundling a third table into this migration to save a later one would have been a table
+   with no reader — they get their own step and their own migration when the players page wants
+   them.
+
+8. **The panel takes its API as a prop and lives on the page, not in `HandStudy`.** A pasted hand
+   has no `hand_uid` and nothing on the server to hang a note on (ADR-029), so `pages/hands/[id].vue`
+   mounts `HandNotes` beside `HandStudy` and `pages/hands/paste.vue` does not. The API arrives as a
+   prop, the way `poker-ui`'s components take their services (ADR-027), which is what lets the panel
+   be the **first app component mounted under Vitest** — with an in-memory fake, no Nuxt — and that
+   needed one line of shared configuration: the `~` alias in `web/vitest.config.ts`. The note
+   autosaves 800 ms after typing stops and is flushed on blur and on leaving the page; **the last
+   text typed is the text saved** — a save already in flight when more typing arrives is not
+   reported as "saved", and another follows once it lands — and the box stays disabled until the
+   server's note has loaded, so an autosave can never overwrite a note with the empty draft.
+
+9. **The Postgres-only tests live in `tests/postgres/`, with ownership faked, and the reason is
+   the other lane.** `tests/integration/`'s session fixture drops and re-provisions the ClickHouse
+   `test_` databases and rebuilds the empty marts, because its tests ingest hands — and another
+   lane owned that namespace throughout this session. A suite whose every query is Postgres can
+   run beside it against any database ending in `_test`, so `tests/postgres/conftest.py` provisions
+   Postgres alone, and its guard is *stricter* about ClickHouse than the integration one: the prefix
+   must be **set** to anything but the empty string, so a route reached by mistake fails on an
+   unknown database instead of reading the founder's real hands. `owned_hand` is overridden through
+   `app.dependency_overrides` with a registry of who owns what; the unfaked path — a hand really
+   ingested, another tenant really refused by `core.hands`, a tag filter really compiled against the
+   decision mart — is `tests/integration/test_hand_notes.py`, which this lane could not run.
+
+### What the tests found before a browser did
+
+**The honest 500-request loop cannot pass, and that is E.3 working.** The first version of the
+501st-tag test added five hundred tags through the API and was refused at request 300 — not by the
+cap, by `TENANT_REQUESTS_PER_MINUTE` in `api/ratelimit.py`, with "Too many requests for this
+account". The same loop would have failed under `make test-all` for a reason unrelated to the
+feature, which is exactly the shape of test the last merge session warned about. Both tests now seed
+the first 499 tags as rows through the store and send the 500th and the 501st over HTTP, so the cap
+is still exercised at its literal boundary and the budget is left to its own tests.
+
+### What the adversarial review found, and what was done with it
+
+Six reviewers with distinct lenses read the slice; their verifiers all died on a session limit, so
+the seventeen raw findings were triaged by hand rather than by vote. **Four were real and are
+fixed, each with a test in `tests/postgres/`:** (1) a tag containing `/` — `3-bet/4-bet` is a
+natural one — could be added but never removed, because the client sends it as `%2F`, the server
+decodes the path before routing, and a plain `{tag}` segment then never matches; the route is
+`{tag:path}` now, and `50%25%20pot` and `why%3F` are exercised beside it. (2) The note's first
+save was read-then-insert, so two first saves of one hand at once (two tabs) would both insert and
+the second would 500 on the unique constraint; `put_note` is an `ON CONFLICT DO UPDATE` upsert, and
+`add_tag` an `ON CONFLICT DO NOTHING`, so the router's `IntegrityError` handling went away with it.
+(3) A NUL byte in a note or a tag reached Postgres, which refuses it, as a 500; it is refused at
+the pydantic layer in words. (4) The `extra="forbid"` test for the note body passed vacuously —
+`{"Body": "x"}` fails on the *missing* `body` first — and now sends both spellings. **Four more were
+worth doing:** the two client-side length limits are named constants mirrored from the server; the
+note box and the tag input carry `aria-label`s and the save status is a polite live region; and the
+Postgres-only conftest's Redis guard parses the URL's path, so a URL naming *no* database (which
+Redis reads as 0) is refused too — the integration conftest has the same gap and was left alone as
+another lane's file. **One is accepted rather than fixed:** the 500-distinct-tags cap is checked
+read-then-write and concurrent adds of *different* new tags can overshoot it by their number; it
+bounds a vocabulary, not an account, and an advisory lock per request is not worth that. **Two were
+already fixed by the time the review returned** (the `arrayMap` form; the plan line still reading
+"Not started").
+
+### Consequences
+
+- The registry's 80 dimensions are unchanged, the compiler knows nothing of tags, and `make gen`
+  output is byte-identical (`gen-check` green).
+- A tag filter costs one Postgres query plus an `IN` list the size of the user's tagged hands. At
+  the corpus's scale (19,802 hero hands) that is trivially bounded; if a user ever tags most of a
+  million hands the list becomes a temp-table question, which is a change inside `restrict_to` and
+  the two `hand_query` functions and nowhere else.
+- `HandSummary` gained a field, so every producer of a list row carries tags by construction; a
+  future list route that forgets `attach_tags` shows empty chips rather than wrong ones.
+- Re-parsing the corpus loses nothing written on it: `hand_uid` is derived from the hand's own
+  identity, and the note never lived in the table that gets rebuilt.
+
+---
+
+## ADR-049 — The cohort form is a small vocabulary of its own, offers what the registry marks cached, and shows a refusal in the server's words
+
+**Status:** accepted · 2026-09-14 · plan D.6b (amended before it was built)
+
+**Context.** D.6b is D.6's write half, split out by ADR-046 because it writes rows to Postgres and
+that lane was read-only. Its wording said `app/pool/stats.ts` "already types all six routes".
+Audited against the code first, as D.3, D.6 and D.7 were: the server side was complete and needed
+nothing — the six routes in `api/routers/pool.py`, the `cohorts` table with `uq_cohorts_user_name`
+(migration `8b2f4c6d1e3a`, in the chain to head), the 409 sentence, the 400 at create for a rule on
+an uncached stat (`stats/query.py#_cached_stat`), the 422 list for an eleventh rule
+(`MAX_COHORT_RULES`) — each measured over HTTP before a line of the form was written. The client
+typed the **shapes** (`PoolCohort`, `CohortSpec`) and bound only the three reads; no `POST`, `PUT`
+or `DELETE` call existed. So the step became web-only — `app/pool/**`, `components/pool/**`,
+`pages/pool/**` — one of three parallel lanes, with no migration and no Python.
+
+**Decisions.**
+
+1. **The rule builder is a vocabulary of its own, not `ClauseRow`.** `app/pool/rules.ts` holds
+   it: four comparisons, a stat, a number, at most ten rules. A cohort rule is a smaller language
+   than a filter clause and is refused by different code for different reasons (`stats/request.py`
+   for the shape, `stats/query.py` for the stat); teaching the 80-dimension builder that dialect
+   would have meant hiding most of what it knows. The logic is framework-free and unit-tested, the
+   `.vue` only binds — the pattern every `app/<area>/` already follows.
+
+2. **Which stats may define a cohort is the registry's to say, and the form shows both answers.**
+   `Stat.cached` was already on the wire. The picker offers the cached stats (57 today) and lists
+   the uncached ones (8: the aggression factors and frequencies) **greyed** under "Not cached —
+   cannot define a cohort", rather than hiding them: a person then learns *why* aggression factor is
+   not on offer instead of wondering whether it exists. No list of codes lives in the client; when
+   the registry changes, the picker changes with it.
+
+3. **A refused write is shown in the server's sentence; the client checks only the shape.**
+   `describeCohortError` passes a 409 and a 400 detail through verbatim, and reads a 422's *list*
+   item by item ("criteria.rules: List should have at most 10 items after validation, not 11") —
+   the one shape `describeApiError` cannot read and would have reported as a bare status. The
+   client refuses an empty name, a value that is not a number, and an eleventh rule ("Add a rule"
+   is disabled at ten and says why) — but it does **not** judge whether a stat is cached. Two
+   authorities for one rule would drift; the server's is the one that counts, and it was measured:
+   a rule forced onto `af_flop` by un-greying the option earned exactly
+   `cohort rule on 'af_flop': only cached stats can define a cohort`, and nothing was saved.
+
+4. **The list is re-read after every write; the form's draft never becomes the page's truth.**
+   `toSpec` builds a new document (the plan's "assign a new object, never push into `.rules`"),
+   and after a `POST`, `PUT` or `DELETE` the page calls `load()` again, so what is shown is what is
+   stored — `25` comes back as `25.0` and is described as the server has it.
+
+5. **"Save as mine" is the answer to the shipped cohort's missing member list.** ADR-046 recorded
+   that a shipped cohort has no membership list and said so on the page. The copy button opens the
+   form pre-filled with the preset's label and rules and saves a cohort of the founder's own, which
+   does list them (7,711 players for Regs at verification). The shipped rules are still never
+   retyped in the client — they arrive from `GET /v1/pool/presets` and pass through.
+
+6. **Delete asks first, in the browser's own dialog, and says what a stale link will do.**
+   `window.confirm`, as `/ranges/[id]` already does. The sentence says a `/pool?cohort=<id>` link
+   that named the cohort will measure the whole field instead — which is exactly what that page's
+   `labelOf()` does with a key it cannot find. Verified both ways: declining sends nothing.
+
+**Verification.** A headless Chrome of its own (the shared MCP profile was another lane's), the app
+on `:3006`, a throwaway API on `:8806` over a scratch Postgres `poker_d6b_verify` migrated to head,
+and the real ClickHouse read-only — the first account registered there is tenant 1 and so sees the
+real 9M-hand pool while writing nothing to the real Postgres. 37/37 checks; another tenant's
+`GET`/`PUT`/`DELETE` on the id answered 404 over HTTP with a second throwaway account. The database
+was dropped afterwards.
+
+**The review changed two of these before the tick, and the way they were wrong is worth keeping.**
+An adversarial review ran before the step was ticked (five lenses; two of them and every refuter hit
+the session limit, so the seven findings were judged by hand against the code). Two were real
+defects in the page: editing a cohort whose "Who is in it" panel was open left the panel showing the
+*pre-edit* size and members under the words "right now" — the list was re-read, the panel was not —
+and the write and its read-back shared one `try`, so a `poolPresets()` failure *after* the server
+had accepted the row would have shown as a refused save with the form still open, and the next
+Save would have earned the real 409 for a cohort the person believed was never saved. Both were
+invisible to the first browser run, which edited with the panel closed and never lost the list.
+Now the panel is fetched again after an edit of its cohort (measured: 1,444 → 3,563 players as the
+threshold moved) and a failed reload is its own sentence. Three tests were also tautological under
+mutation — a `MAX_RULES` of 11 passed every test because the tests were built from the constant —
+and now pin the literals the server holds.
+
+**Consequences.** A saved cohort whose stat later stops being cached (a registry change) would open
+in the form with its greyed option selected and be refused on save with the server's sentence —
+correct, and unverified only because it cannot happen from the UI today; a stat the registry no
+longer names at all is shown as such in the select rather than as its first option.
+`GET /v1/pool/cohorts/{id}` is still fetched only when "Who is in it" opens. **Follow-up outside
+this lane:** `validationMessages` in `pool/rules.ts` is the app's only reader of a FastAPI 422 list
+and has nothing cohort-specific in it — it belongs beside `errorDetail` in `auth/api.ts`, with
+`describeApiError` reading a list, after which `describeCohortError` is unnecessary; left where it
+is because `auth/api.ts` was not this lane's file. The lane's gate, `make web-check`, was **green
+over the combined tree** at the end of the session (846 tests / 79 files); its first run had been
+red on one line outside the lane — `app/hands/notes.ts:92`, lane B's `createAutosave` at 47 lines
+against the 40-line rule — which that lane fixed before the final run.

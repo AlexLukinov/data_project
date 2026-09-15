@@ -6,7 +6,13 @@
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
 **Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; CI run pending a push**
-**Last updated:** 2026-09-12 (session 18, **the round-3 merge** — four parallel lanes (E.3, E.1, D.6, D.4) reconciled and committed as `9d72503`, `0247f2d`, `61dff34`, `fcff2af`. **E.3 ticked**; E.1 deliberately left `[ ]` pending E.1b. `make check` green (1,552) · `make web-check` green (806 tests / 76 files) · `make seed && make test-all` **1,655 passed, 6 skipped** — green only after two fixes to E.3, the lane whose gate had never been run.)
+**Last updated:** 2026-09-15 (session 19, **the round-4 merge** — E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a` and the F.12 audit `7f3e2bf` reconciled and committed. **D.7b ticked** after its six never-run integration tests passed by name; E.1 and E.1b ticked by their lane. `make check` green · `make web-check` green (846 / 79 files) · `make seed && make test-all` **1,715 passed, 6 skipped**. Found: the real Postgres is four create-only migrations behind head.)
+
+**Previously:** 2026-09-14/15 (**round 4**, four parallel lanes: **E.1b** the hot path, owned the stack, applied 0012 and `built_by` to the real database and verified 0 / 0; **D.7b** notes and tags, owned the Alembic head; **D.6b** the cohort form, web only; the **F.12 audit**, docs only.)
+
+**Previously:** 2026-09-14 (**D.6b** — cohort create / edit / copy / delete, D.6's write half; ADR-049. **Web workspace only** (`app/pool/**`, `components/pool/**`, `pages/pool/**`), one of three parallel lanes (A owned the stack, B `app/hands/**`). **Amended before it was built:** the backend was already complete — six routes, the `cohorts` table, the 409/400/422 sentences, all confirmed and untouched — and the client bound only the three reads, so the step shrank to the client's write half, a rule builder and the form. **Done, reviewed adversarially, verified 37/37 in a headless Chrome of its own against a scratch Postgres (dropped) and the real pool read-only, ticked, uncommitted.** Gate: **`make web-check` green over the combined tree** — typecheck clean, lint clean, Vitest 846 / 79 files, licence unchanged.)
+
+**Previously:** 2026-09-12 (session 18, **the round-3 merge** — four parallel lanes (E.3, E.1, D.6, D.4) reconciled and committed as `9d72503`, `0247f2d`, `61dff34`, `fcff2af`. **E.3 ticked**; E.1 deliberately left `[ ]` pending E.1b. `make check` green (1,552) · `make web-check` green (806 tests / 76 files) · `make seed && make test-all` **1,655 passed, 6 skipped** — green only after two fixes to E.3, the lane whose gate had never been run.)
 
 **Previously:** 2026-09-12 (session 16, **D.4** — **My game**: the founder's own play on one
 page. Eight KPI tiles carrying E.2's confidence intervals, a four-line winnings curve on which
@@ -34,79 +40,93 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ First: [POKER_PLAN.md](POKER_PLAN.md) **E.1b** — make the materialized view actually serve a read
+### ▶ First: [POKER_PLAN.md](POKER_PLAN.md) **D.8** — upload & accounts
 
-E.1 built the views and proved they reconcile with a full dbt rebuild. Nothing reads them yet:
-`platform/stats/router.py` still picks `stats_daily` alone, so an upload is **not** one second
-fresher than it was before. E.1b is the step that closes that, and it is why **E.1 is still `[ ]`**
-— by its own lane's judgement, not for a missing test.
+E.1b landed on 2026-09-15 (ADR-047): an upload is in stats seconds after the worker stores it, on the real
+stack, and E.1 is ticked with it. D.8's "Done means" — *a real file uploaded through the UI produces stats
+without manual steps* — is now reachable: `DropZone` with progress via `/v1/uploads/{id}` polling, the
+dataset choice and the poker accounts, over the ingestion that already exists. Needs the stack and real
+ingestion; `make up && make seed`, then `make api` and `make web`.
+
+**Before D.8 touches the real stack — the real Postgres is four migrations behind.** It is at
+`8b2f4c6d1e3a` (cohorts, C.7); head is `f7a8b9c0d1e2`. The four missing ones only create tables —
+`ranges` + `range_versions` (F.6), `analyses` (F.9), `heuristics` (F.11), `hand_notes` + `hand_tags`
+(D.7b) — so against the founder's own database the range library, the analyzer, the heuristic log and
+hand notes would all fail on a missing table. Every lane since F.6 verified against a scratch Postgres,
+which is why nothing noticed. One command, additive, not run by the merge because it writes to the
+founder's database:
 
 ```
-cd platform && make up                       # the stack
-uv run python -m scripts.mv_sync --status    # what exists, what each view covers
+cd platform && make pg-migrate          # alembic upgrade head against POSTGRES_DB from .env
 ```
 
-**Done looks like:** a hand ingested through the worker appears in a `/v1/reports/run` answer
-without a dbt run, and `tests/integration/test_mv_reconciliation.py` still passes — the view is a
-*complete* rollup (backfill below the boundary, view above it), so unioning it must not
-double-count. Read ADR-044 first; the boundary-marker ordering is the part that is easy to get
-subtly wrong.
-
-**Then:** **D.8** (upload & accounts — needs the stack and real ingestion) and **D.10**.
+**Two things E.1b leaves for the operator**, both in ADR-047: after a re-parse or a bulk import, once
+`scripts.backfill` has caught up, run `uv run python -m scripts.mv_sync --verify` and, if it reports
+drift, `--recreate`; and `stats_cache_ttl_seconds` no longer bounds freshness for uploads (the worker
+invalidates the tenant's cache), but still does for dbt-only changes. ADR-047 also carries the exact
+upgrade recipe for any environment whose marts predate it.
 
 **Solo-only from here:** **F.12**, **D.9** and **B.5b** each need the tree to themselves. F.12
-touches every page and the glossary; D.9 deletes `api/static/index.html` and the old `/v1/stats*`
-adapters — and now also carries D.4's obligation, because the winnings curve is built on
-`/v1/stats/timeline` and `/v1/reports/run` cannot replace it (the registry has no `day` dimension,
-so a report cannot group by time at all); B.5b is a full `core.*` table rebuild.
+touches every page and the glossary — **its audit is done** (2026-09-14):
+[POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) is the checklist it starts from, §7 the order. D.9 deletes
+`api/static/index.html` and the old `/v1/stats*` adapters — and carries D.4's obligation, because the
+winnings curve is built on `/v1/stats/timeline` and `/v1/reports/run` cannot replace it (the registry
+has no `day` dimension, so a report cannot group by time at all). B.5b is a full `core.*` table
+rebuild. **F.1** stays open on a CI run, which needs a push.
 
-### Round 3 is merged (2026-09-12)
+### Round 4 is merged (2026-09-15)
 
 Four parallel lanes, committed on `feat/range-lab` in this order:
 
 | commit | step |
 |---|---|
-| `9d72503` | **E.3** per-tenant ClickHouse budget + auth rate limits (ADR-043) — **ticked** |
-| `0247f2d` | **E.1** the rollup's MV, generated from one renderer (ADR-044) — still `[ ]`, see above |
-| `61dff34` | **D.6** the pool: population workbench, cohorts, player search (ADR-046) |
-| `fcff2af` | **D.4** My game: KPI tiles, winnings curve, sessions (ADR-045) |
+| `1b11db0` | **E.1b** the hot path — an upload is in stats with no dbt run (ADR-047) — **ticked, and E.1 with it** |
+| `ac1be5e` | **D.7b** notes and tags on a hand, `?tag=` on every hand list (ADR-048) — **ticked on merge** |
+| `3cd1c2a` | **D.6b** cohort create / edit / copy / delete (ADR-049) — ticked by its lane |
+| `7f3e2bf` | the **F.12 audit** — [POKER_UX_AUDIT.md](POKER_UX_AUDIT.md); F.12 itself unstarted |
 
-**E.3 took three runs of `make test-all` to tick, and the first one found a real bug.** All four of
-`test_quotas.py`'s assertions failed, each reading as "the budget did not bite". The cause:
-`client_for()` called `ensure()` on every connection-cache miss, and `ensure()` ends in
-`ALTER USER … SETTINGS PROFILE poker_budget_standard` — so connecting to a tenant put it back on
-the standard tier, and any other budget survived only until the next reconnect. Diagnosed by
-reading `system.settings` on a narrowed connection: the profile held `max_rows_to_read = 10 CONST`
-while the session held `400,000,000`, which is `STANDARD`'s. Fixed by separating the statements
-that *bind* a tenant to a tier from the ones that merely keep it able to connect; a unit test now
-states that invariant directly, because it is invisible from reading either function alone.
+**D.7b was the lane that handed over integration tests it could not run** — the exact shape that
+produced round 3's E.3 bug — so the merge budgeted for a red first run. It was green:
+`make seed && make test-all` **1,715 passed, 6 skipped**, and then `test_hand_notes.py` (6),
+`test_hot_path.py` (5) and `test_mv_reconciliation.py` (3) run again **by name, verbose: 14 of 14**.
+The re-run was not ceremony: 1,715 is also the number E.1b's lane reported, and an unchanged total
+over a shared tree says nothing about which files it counted.
 
-**The second correction was in the test, and is worth knowing generally: a ClickHouse quota does
-not charge a query that reads no table.** `SELECT 1` is folded to a constant and is free — 25 of
-them left the counter at 1, the one the driver's own handshake spends on `system.settings` — so an
-exhaustion loop built on it can never refuse. The probe now reads a mart. Both corrections are
-written up at the end of ADR-043.
+**Gates over the combined tree:** `make check` green (7 contracts kept, size check clean) ·
+`make web-check` green (**846 tests / 79 files**, licence audit unchanged) · `make test-all` as above.
+The three lanes' file lists covered the dirty tree exactly — 75 paths, none claimed twice, none unclaimed.
 
-**Gates over the combined tree:** `make check` green (**1,552** unit tests) · `make web-check`
-green (**806 tests / 76 files**) · `make seed && make test-all` **1,655 passed, 6 skipped**, with
-`test_quotas.py` (5), `test_rate_limits.py` (3) and `test_mv_reconciliation.py` (3) confirmed by
-`--collect-only` **by name**, not inferred from the total.
+**Fixed in the merge:** ADR-047's `ALTER TABLE … ADD COLUMN built_by` on the real fact tables was
+recorded only as prose — the ADR now carries the exact recipe and why it needs no backup (0012 drops
+only a derived table; the `ADD COLUMN`s change no stored row). `test_quotas.py` still said
+**NOT YET RUN** a round after it ran. The ADR bodies had landed 049, 048, 047 and are re-ordered;
+index 49/49 with every anchor valid.
 
-**Housekeeping done in the merge:** the ADR index had drifted nine entries behind its own bodies
-(037, 038, 040–046) and carried two dead anchors — now 46/46. `scratchpad/` and `.claude/` are
-gitignored, which makes "never stage the founder's `.claude/`" mechanical rather than a rule to
-remember.
-
-**Still needs a human:** `d7-verify@example.com` (tenant 2) is on the **real** Postgres from D.7's
-browser verification and there is no delete-account endpoint — remove it by hand. `make test-all`
-dropped `poker_test`, so re-run `make seed` before any test-environment work. Keep
-`platform/.equity-cache.pkl` (3.9 MB, gitignored, 69,364 solved match-ups): deleting it costs ~2 h
-and it makes all-in equity a 34 µs lookup instead of 1.25 s. `platform/backups/` holds the
-dead-letter export (gitignored; restore command in plan §5b) and the table itself is dropped.
+**Still needs a human:** `make pg-migrate` on the real Postgres (above). `d7-verify@example.com`
+(tenant 2) is still on the real Postgres from D.7's browser verification and there is no
+delete-account endpoint — remove it by hand. `make test-all` dropped `poker_test`, so re-run
+`make seed` before any test-environment work. Keep `platform/.equity-cache.pkl` (3.9 MB, gitignored,
+69,364 solved match-ups): deleting it costs ~2 h. `platform/backups/` holds the dead-letter export
+(gitignored; restore command in plan §5b). Follow-up recorded in ADR-049: the 422-list reader in
+`app/pool/rules.ts` belongs in `auth/api.ts`.
 
 The build is **plan-driven**: [POKER_PLAN.md](POKER_PLAN.md) holds the v2 architecture
 (ADR-020…035) and phases A–F as checkbox steps, each with a "Done means". Its `## Status` block
 names the next step. This block only points there.
+
+**Where E.1b stands (2026-09-15): done, verified on the real database, ticked with E.1 — uncommitted** (ADR-047).
+One of four parallel lanes; it owned the Docker stack, both ClickHouse database sets, Postgres, dbt and the
+backfill scripts, and touched no web workspace file and no other lane's code. The two questions the step
+named were settled in writing before code and are the ADR's two sections: the lost-update race is guarded by
+**provenance** (`built_by` on every fact row, the rollup aggregating dbt's rows only, and a gate clause that
+calls a partition with a hot row dirty), and the union lives in the **query builder** below the router, each
+(tenant, dataset, day) from exactly one rollup. The hot path is the dbt models rendered a second time; it
+derives a batch in ~0.25 s + ~0.3 s once the decisions statement is planned by the legacy analyzer (3.2 s
+otherwise, same rows). On the real database: migration 0012, `built_by` on both fact tables, the views
+created and `marts.stats_daily_mv` backfilled over 160 partitions in 100 s (4,955,456 rows), `mv_sync --verify` **0 / 0 over 160 day-partitions**, the hero fingerprint 19,802 hands, VPIP 22.96, PFR 18.85, WTSD 29.92 (n 2,239), −1.374 bb/100 — identical to the read-only check taken before any write.
+Gates: `make check` 1,621 unit tests · `make seed && make test-all` **1,715 passed, 6 skipped**, with
+`test_hot_path.py` (5) and `test_mv_reconciliation.py` (3) confirmed by `--collect-only` by name. The lane's
+file list is `scratchpad/lane-e1b.files`.
 
 **Where E.1 stands (2026-09-12):** **built, verified, uncommitted — and deliberately still
 `[ ]`** (ADR-044). One of four parallel sessions; it owned the Docker stack, ClickHouse, Postgres,
@@ -168,6 +188,33 @@ output** — `--check` was green immediately after it.
 **73,679,949**, `marts.player_hands` **54,562,770** and `marts.stats_daily` **2,484,751** all
 unchanged, and **zero materialized views** — they are created in the test environment only, because
 until E.1b exists they would do nothing there.
+
+**Where F.12's audit stands (2026-09-14):** **written, docs only, nothing to tick.**
+[POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) is the file the solo F.12 session implements from. It
+scores every §13 line with the current state and the file that would change — **2 met** (sensible
+defaults; no modal traps), **9 partial**, **2 missing** (the `?` shortcut overlay; the first-run
+tour and the Examples section) — and settles what the session would otherwise have had to
+rediscover: the glossary's 28 entries cover the six terms the spec names and the metric panels,
+while the app-side vocabulary (the registry's stats and dimensions, pool tiers, hand classes,
+positions, the node shorthand, "the field") reaches the screen as `title=` hovers at best and in
+`LeakTable` not at all; acceptance 13 is met (`npm run license-check` exit 0 over 805 packages,
+no copyleft) and 12 partial (the equity-service adapter and the bundler settings exist only in
+`apps/web`; no README example per component; nothing outside `apps/web` mounts the components).
+The three recorded issues are confirmed and mapped, with one fact the recording lacked: the
+document already carries `lang="en"` and Chrome on this `ru_RU` machine still renders the Lab's
+custom-brush input as `0,6` — seen in a headless screenshot — so the `lang` route is closed and
+28 numeric inputs (17 of them fractional in normal use) share the display. Also found on the way:
+the compare page shows its "No chart stored" empty state *while* the lookup is running and words
+a failed pool call as "insufficient data"; step 1 never names the chart it loaded; the equity
+trainer omits the provenance line the other four trainers print; the replayer and the pot-odds
+trainer mount pot-odds panels whose inputs render editable and change nothing; step 4's Advanced
+nut definition never reaches the graded number; `HandStudy` still carries F.10's stale
+"needs `invested_bb`" developer text. **The audit takes no decisions** (ADR-050 unused; the one
+decision it points at — where the Examples live, given the real-hands rule — belongs to the
+session). Method: five of twelve planned agent passes completed before the pool hit its session
+limit; the rest was read by hand from every page and the components named; the public pages were
+rendered read-only in a scratch headless Chrome; nothing seeded, nothing tested, no account
+touched. The tree carried two other lanes' uncommitted D.6b and D.7b files, untouched.
 
 **Where things stand (2026-09-10):** phases A–C are done and merged into `main` (`f18049b`);
 the backend answers any stat for any situation (`POST /v1/reports/run`), serves definitions,
@@ -505,6 +552,28 @@ dependency**, because the `z` table is three constants rather than scipy.
 because the **D.5 lane was rewriting that same file** while this session ran, and a two-line
 addition was not worth the conflict. Nothing is blocked: `MetricValue` takes primitives
 (`value`, `low`, `high`, `n`, `unit`, `digits`, `level`, `signed`) and imports nothing from the app.
+
+**Where D.6b stands (2026-09-14):** **done, reviewed, verified in a headless Chrome of its own,
+ticked, uncommitted** (ADR-049). Web workspace only. **The audit came first and shrank the step:**
+its wording said the client "already types all six routes" — it typed the shapes and bound only the
+three reads; the server side (six routes in `api/routers/pool.py`, `cohorts` + `uq_cohorts_user_name`
+from `8b2f4c6d1e3a`, the 409 `a cohort named 'X' already exists`, the 400 at create
+`cohort rule on 'af_flop': only cached stats can define a cohort`, the 422 list for an eleventh rule)
+was measured over HTTP before a line of UI was written and needed nothing. Delivered `stats.ts`'s
+`createCohort`/`updateCohort`/`deleteCohort`, **`app/pool/rules.ts`** (the builder's own vocabulary —
+`ClauseRow` deliberately not reused; `describeCohortError` reads the 422 *list* that
+`describeApiError` cannot), `components/pool/CohortForm.vue` (57 cached stats offered, the 8 uncached
+listed greyed, from the registry's `cached` flag) and `pages/pool/cohorts.vue` (New · Edit · **Save as
+mine** · Delete, the list re-read after every write). **Verified 37/37** against a throwaway API on
+`:8806` over a scratch Postgres migrated to head and the real ClickHouse read-only (tenant 1): the
+duplicate shows exactly the server's 409 sentence, a rule forced onto `af_flop` exactly its 400, the
+eleventh rule cannot be added, the `/pool` picker lists the saved cohort and runs the report as
+`?cohort_id=<uuid>` over 12.4M hands, the copied Regs names 7,711 players, delete asks first and
+declining sends nothing. **The adversarial review found two real page defects before the tick** —
+an open "Who is in it" panel kept its pre-edit size after an edit (now fetched again: 1,444 → 3,563
+as the threshold moved), and a write shared its `try` with the read-back so a failed reload would
+have read as a refused save with the form still open — plus three tests a mutation would have passed.
+Gate: `make web-check` green over the combined tree (846 / 79).
 
 **Where D.6 stands (2026-09-12):** **done, verified in Chrome, ticked, uncommitted** (ADR-046).
 One of four parallel lanes, **web workspace only** — no migration, no Python, no data written, and
@@ -1262,6 +1331,11 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-15 (session 19, **the round-4 merge** — no lane work of its own) | **Four lanes committed:** E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a`, F.12 audit `7f3e2bf`. **D.7b ticked**: its never-run `test_hand_notes.py` was green on the first run, confirmed by name and verbose (14/14 with `test_hot_path.py` and `test_mv_reconciliation.py`) beside `make test-all` **1,715 passed, 6 skipped**; `make check` and `make web-check` (846 / 79) green. **Found:** the real Postgres is at `8b2f4c6d1e3a`, four create-only migrations behind head, so the range library, the analyzer, the heuristic log and notes would fail on the founder's own database — not applied, flagged. ADR-047 gained the exact `built_by` upgrade recipe; `test_quotas.py`'s stale NOT YET RUN corrected; ADR bodies re-ordered, index 49/49. | **`make pg-migrate`** on the real Postgres if agreed, then **D.8**, D.10; F.12 / D.9 / B.5b solo |
+| 2026-09-15 (**E.1b** — owned the stack; three other lanes in the tree) | **E.1b done, E.1 ticked with it** (ADR-047). Provenance guards the swap race (`built_by`, the rollup on dbt's rows only, a second gate clause); the union is in the query builder below the router (one rollup per (tenant, dataset, day), a once-computed scalar and `has()`); the hot path is the dbt models rendered again by Jinja, keyed by the batch stamp, idempotent by anti-join, off for bulk paths; 0012 gives the view target an aggregate-max watermark. Legacy analyzer for the decisions statement (3.2 s → 0.18 s to plan, same rows). Real database migrated, altered, backfilled in 100 s and verified **0 / 0 over 160 day-partitions**; hero fingerprint 19,802 hands, VPIP 22.96, PFR 18.85, WTSD 29.92 (n 2,239), −1.374 bb/100 — identical to the read-only check taken before any write. `make check` 1,621 · `make seed && make test-all` **1,715 passed, 6 skipped**. | **D.8** |
+| 2026-09-14 (**D.7b** — lane B: `api/` notes and tags, the round's one migration, `app/hands/**`) | **Hand notes and tags, built and verified, left `[ ]`** (ADR-048). Migration `f7a8b9c0d1e2` (`hand_notes`, `hand_tags`) from head `e6f7a8b9c0d1`; `owned_hand` asks `core.hands` and 404s like the hand itself; one `normalize_tag` everywhere; **no registry dimension — `?tag=` is an id-list intersection**; 500 distinct tags per user; blank note deletes; `HandNotes.vue` under the replayer with a tested autosave, tags column and "Tagged" select on `/hands`. **Chrome 30/30** on the real hands read-only (scratch `poker_d7b_verify`, dropped). **One bug found in the browser:** `IN arrayMap(unhex…)` refused by ClickHouse — now a subquery, unit test corrected. **One found by the tests:** 500 POSTs hit E.3's 300/min budget — seeded instead. **Four found by the adversarial review and fixed:** a tag with `/` could never be removed (`{tag:path}`), the note's first save was a read-then-insert race (upsert), a NUL byte was a 500 (422 now), a vacuous `extra=forbid` test. `make check` 1,597 on this lane's files (lane A's in-flight files carry lint and size violations of their own) · `make web-check` 846 · `tests/postgres/` 12. | **`make seed && make test-all`** to run `tests/integration/test_hand_notes.py` (6, unrun), then tick D.7b. |
+| 2026-09-14 (**D.6b** — web workspace only, one of three parallel lanes) | **D.6b done and ticked** (ADR-049), amended first: the backend was complete (six routes, `cohorts` table, the 409/400/422 sentences measured over HTTP) and the client bound only the reads, so the step became `stats.ts`'s write half + `app/pool/rules.ts` (the builder's vocabulary, 21 tests) + `CohortForm.vue` (cached stats offered, uncached greyed, from the registry) + `cohorts.vue` (New · Edit · Save as mine · Delete). Reviewed adversarially before the tick — two real page defects fixed (stale open panel after an edit; write and read-back sharing one `try`), three tautological tests pinned, one follow-up recorded (the 422-list reader belongs in `auth/api.ts`). Verified 37/37 in a headless Chrome of its own against a scratch Postgres (dropped) and the real pool read-only. Gate: `make web-check` green over the combined tree (846 tests / 79 files). | **E.1b** unchanged |
+| 2026-09-14 (**F.12 audit lane** — docs only) | **[POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) written**: spec §13 as a checklist with each line's state and file (2 met · 9 partial · 2 missing), the glossary coverage audit, the three recorded issues confirmed and mapped (plus the finding that `lang="en"` is already set and does not stop Chrome rendering `0,6` on this `ru_RU` machine), acceptance 13 met / 12 partial, and an inventory of what a tour and Examples would be built from. No product code, no page edited, nothing seeded or tested, no account touched; the public pages rendered read-only in a scratch headless Chrome. Five agent passes completed before the agent pool hit its session limit; the remaining slices were read by hand. F.12 itself unstarted, `[ ]`; ADR-050 deliberately unused. Files in `scratchpad/lane-f12-audit.files`. | **E.1b** as before; F.12 starts from the audit's §7 when it has the tree to itself |
 | 2026-09-12 (38, **the round-3 merge**) | **Four parallel lanes reconciled, gated and committed** — E.3 `9d72503`, E.1 `0247f2d`, D.6 `61dff34`, D.4 `fcff2af`. **E.3 ticked after three runs of `make test-all`, the first of which found a real bug**: a connection-cache miss re-tiered the tenant it was connecting to, so any budget other than `STANDARD` survived only until the next reconnect, and all four quota assertions failed on it. The second run left one failure that was the test's own — a ClickHouse quota does not charge a query that reads no table, so a `SELECT 1` exhaustion loop is free. Both written up at the end of ADR-043. **E.1 stays `[ ]`** by its lane's own judgement: the views reconcile, but `stats/router.py` still reads `stats_daily` alone, so nothing is fresher yet. Also repaired the ADR index (nine bodies unlisted, two dead anchors — now 46/46) and gitignored `scratchpad/` and `.claude/`. | **E.1b** — union the view into `stats/router.py`. Then D.8 and D.10. F.12, D.9 and B.5b each need the tree to themselves. |
 | 2026-09-12 (37, **D.6** — web only) | **Plan D.6 done — the pool, and one clause struck because phase F had already built it** (ADR-046). Audited before building, as D.3, D.5 and D.7 all needed. **The ranges clause was already closed:** `HandMatrix` does not exist (the grid is `RangeMatrix`, and `/ranges/compare` already draws the pool column through it), so *"the ranges page adds no new grid code"* was true before the step started and a pool-ranges page would have made the second grid the clause forbids. **The other three were missing in the web lane only** — `POST /v1/pool/stats`, the cohort CRUD and its table, the `regs`/`fish` presets and `GET /v1/pool/players` all shipped in phase C, so this step wrote no Python and no migration. Built `app/pool/{stats,compare,population}.ts`, `components/pool/{CohortPicker,CohortGrids}.vue`, `pages/pool/{index,cohorts,players}.vue`, one nav line. **`StatGrid` is not forked and no D.5 file was edited:** the page ignores `ReportWorkbench` (hero-shaped three ways) and composes its parts, while the dataset lock is a `FilterAccess` wrapper rather than a write into the shared Pinia filter — which would have left the hand list on the pool afterwards and which a missing `ds` in the URL would have undone. **"Regs vs fish" is two runs joined on the row key with no difference drawn**, because the engine takes one cohort, refuses a pool baseline, and a client-side delta would be a second answer to what "enough" means. **Verified in Chrome against the real pool, read-only, 20/20, 0 console errors and 0 failed requests from sign-in onward** (own Chrome on :9227, app :3003, an API of its own on :8003; the other lanes' :3000/:8000/:9226 untouched): regs fold to a flop c-bet **38.0%** (n 572,450) small through **68.9%** (n 11,637) overbet, recreational players less at every size (31.8% / 62.6%), five buckets aligned across two grids with every cell carrying its `n`; and §17 checked as a property — a player report's two cells at **n 68** carry `data-thin="true"` while five full-sample cells do not. **One real defect, in the server:** `GET /v1/pool/players` prefix-matches a key that is always `ggpoker:<name>`, so it answered "no such player" to every real opponent (`A`, `V`, `Vill`, `P`, `1` → 0 rows); search now goes through the report path as a `like`, lower-cased because **none of the 94,276 distinct keys has an upper-case character**. A backend fix is owed. **Also found: the API on wire :8000 predates E.2** — no `confidence`, no `Interval` — and `ReportRequest` is `extra='forbid'`, so any grid asking for intervals would 422 against the running server; restart it before the next browser pass. `make web-check`: typecheck clean, lint 0 errors, **806 tests / 76 files**, licences unchanged. Throwaway auth database dropped; **no loose ends**. Uncommitted; files in `scratchpad/lane-d6.files`. | **E.3's two integration tests**, then **E.1b**. **D.6b** (cohort create/edit/delete) is specified and unbuilt — it needs a lane allowed to write to Postgres. |
 | 2026-09-12 (35, **E.1** — owned the stack) | **The rollup's materialized views, generated from the registry, with the boundary-marker backfill and the reconciliation test** (ADR-044). `scripts/rollup_sql.py` is now the single renderer behind the dbt model, the views and the backfill, so ADR-003's drift is unwritable. Reconciliation **green**: 113 counters × 11 group keys, both directions, traffic in 12 insert blocks, non-vacuity asserted, mutation-proved. **Left `[ ]`**: E.1's "Done means" needs a plain `INSERT` into `marts.*` and dbt uses `REPLACE PARTITION`, which fires no view — verified live. Also found: `SummingMergeTree` does not sum `DateTime64`, and writing to `marts.stats_daily` would make the incremental gate compare a value against itself. Migration `0011` applied on the real database; row counts unchanged, no views there. | **E.1b** (the hot path + its lost-update race). D.7b not taken. |
