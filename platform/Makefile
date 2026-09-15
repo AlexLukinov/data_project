@@ -36,8 +36,9 @@ help: ## Show this help
 
 # ── stack ────────────────────────────────────────────────────────────────────
 .PHONY: up
-up: ## Start ClickHouse + Postgres + Kafka + Redis + MinIO and wait for health
+up: ## Start ClickHouse + Postgres + Kafka + Redis + MinIO, wait for health, then create the buckets
 	$(COMPOSE) up -d --wait
+	$(COMPOSE) run --rm minio-init
 	@echo ">> stack healthy. Next: make seed"
 
 .PHONY: down

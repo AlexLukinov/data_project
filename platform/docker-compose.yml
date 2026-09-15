@@ -172,7 +172,11 @@ services:
       retries: 20
 
   minio-init:
-    # Creates the buckets once, then exits. `make up` waits for it to complete.
+    # Creates the buckets, then exits. Its profile keeps it out of `up`: `docker compose up --wait`
+    # fails on any container that has exited, even with code 0, unless another service depends on
+    # it with `service_completed_successfully`. `make up` runs it with `docker compose run --rm`
+    # once the stack is healthy, and fails if it fails (ADR-054).
+    profiles: ["init"]
     image: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
     container_name: poker-minio-init
     depends_on:
