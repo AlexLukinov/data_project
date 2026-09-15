@@ -113,10 +113,34 @@ def detail_from_rows(hand: Row, players: Sequence[Row], actions: Sequence[Row]) 
     )
 
 
+def hand_exists(tenant_id: int, hand_uid: str) -> bool:
+    """Whether this tenant has this hand -- one point lookup on the sort key `(user_id, hand_uid)`.
+
+    What a note or a tag is checked against before it is written (plan D.7b): the hand lives
+    here and the annotation in Postgres, so this is the only place ownership can be decided.
+    """
+    rows = clickhouse().query(
+        f"SELECT 1 FROM {CORE}.hands "
+        "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String} LIMIT 1",
+        parameters={"tenant_id": tenant_id, "hand_uid": hand_uid},
+    )
+    return len(rows.result_rows) > 0
+
+
 def hero_hands(
-    tenant_id: int, date_from: date | None, date_to: date | None, limit: int
+    tenant_id: int,
+    date_from: date | None,
+    date_to: date | None,
+    limit: int,
+    *,
+    only: Sequence[str] | None = None,
 ) -> list[HandSummary]:
-    """Recent hands for this user's own seat, newest first."""
+    """Recent hands for this user's own seat, newest first.
+
+    `only` restricts the list to those `hand_uid`s -- how a tag, which lives in Postgres,
+    narrows a list that lives here (ADR-048). `None` means no restriction; an empty list is
+    the caller's to short-circuit, since it can only ever answer nothing.
+    """
     where = ["h.user_id = {tenant_id:UInt32}", "p.is_hero = 1"]
     params: dict[str, Any] = {"tenant_id": tenant_id, "limit": min(limit, MAX_LIST)}
     if date_from is not None:
@@ -125,6 +149,9 @@ def hero_hands(
     if date_to is not None:
         where.append("toDate(h.played_at_utc) <= {date_to:Date}")
         params["date_to"] = date_to
+    if only is not None:
+        where.append("h.hand_uid IN {only:Array(String)}")
+        params["only"] = list(only)
     sql = (
         "SELECT h.hand_uid AS hand_uid, h.site AS site, h.played_at_utc AS played_at_utc, "
         "h.stake_level AS stake_level, p.seat AS seat, p.position AS position, "
@@ -146,8 +173,12 @@ def pool_hand_refs(
     date_to: date | None,
     stake_level: str | None,
     limit: int,
+    only: Sequence[str] | None = None,
 ) -> list[HandRef]:
-    """Recent pool hands, each with the seat worth opening on (`FOCUS`)."""
+    """Recent pool hands, each with the seat worth opening on (`FOCUS`).
+
+    `only` restricts to those `hand_uid`s, as in `hero_hands`.
+    """
     where = ["user_id = {tenant_id:UInt32}", "dataset = 'population'"]
     params: dict[str, Any] = {"tenant_id": tenant_id, "limit": min(limit, MAX_LIST)}
     if date_from is not None:
@@ -159,6 +190,9 @@ def pool_hand_refs(
     if stake_level is not None:
         where.append("stake_level = {stake_level:String}")
         params["stake_level"] = stake_level
+    if only is not None:
+        where.append("hand_uid IN {only:Array(String)}")
+        params["only"] = list(only)
     uids = [
         str(row["hand_uid"])
         for row in clickhouse()

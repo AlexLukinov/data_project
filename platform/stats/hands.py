@@ -10,6 +10,7 @@ without the seat the caller would not know whose decision to watch.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,10 +36,36 @@ class HandRef:
     seat: int
 
 
+def restrict_to(only_hand_uids: Sequence[str]) -> tuple[str, list[str]]:
+    """The WHERE term (and its bound value) that keeps only the given hands.
+
+    The list arrives in the hex form the API speaks; the mart holds the 16 raw bytes, so the
+    values are unhexed on the way in and the column is compared bare, as the sort key likes it.
+    **As a subquery, not `arrayMap` over the parameter:** ClickHouse's `IN` takes a constant or a
+    table expression, and a function applied to a bound array is neither -- the `arrayMap` form
+    was accepted by the unit test and refused by the server with UNSUPPORTED_METHOD. A keyword on
+    the builder rather than a field of `HandSearch`, on purpose: the search document is a
+    *situation*, and an id list is not one -- it is how a tag kept in Postgres narrows a list
+    answered here (plan D.7b, ADR-048).
+    """
+    term = (
+        "s.hand_uid IN (SELECT toFixedString(unhex(x), 16) "
+        "FROM (SELECT arrayJoin({only_hand_uids:Array(String)}) AS x))"
+    )
+    return term, list(only_hand_uids)
+
+
 def hand_search_sql(
-    search: HandSearch, tenant_id: int, reg: Registry | None = None
+    search: HandSearch,
+    tenant_id: int,
+    reg: Registry | None = None,
+    *,
+    only_hand_uids: Sequence[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """(sql, parameters) for one search. `tenant_id` comes from the token, never the body."""
+    """(sql, parameters) for one search. `tenant_id` comes from the token, never the body.
+
+    `only_hand_uids` restricts the answer to those hands (`restrict_to`); `None` is no restriction.
+    """
     reg = reg or registry()
     params = Params()
     compiler = Compiler(dims=reg.dimensions, table=DECISIONS, values=params, alias="s")
@@ -50,6 +77,9 @@ def hand_search_sql(
     where, scalars = scope(search.as_report(), tenant_id, DECISIONS)
     if filter_sql != "1":
         where.append(f"({filter_sql})")
+    if only_hand_uids is not None:
+        term, scalars["only_hand_uids"] = restrict_to(only_hand_uids)
+        where.append(term)
     scalars["limit"] = search.limit
 
     table = f"{get_settings().db('marts')}.{PHYSICAL[DECISIONS]}"
@@ -72,9 +102,10 @@ def find_hands(
     *,
     run: Runner | None = None,
     reg: Registry | None = None,
+    only_hand_uids: Sequence[str] | None = None,
 ) -> list[HandRef]:
     """The hands and seats that match, newest first. Never cached: the list is a browse."""
     runner = run or tenancy.runner_for(tenant_id)
-    columns, rows = runner(*hand_search_sql(search, tenant_id, reg))
+    columns, rows = runner(*hand_search_sql(search, tenant_id, reg, only_hand_uids=only_hand_uids))
     index = {name: i for i, name in enumerate(columns)}
     return [HandRef(hand_uid=str(r[index["hand_uid"]]), seat=int(r[index["seat"]])) for r in rows]

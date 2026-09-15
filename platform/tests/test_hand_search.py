@@ -78,6 +78,30 @@ def test_a_dimension_the_decision_table_lacks_is_refused() -> None:
         _sql(filter={"dim": "did_vpip", "op": "eq", "value": 1})
 
 
+def test_a_hand_list_restriction_is_bound_and_unhexed() -> None:
+    """A tag filter arrives as hex ids (plan D.7b); the mart stores the 16 raw bytes.
+
+    The restriction is a subquery over the bound array: `IN arrayMap(...)` reads fine and is
+    refused by the server (`IN` wants a constant or a table expression), which is how the first
+    version of this was found -- in the browser, not here.
+    """
+    sql, params = hand_search_sql(
+        HandSearch(), tenant_id=7, only_hand_uids=["00ff" * 8, "abcd" * 8]
+    )
+    assert (
+        "s.hand_uid IN (SELECT toFixedString(unhex(x), 16) "
+        "FROM (SELECT arrayJoin({only_hand_uids:Array(String)}) AS x))"
+    ) in sql
+    assert "arrayMap" not in sql
+    assert params["only_hand_uids"] == ["00ff" * 8, "abcd" * 8]
+    assert "00ff" not in sql
+
+
+def test_no_restriction_means_no_restriction_not_an_empty_one() -> None:
+    sql, params = _sql()
+    assert "only_hand_uids" not in sql and "only_hand_uids" not in params
+
+
 def test_find_hands_returns_refs_in_query_order() -> None:
     rows = [["a", 3, "2026-01-02"], ["b", 5, "2026-01-01"]]
 

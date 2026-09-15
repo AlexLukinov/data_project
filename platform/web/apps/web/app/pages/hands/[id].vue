@@ -4,11 +4,17 @@
 import { computed } from 'vue';
 
 import { describeApiError } from '~/auth/api';
+import HandNotes from '~/components/hands/HandNotes.vue';
 import HandStudy from '~/components/hands/HandStudy.vue';
+import { createHandNotesApi } from '~/hands/notes';
 import { toReplayHand } from '~/hands/replay';
 import { useFilterStore } from '~/stores/filter';
 
 const api = useHands();
+// The note and the tags (plan D.7b) are only for a *stored* hand: a pasted one has no uid and
+// nothing on the server to hang them on, which is why the panel lives on this page, not in
+// `HandStudy`.
+const notesApi = createHandNotesApi(useApi());
 const route = useRoute();
 // The way back carries the situation, so opening a hand in a new tab and going back still lands
 // on the set it came from. This page does not call `useFilterUrl()` — a hand's own link stays a
@@ -37,7 +43,10 @@ function day(iso: string): string {
     </div>
 
     <p v-if="error" role="alert" data-testid="hand-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(error) }}</p>
-    <HandStudy v-else-if="hand" :hand="hand" :watch-seat="seat" />
+    <template v-else-if="hand">
+      <HandStudy :hand="hand" :watch-seat="seat" />
+      <HandNotes :hand-uid="handUid" :api="notesApi" />
+    </template>
     <p v-else class="text-sm text-zinc-500">Loading…</p>
   </section>
 </template>

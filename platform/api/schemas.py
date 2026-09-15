@@ -180,6 +180,9 @@ class HandSummary(BaseModel):
     board: str
     net_won_bb: float
     went_to_showdown: bool
+    tags: list[str] = Field(default_factory=list)
+    """The user's tags on this hand (plan D.7b) -- attached by the router from Postgres, so a
+    row read straight off ClickHouse carries none."""
 
 
 class HandPlayerOut(BaseModel):

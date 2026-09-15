@@ -21,6 +21,8 @@ export interface HandSummary {
   board: string;
   net_won_bb: number;
   went_to_showdown: boolean;
+  /** My tags on this hand (plan D.7b), attached by the API from Postgres. */
+  tags: string[];
 }
 
 export interface HandPlayer {
@@ -81,6 +83,8 @@ export interface RecentFilters {
   date_from?: string;
   date_to?: string;
   limit?: number;
+  /** Only hands carrying this tag. Not a clause: the tag lives in Postgres (ADR-048). */
+  tag?: string;
 }
 
 export interface PoolFilters extends RecentFilters {
@@ -89,7 +93,8 @@ export interface PoolFilters extends RecentFilters {
 
 export interface HandsApi {
   recent(filters?: RecentFilters): Promise<HandSummary[]>;
-  search(body: HandSearchBody): Promise<HandSummary[]>;
+  /** `tag` rides in the query string beside the body, which stays the engine's own document. */
+  search(body: HandSearchBody, tag?: string): Promise<HandSummary[]>;
   pool(filters?: PoolFilters): Promise<HandSummary[]>;
   get(handUid: string): Promise<HandDetail>;
   /** Parse pasted text. Nothing is stored (ADR-029). */
@@ -107,7 +112,7 @@ function query(filters: RecentFilters | PoolFilters): string {
 export function createHandsApi(fetch: Fetcher): HandsApi {
   return {
     recent: (filters = {}) => fetch<HandSummary[]>(`/v1/hands${query(filters)}`),
-    search: (body) => fetch<HandSummary[]>('/v1/hands/search', { method: 'POST', body: { ...body } }),
+    search: (body, tag) => fetch<HandSummary[]>(`/v1/hands/search${query({ tag })}`, { method: 'POST', body: { ...body } }),
     pool: (filters = {}) => fetch<HandSummary[]>(`/v1/pool/hands${query(filters)}`),
     get: (handUid) => fetch<HandDetail>(`/v1/hands/${handUid}`),
     parse: (text, site) => fetch<HandDetail>('/v1/hands/parse', { method: 'POST', body: site === undefined ? { text } : { text, site } }),

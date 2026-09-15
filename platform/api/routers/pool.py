@@ -30,9 +30,11 @@ from analysis.pool.reconstruct import estimated_range as node_estimate
 from analysis.pool.service import players as player_lookup
 from analysis.pool.service import pool_report, presets
 from api import cache, hand_query
+from api import hand_note_store as notes
 from api.deps import CurrentUserDep, SessionDep
 from api.models_pg import Cohort
 from api.ratelimit import tenant_rate_limit
+from api.routers.hands import TagFilter
 from api.schemas import HandSummary
 from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, EstimateIn, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
@@ -260,17 +262,23 @@ async def node_realization_at(
 @router.get("/hands", response_model=list[HandSummary])
 async def pool_hands(
     user: CurrentUserDep,
+    session: SessionDep,
     date_from: date | None = None,
     date_to: date | None = None,
     stake_level: str | None = None,
     limit: Limit = 50,
+    tag: TagFilter = None,
 ) -> list[HandSummary]:
-    """Recent hands from the pool, newest first (plan F.7).
+    """Recent hands from the pool, newest first (plan F.7), each with the user's tags on it.
 
     A pool hand has no hero seat, so each row opens on the seat worth watching: one that
     showed cards if any did, else the biggest winner. For hands where a *situation* happened,
-    `POST /v1/hands/search` with `dataset: population` is the query to use.
+    `POST /v1/hands/search` with `dataset: population` is the query to use. `?tag=` narrows
+    to the hands carrying that tag, the same way it does on `/v1/hands` (ADR-048).
     """
+    only = None if tag is None else await notes.hands_tagged(session, user.id, tag)
+    if only == []:
+        return []
     refs = await run_in_threadpool(
         hand_query.pool_hand_refs,
         user.tenant_id,
@@ -278,8 +286,10 @@ async def pool_hands(
         date_to=date_to,
         stake_level=stake_level,
         limit=limit,
+        only=only,
     )
-    return await run_in_threadpool(hand_query.summaries_for, user.tenant_id, refs)
+    rows = await run_in_threadpool(hand_query.summaries_for, user.tenant_id, refs)
+    return await notes.attach_tags(session, user.id, rows)
 
 
 @router.get("/presets", response_model=PoolPresetsOut)
