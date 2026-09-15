@@ -16,6 +16,7 @@ against an in-memory fake in unit tests and against ClickHouse in production.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from core.allin import enrich
@@ -46,11 +47,24 @@ class IngestResult:
     found: int = 0
     stored: int = 0
     failed: int = 0
+    without_hero: int = 0
+    """Stored hands of a `hero` file in which no seat resolved as the uploader's. They are kept,
+    and every hero stat filters `is_hero = 1`, so nothing would count them -- this is the only
+    trace that a pool export went in under the wrong dataset (plan D.8, ADR-051)."""
     failures: list[list[object]] = field(default_factory=list)
 
     def as_counts(self) -> dict[str, int]:
         """The shape `uploads` rows and log lines expect."""
-        return {"found": self.found, "parsed": self.stored, "failed": self.failed}
+        return {
+            "found": self.found,
+            "parsed": self.stored,
+            "failed": self.failed,
+            "without_hero": self.without_hero,
+        }
+
+
+Progress = Callable[[IngestResult], None]
+"""Told the running totals after every stored batch; the worker writes them to the upload row."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -105,6 +119,24 @@ def _outcome(
     return hand
 
 
+def _file(
+    result: IngestResult,
+    batch: list[CanonicalHand],
+    outcome: CanonicalHand | list[object],
+    dataset: str,
+) -> None:
+    """Put one outcome where it belongs: a hand into the batch, anything else into the failures.
+
+    A hand of a `hero` file with no hero seat is counted as it joins.
+    """
+    if isinstance(outcome, CanonicalHand):
+        batch.append(outcome)
+        result.without_hero += int(dataset == DATASET_HERO and outcome.hero_seat is None)
+    else:
+        result.failures.append(outcome)
+        result.failed = len(result.failures)  # current for `progress`, not only at the end
+
+
 def _flush(sink: HandSink, batch: list[CanonicalHand], tenant_id: int, dataset: str) -> int:
     """Insert the pending hands and empty the batch. Returns how many were stored."""
     if not batch:
@@ -127,13 +159,15 @@ def ingest_text(
     hero_names: frozenset[str],
     dataset: str = DATASET_HERO,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    progress: Progress | None = None,
 ) -> IngestResult:
     """Parse every hand in `raw_text`, validate it, and store the survivors through `sink`.
 
     A hand whose money does not reconcile is NOT stored. Silently importing it would corrupt
     every stat it touches with no error anywhere — the worst failure mode an analytics product
     has. It goes to the dead-letter table instead, with enough raw text attached to reproduce.
-    Dead letters are written by this function too, so no caller can forget them.
+    Dead letters are written by this function too, so no caller can forget them. `progress`,
+    when given, is told the running totals after each batch reaches the sink.
     """
     src = Source(tenant_id=tenant_id, site=site, object_key=object_key, upload_id=upload_id)
     result = IngestResult()
@@ -141,14 +175,12 @@ def ingest_text(
     offset = 0
     for chunk in parser.split(raw_text):
         result.found += 1
-        outcome = _outcome(parser, chunk, hero_names, src, offset)
+        _file(result, batch, _outcome(parser, chunk, hero_names, src, offset), dataset)
         offset += len(chunk)
-        if isinstance(outcome, CanonicalHand):
-            batch.append(outcome)
-        else:
-            result.failures.append(outcome)
         if len(batch) >= batch_size:
             result.stored += _flush(sink, batch, tenant_id, dataset)
+            if progress is not None:
+                progress(result)
 
     result.stored += _flush(sink, batch, tenant_id, dataset)
     result.failed = len(result.failures)

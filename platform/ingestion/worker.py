@@ -22,7 +22,6 @@ import signal
 import sys
 from types import FrameType
 
-import psycopg
 from confluent_kafka import Consumer, KafkaError, Message
 
 from core.enums import Site
@@ -31,48 +30,16 @@ from ingestion import sinks
 from ingestion.bus import make_consumer
 from ingestion.cache import invalidate_tenant
 from ingestion.messages import UploadMessage
-from ingestion.pipeline import ingest_text
+from ingestion.pipeline import IngestResult, Progress, ingest_text
 from ingestion.sinks.protocols import HandSink, RawStore
+from ingestion.upload_status import claim, record_failure, record_outcome, record_progress
 from parser.registry import get_parser
 
 log = logging.getLogger("ingestion.worker")
 
 POLL_TIMEOUT = 1.0
-ERROR_TEXT_CHARS = 2000
-"""How much of an exception message the `uploads.error_text` column keeps."""
 
 _running = True
-
-
-def record_upload_result(upload_id: str, counts: dict[str, int], error: str = "") -> None:
-    """Write the outcome back to the `uploads` row in Postgres.
-
-    A synchronous driver here on purpose: the worker is a plain loop, and dragging an event
-    loop into it just to reuse the API's async session would add complexity for no benefit.
-    One short-lived connection per file is nothing next to the parse cost.
-
-    Failures are logged, never raised: hands are already durably in ClickHouse at this point,
-    and losing the status update must not cause a redelivery that re-does the work.
-    """
-    settings = get_settings()
-    status = "failed" if error else "completed"
-    try:
-        with psycopg.connect(settings.postgres_libpq_dsn, autocommit=True) as conn:
-            conn.execute(
-                "UPDATE uploads SET status = %s, hands_found = %s, hands_parsed = %s, "
-                "hands_failed = %s, error_text = %s, completed_at = now(), updated_at = now() "
-                "WHERE id = %s",
-                (
-                    status,
-                    counts.get("found", 0),
-                    counts.get("parsed", 0),
-                    counts.get("failed", 0),
-                    error[:ERROR_TEXT_CHARS],
-                    upload_id,
-                ),
-            )
-    except Exception as exc:
-        log.warning("could not update upload %s status: %s", upload_id, exc)
 
 
 def _stop(signum: int, _frame: FrameType | None) -> None:
@@ -87,6 +54,7 @@ def process(
     *,
     sink: HandSink | None = None,
     store: RawStore | None = None,
+    progress: Progress | None = None,
 ) -> dict[str, int]:
     """Parse one uploaded file end to end. Returns counts for the upload record.
 
@@ -96,7 +64,7 @@ def process(
     upload as `dataset='hero'` and buffered the whole file in memory (docs/POKER_AUDIT.md, B2).
 
     `sink` and `store` default to the real ClickHouse and S3 implementations; tests pass the
-    fakes from `ingestion.sinks`.
+    fakes from `ingestion.sinks`. `progress` is told the running totals after each stored batch.
     """
     sink = sink if sink is not None else sinks.hand_sink()
     store = store if store is not None else sinks.raw_store()
@@ -112,6 +80,7 @@ def process(
         hero_names=frozenset(name.lower() for name in message.hero_names),
         dataset=message.dataset,
         batch_size=get_settings().insert_batch_size,
+        progress=progress,
     )
     counts = result.as_counts()
     log.info("upload %s: %s", message.upload_id, counts)
@@ -134,18 +103,32 @@ def _handle(msg: Message) -> bool:
     if payload is None:
         return True  # tombstone: nothing to do, but the offset should still advance
     message = UploadMessage.from_json(payload)
-    try:
-        counts = process(message)
-    except Exception as exc:
-        log.exception("upload %s failed", message.upload_id)
-        record_upload_result(message.upload_id, {}, f"{type(exc).__name__}: {exc}")
+    if not claim(message.upload_id):
+        log.warning("upload %s already failed; skipping its late pointer", message.upload_id)
         return True
-    record_upload_result(message.upload_id, counts)
-    if counts.get("parsed", 0):
-        # The hands are in the fact tables already (the sink's hot path); a report cached
-        # before this upload would hide them for the cache's whole TTL (ADR-047).
-        invalidate_tenant(message.tenant_id)
+    try:
+        counts = process(message, progress=_progress_of(message.upload_id))
+    except Exception:
+        # Logged in full here and nowhere else: the row gets a sentence, because the uploader
+        # reads it and a storage exception names hosts and SQL (ADR-051).
+        log.exception("upload %s failed", message.upload_id)
+        invalidate_tenant(message.tenant_id)  # earlier batches of the file may be in stats
+        record_failure(message.upload_id)
+        return True
+    # Before the status, not after: a page re-reads its reports the moment it sees the upload
+    # end, and must not be answered from an entry cached before these hands (ADR-047, ADR-051).
+    invalidate_tenant(message.tenant_id)
+    record_outcome(message.upload_id, counts, message.site)
     return True
+
+
+def _progress_of(upload_id: str) -> Progress:
+    """Write the running totals to the upload row after every stored batch."""
+
+    def report(result: IngestResult) -> None:
+        record_progress(upload_id, result.as_counts())
+
+    return report
 
 
 def run(consumer: Consumer | None = None) -> int:

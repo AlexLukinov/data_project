@@ -15,6 +15,7 @@ const links = [
   { to: '/train', label: 'Train' },
   { to: '/progress', label: 'Progress' },
   { to: '/dev/components', label: 'Components' },
+  { to: '/upload', label: 'Upload' },
 ];
 
 const auth = useAuthStore();

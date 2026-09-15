@@ -82,6 +82,29 @@ export function errorDetail(error: unknown): string | null {
   return typeof detail === 'string' ? detail : null;
 }
 
+interface ValidationItem {
+  loc?: unknown;
+  msg?: unknown;
+}
+
+/**
+ * FastAPI's 422 `detail` is a list of `{loc, msg}`; each becomes "where: what", in the server's
+ * words, with the `body` part of the location dropped. Empty when the detail is not such a list.
+ */
+export function validationMessages(error: unknown): string[] {
+  if (typeof error !== 'object' || error === null) return [];
+  const data = (error as FetchErrorLike).data;
+  if (typeof data !== 'object' || data === null) return [];
+  const detail = (data as { detail?: unknown }).detail;
+  if (!Array.isArray(detail)) return [];
+  return (detail as unknown[]).map((raw) => {
+    const item = (typeof raw === 'object' && raw !== null ? raw : {}) as ValidationItem;
+    const where = Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '';
+    const what = typeof item.msg === 'string' ? item.msg : 'invalid';
+    return where === '' ? what : `${where}: ${what}`;
+  });
+}
+
 const SIGN_IN_MESSAGES: Record<number, string> = {
   401: 'Wrong email or password.',
   403: 'This account is disabled.',
@@ -100,12 +123,17 @@ export function describeSignInError(error: unknown): string {
 }
 
 /**
- * One sentence for any other failed call: the API's own detail, else its status, else what
- * threw. `whenSilent` is what to say when nothing answered at all, which differs per screen.
+ * One sentence for any other failed call: the API's own detail (a 422's list joined with " · "),
+ * else its status, else what threw. `whenSilent` is what to say when nothing answered at all,
+ * which differs per screen.
  */
 export function describeApiError(error: unknown, whenSilent = NO_ANSWER): string {
   const status = errorStatus(error);
-  if (status !== undefined) return errorDetail(error) ?? `The API answered with status ${status}.`;
+  if (status !== undefined) {
+    const listed = validationMessages(error);
+    if (listed.length > 0) return listed.join(' · ');
+    return errorDetail(error) ?? `The API answered with status ${status}.`;
+  }
   if (error instanceof Error && error.name !== 'FetchError' && error.name !== 'TypeError') return `${error.name}: ${error.message}`;
   return whenSilent;
 }

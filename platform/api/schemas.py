@@ -48,50 +48,6 @@ class UserResponse(BaseModel):
     is_active: bool
 
 
-class PokerAccountRequest(BaseModel):
-    """Register a screen name. This is how `is_hero` gets resolved during parsing."""
-
-    site: str = Field(max_length=32)
-    screen_name: str = Field(min_length=1, max_length=120)
-
-
-class PokerAccountResponse(BaseModel):
-    """A registered screen name."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    site: str
-    screen_name: str
-    is_verified: bool
-
-
-class UploadResponse(BaseModel):
-    """Accepted upload. `dedupe` tells the client whether this was new work."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    upload_id: uuid.UUID = Field(validation_alias="id")
-    status: str
-    site: str
-    filename: str
-    hands_found: int
-    hands_parsed: int
-    hands_failed: int
-    error_text: str
-    created_at: datetime
-    completed_at: datetime | None
-
-
-class UploadAccepted(BaseModel):
-    """202 response from the ingestion endpoint."""
-
-    upload_id: uuid.UUID
-    status: str
-    dedupe: str
-    """`new` or `duplicate` — re-uploading the same bytes is a no-op, not an error."""
-
-
 class HandSummary(BaseModel):
     """A row in the hand list."""
 

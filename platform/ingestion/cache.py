@@ -21,8 +21,15 @@ from core.settings import get_settings
 log = logging.getLogger(__name__)
 
 STATS_PREFIX = "stats"
-"""Every report-cache key is `stats:{tenant_id}:...` -- tenant first, so the namespace is
+"""`api.cache.stats_key` writes `stats:{tenant_id}:...` -- tenant first, so the namespace is
 physically partitioned and one tenant's invalidation cannot reach another's."""
+REPORT_PREFIX = "report"
+"""`stats.request.ReportRequest.cache_key` writes `report:{tenant_id}:{digest}`, and every report
+the engine serves is cached under it. The invalidation once scanned `stats:` alone and so deleted
+nothing a report had cached: an upload was in ClickHouse and not on screen for the cache's whole
+TTL, with nothing red anywhere (plan D.8, ADR-051). `tests/test_cache_invalidation.py` pins both
+writers to these prefixes."""
+TENANT_PREFIXES: tuple[str, ...] = (STATS_PREFIX, REPORT_PREFIX)
 
 _client: redis.Redis | None = None
 
@@ -44,9 +51,10 @@ def invalidate_tenant(tenant_id: int) -> int:
     try:
         conn = client()
         removed = 0
-        for key in conn.scan_iter(match=f"{STATS_PREFIX}:{tenant_id}:*", count=500):
-            conn.delete(key)
-            removed += 1
+        for prefix in TENANT_PREFIXES:
+            for key in conn.scan_iter(match=f"{prefix}:{tenant_id}:*", count=500):
+                conn.delete(key)
+                removed += 1
         return removed
     except redis.RedisError as exc:
         log.warning("redis invalidate failed: %s", exc)

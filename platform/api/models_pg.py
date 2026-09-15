@@ -169,10 +169,18 @@ class Upload(Base, TimestampMixin):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="queued", nullable=False)
-    """queued -> processing -> completed | failed"""
+    """queued -> processing -> completed | failed; the worker writes the last three
+    (`ingestion/upload_status.py`)."""
+    dataset: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """`hero` or `population`. NULL only on rows written before plan D.8 recorded it."""
     hands_found: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     hands_parsed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     hands_failed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    hands_without_hero: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    """Of a `hero` upload's stored hands, those in which no seat resolved as the uploader's:
+    stored, and counted by no hero stat (plan D.8, ADR-051)."""
     error_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

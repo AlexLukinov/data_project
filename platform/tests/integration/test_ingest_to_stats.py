@@ -115,7 +115,8 @@ async def test_upload_to_stats_end_to_end() -> None:
         assert status["status"] == "completed", status
         assert (status["hands_found"], status["hands_parsed"], status["hands_failed"]) == (2, 2, 0)
 
-        # Hands are queryable immediately from core.* (stat marts need a dbt run).
+        # Hands are queryable immediately from core.*; the stats path, with no dbt run, is
+        # tests/integration/test_upload_to_report.py (plan D.8).
         listing = await _hands(c, token)
         assert len(listing) == 2
         assert {h["stake_level"] for h in listing} == {"NL50"}

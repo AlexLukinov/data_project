@@ -120,7 +120,7 @@ def test_an_upload_is_in_a_report_with_no_dbt_run(client: Client, tenant: int) -
     assert _report(tenant)["total"] == 0, "a fresh tenant must start empty"
 
     counts = _ingest(tenant)
-    assert counts == {"found": 2, "parsed": 2, "failed": 0}
+    assert counts == {"found": 2, "parsed": 2, "failed": 0, "without_hero": 0}
 
     facts = _counts(client, tenant)
     assert facts["decisions"][0] > 0 and facts["decisions"] == (facts["decisions"][0],) * 2, (

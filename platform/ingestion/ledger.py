@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import psycopg
 
+from ingestion.upload_status import ERROR_TEXT_CHARS, failure_sentence
+
 LABEL_CHARS = 250
 """`uploads.filename` width; archive member labels can be longer."""
 
@@ -29,6 +31,19 @@ def already_done(dsn: str, user_uuid: str, digest: str) -> bool:
     return row is not None
 
 
+RECORD_UPLOAD_SQL = (
+    "INSERT INTO uploads (id, user_id, site, dataset, filename, object_key, sha256, "
+    "byte_size, status, hands_found, hands_parsed, hands_failed, hands_without_hero, "
+    "error_text, completed_at, created_at, updated_at) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+    "now(), now(), now()) ON CONFLICT (user_id, sha256) DO UPDATE SET "
+    "status = EXCLUDED.status, error_text = EXCLUDED.error_text, dataset = EXCLUDED.dataset, "
+    "hands_found = EXCLUDED.hands_found, hands_parsed = EXCLUDED.hands_parsed, "
+    "hands_failed = EXCLUDED.hands_failed, hands_without_hero = EXCLUDED.hands_without_hero, "
+    "completed_at = now(), updated_at = now()"
+)
+
+
 def record_upload(
     dsn: str,
     *,
@@ -40,29 +55,32 @@ def record_upload(
     digest: str,
     size: int,
     counts: dict[str, int],
+    dataset: str,
 ) -> None:
-    """Write the ledger row that makes a re-run skip this file."""
+    """Write the ledger row that makes a re-run skip this file.
+
+    A file that stored no hands is `failed` in words, as the worker writes it (ADR-051), so a
+    re-run and a drop on the upload page both retry it instead of skipping an empty `completed`.
+    """
+    sentence = failure_sentence(counts, site)
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(
-            "INSERT INTO uploads (id, user_id, site, filename, object_key, sha256, "
-            "byte_size, status, hands_found, hands_parsed, hands_failed, error_text, "
-            "completed_at, created_at, updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'completed', %s, %s, %s, '', "
-            "now(), now(), now()) ON CONFLICT (user_id, sha256) DO UPDATE SET "
-            "status = 'completed', hands_found = EXCLUDED.hands_found, "
-            "hands_parsed = EXCLUDED.hands_parsed, hands_failed = EXCLUDED.hands_failed, "
-            "completed_at = now(), updated_at = now()",
+            RECORD_UPLOAD_SQL,
             (
                 upload_id,
                 user_uuid,
                 site,
+                dataset,
                 label[-LABEL_CHARS:],
                 key,
                 digest,
                 size,
+                "failed" if sentence else "completed",
                 counts["found"],
                 counts["parsed"],
                 counts["failed"],
+                counts.get("without_hero", 0),
+                sentence[:ERROR_TEXT_CHARS],
             ),
         )
 

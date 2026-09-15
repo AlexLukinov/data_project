@@ -148,6 +148,7 @@ def _process_one(job: Job) -> FileResult:
         digest=digest,
         size=len(data),
         counts=counts,
+        dataset=ctx.dataset,
     )
     return FileResult(label, False, counts["found"], counts["parsed"], counts["failed"])
 

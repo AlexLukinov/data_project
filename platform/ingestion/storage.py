@@ -10,6 +10,7 @@ Everything written here is immutable and zstd-compressed. Hand histories compres
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -20,6 +21,9 @@ import zstandard
 from botocore.client import Config
 
 from core.settings import get_settings
+
+UTF16_BOMS = (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
+TEXT_ENCODINGS = ("utf-8-sig", "cp1251", "latin-1")
 
 ZSTD_LEVEL = 10
 """Level 10: near-maximum ratio at a fraction of level 19's CPU. Uploads are latency
@@ -95,8 +99,13 @@ def decode_upload(data: bytes) -> str:
     Not decoration: PokerStars writes UTF-8, some iPoker skins write UTF-16, and older
     Russian-language clients write cp1251. Guessing wrong turns every screen name into
     mojibake and silently splits one player into several.
+
+    **UTF-16 only behind its byte-order mark.** Tried blind, it decodes almost any byte string of
+    even length, so a cp1251 file was read as UTF-16 garbage or not depending on whether its size
+    was even -- and then refused as an unknown format (plan D.8).
     """
-    for encoding in ("utf-8-sig", "utf-16", "cp1251", "latin-1"):
+    encodings = ("utf-16", *TEXT_ENCODINGS) if data.startswith(UTF16_BOMS) else TEXT_ENCODINGS
+    for encoding in encodings:
         try:
             return data.decode(encoding)
         except (UnicodeDecodeError, UnicodeError):

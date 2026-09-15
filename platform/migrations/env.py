@@ -24,7 +24,10 @@ config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().postgres_dsn)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Not `disable_existing_loggers`: migrations also run in-process (`api.provision`, the test
+    # session), and the default would silence every logger already imported -- the worker's
+    # included, whose exception log is the only record of why an upload failed (ADR-051).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

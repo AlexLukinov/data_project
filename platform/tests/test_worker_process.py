@@ -41,7 +41,7 @@ def test_worker_stores_hands_under_the_message_dataset(store: FakeRawStore) -> N
 
     counts = worker.process(_message(DATASET_POPULATION), sink=sink, store=store)
 
-    assert counts == {"found": 2, "parsed": 2, "failed": 0}
+    assert counts == {"found": 2, "parsed": 2, "failed": 0, "without_hero": 0}
     assert len(sink.hands) == 2
     assert {dataset for _, _, dataset in sink.inserts} == {DATASET_POPULATION}
     assert {tenant for _, tenant, _ in sink.inserts} == {7}

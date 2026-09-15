@@ -15,13 +15,24 @@ everyone else's live uploads behind it in the same partition.
 from __future__ import annotations
 
 import logging
+import time
 
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer, KafkaError, Message, Producer
 
 from core.settings import get_settings
-from ingestion.messages import UploadMessage
+from ingestion.messages import PublishError, UploadMessage
 
 log = logging.getLogger(__name__)
+
+DELIVERY_TIMEOUT_MS = 5_000
+"""librdkafka's `message.timeout.ms`: after this long an unacknowledged pointer is dropped and
+reported as timed out, instead of being retried in the background for the default five minutes
+and delivered after the API has already told the uploader it was not sent (measured: the report
+arrives at 5.0 s and the producer's queue is empty)."""
+ACK_WAIT_SECONDS = DELIVERY_TIMEOUT_MS / 1000 + 2
+"""How long `publish_upload` waits for the pointer's own delivery report; longer than the
+timeout above, so a timed-out pointer is reported rather than waited out."""
+POLL_STEP_SECONDS = 0.1
 
 _producer: Producer | None = None
 
@@ -37,19 +48,38 @@ def producer() -> Producer:
                 "enable.idempotence": True,
                 "acks": "all",
                 "linger.ms": 20,
+                "message.timeout.ms": DELIVERY_TIMEOUT_MS,
             }
         )
     return _producer
 
 
 def publish_upload(message: UploadMessage, *, bulk: bool = False) -> None:
-    """Publish an upload pointer. `bulk=True` routes to the isolated backfill topic."""
+    """Publish an upload pointer. `bulk=True` routes to the isolated backfill topic.
+
+    Returns once the broker has acknowledged **this** pointer, and raises `PublishError` when it
+    refused it, or timed it out, or said nothing within `ACK_WAIT_SECONDS`. Success is read from the
+    pointer's own delivery report, not from `flush()`: `flush()` counts every message in the
+    process-wide producer, so a concurrent upload's stuck pointer would fail this one.
+    """
     settings = get_settings()
     topic = settings.kafka_bulk_topic if bulk else settings.kafka_uploads_topic
+    reports: list[KafkaError | None] = []
+
+    def delivered(error: KafkaError | None, _message: Message) -> None:
+        reports.append(error)
+
     p = producer()
-    p.produce(topic, key=str(message.tenant_id).encode(), value=message.to_json())
-    p.poll(0)
-    p.flush(5.0)
+    p.produce(
+        topic, key=str(message.tenant_id).encode(), value=message.to_json(), on_delivery=delivered
+    )
+    deadline = time.monotonic() + ACK_WAIT_SECONDS
+    while not reports and time.monotonic() < deadline:
+        p.poll(POLL_STEP_SECONDS)
+    if not reports:
+        raise PublishError(f"no delivery report for upload {message.upload_id}")
+    if reports[0] is not None:
+        raise PublishError(f"upload {message.upload_id} not delivered: {reports[0]}")
     log.info("published upload %s to %s", message.upload_id, topic)
 
 

@@ -13,6 +13,17 @@ from typing import Any
 from ingestion.loader import DATASET_HERO
 
 
+class PublishError(RuntimeError):
+    """The bus did not acknowledge a pointer: it refused it, timed it out, or said nothing.
+
+    The pointer is dropped from the producer when it times out, so it will not arrive later in
+    the normal case. A pointer that timed out in flight may still have been stored by the broker,
+    though, which is why the worker skips a message whose upload is already `failed`
+    (`ingestion.upload_status.claim`). Defined beside the message rather than in `ingestion.bus`
+    so the message layer can name it without importing the Kafka client.
+    """
+
+
 @dataclass(slots=True, frozen=True)
 class UploadMessage:
     """The pointer message. Deliberately small and boring.

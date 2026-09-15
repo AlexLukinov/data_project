@@ -110,7 +110,7 @@ function day(iso: string): string {
     <p v-else-if="error" role="alert" data-testid="hands-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(error) }}</p>
     <p v-else-if="status === 'pending'" class="text-sm text-zinc-500">Loading…</p>
     <p v-else-if="rows.length === 0" class="text-sm text-zinc-500" data-testid="hands-empty">
-      No hands match. <span v-if="filter.dataset === 'hero'">Upload some on <NuxtLink to="/account" class="underline">your account</NuxtLink>, or <NuxtLink to="/hands/paste" class="underline">paste one</NuxtLink>.</span>
+      No hands match. <span v-if="filter.dataset === 'hero'">Upload some on <NuxtLink to="/upload" class="underline">the Upload page</NuxtLink>, or <NuxtLink to="/hands/paste" class="underline">paste one</NuxtLink>.</span>
     </p>
 
     <div v-else class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
