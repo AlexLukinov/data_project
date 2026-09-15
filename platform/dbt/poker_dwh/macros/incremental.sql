@@ -191,6 +191,24 @@
 
   Anything else -- a changed type, a new partition key, a dropped column the SELECT still
   names -- is still the `empty_chain` recreate.
+
+  ## The second clause: a partition holding a hot-path row is dirty (plan E.1b, ADR-047)
+
+  Since E.1b the fact tables have a second writer. The ingest worker derives each batch with
+  the same SQL as the models above and plain-INSERTs it into `marts.decisions` and
+  `marts.player_hands` with `built_by = 'hot'`, so the rollup's materialized view fires and an
+  upload is in stats seconds later. That insert can interleave with this model's temp build (t0)
+  and swap (t1) in ways the watermark cannot see: the two fact tables are swapped one after the
+  other, so a batch can survive in one and be wiped from the other, and the rollup then carries
+  the batch's stamp from the half it did see -- `tB > tB` is false, the day reads clean, and the
+  other half is never built. Nothing red, ever.
+
+  Hence the OR below: a partition with ANY `'hot'` row in either fact table is dirty, whatever
+  the stamps say. Together with the generated rollup aggregating `built_by = 'dbt'` rows only,
+  a partition reads clean only once everything in it was derived here, from a snapshot that
+  included every hand in it. The clause costs one scan of a LowCardinality column per fact
+  table (~70 ms on the 73.7M-row real table). `scripts/anchors.py` mirrors it, as it mirrors the
+  rest of this gate.
 #}
 
 {% macro dirty_partitions(column='played_at_utc') %}
@@ -221,9 +239,9 @@
            column is empty but no source row moved, so the partition looks clean and keeps its
            zeroes. This forces everything from that partition on. #}
         where {% if var('rebuild_from', 0) | int > 0 -%}
-        (src.src_max > built.built_max or src.m >= {{ var('rebuild_from') | int }})
+        (src.src_max > built.built_max or src.m in ({{ hot_partitions() }}) or src.m >= {{ var('rebuild_from') | int }})
         {%- else -%}
-        src.src_max > built.built_max
+        (src.src_max > built.built_max or src.m in ({{ hot_partitions() }}))
         {%- endif %}
         {%- if batch > 0 %}
         order by src.m
@@ -234,6 +252,16 @@
     1
   {%- endif -%}
 {% endmacro %}
+
+
+{#- Partitions the ingest worker has written into since dbt last built them (ADR-047). A literal
+    relation, not `ref()`, for the reason the anchor is: `decisions` reading itself would be a
+    cycle, and both fact tables are consulted from every model. -#}
+{% macro hot_partitions() -%}
+    select toYYYYMMDD(played_at_utc) as m from {{ db_prefix() }}marts.decisions where built_by = 'hot'
+    union all
+    select toYYYYMMDD(played_at_utc) as m from {{ db_prefix() }}marts.player_hands where built_by = 'hot'
+{%- endmacro %}
 
 
 {#- The built side of the gate: per partition, the watermark of the anchor table(s). -#}

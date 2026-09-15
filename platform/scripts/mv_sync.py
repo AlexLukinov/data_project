@@ -1,8 +1,10 @@
-"""Create, refresh and backfill the rollup's materialized views (ADR-044).
+"""Create, refresh, backfill and verify the rollup's materialized views (ADR-044, ADR-047).
 
     uv run python -m scripts.mv_sync --status     what exists, what each view covers
     uv run python -m scripts.mv_sync --refresh    re-apply the generated view DDL
-    uv run python -m scripts.mv_sync --create     boundary + views + backfill (the full path)
+    uv run python -m scripts.mv_sync --create     boundary + views + backfill, unless present
+    uv run python -m scripts.mv_sync --recreate   empty the target and do --create from scratch
+    uv run python -m scripts.mv_sync --verify     dbt's rollup vs the view's: group-rows that differ
 
 **Why this is not a migration.** `ch/migrations/` is append-only and the runner skips a version
 it has already applied, so a regenerated file would never reach the database -- the view would
@@ -20,16 +22,21 @@ silently drops whatever lands while it runs. So the order here is
     3. wait until T has passed
     4. backfill `src_parsed_at < T` with an ordinary INSERT ... SELECT
 
-which has neither a gap nor an overlap at any interleaving. A row stamped before T is either
-already in the table (step 4 takes it) or arrives later and is skipped by the fence (step 4
-still takes it); a row stamped at or after T can only arrive once the view exists. `parsed_at`
-is stamped by the loader at ingest and flows straight into `src_parsed_at`, so it orders rows by
-arrival, which is what makes T meaningful at all.
+which has neither a gap nor an overlap at any interleaving, PROVIDED every row stamped before T
+has landed by the time step 4 reads. `src_parsed_at` is the batch stamp the loader takes before
+the core insert, and the worker's hot path derives the batch into `marts.*` a few seconds after
+that (ADR-047), so the margin must exceed that latency -- hence a default well above it.
 
 `marts.stats_daily_mv` is a COMPLETE rollup, not an increment: below the boundary from the
 backfill, above it from the view. That is what lets `tests/integration/test_mv_reconciliation.py`
 assert the thing ADR-003 actually asks for -- that the view's output equals a full dbt rebuild --
 rather than asserting something weaker about a delta.
+
+**When to `--recreate`.** A view never sees dbt's `REPLACE PARTITION`, so a re-parse or a bulk
+import (both run without the hot path and are followed by `scripts.backfill`) leaves the target
+stale for the days they touched. Reads stay bounded -- a stale (dataset, day) is served from the
+target only while the worker has written into it since dbt last built it -- but `--verify` will
+report the drift, and `--recreate` after the backfill has caught up removes it.
 """
 
 from __future__ import annotations
@@ -44,20 +51,27 @@ from clickhouse_connect.driver.client import Client
 
 from ch.migrate import _STATEMENT_SPLIT, MIGRATIONS_DIR, connect, prefixed
 from core.settings import get_settings
-from scripts.rollup_sql import BOUNDARY, MV_ALIAS, MV_TARGET, _group_by, select_body
+from scripts.rollup_sql import (
+    BOUNDARY,
+    MV_ALIAS,
+    MV_TARGET,
+    ROLLUP,
+    SOURCES,
+    _group_by,
+    disagreements_sql,
+    select_body,
+)
 from stats.registry import registry
 
 log = logging.getLogger(__name__)
 
 VIEWS_FILE = MIGRATIONS_DIR.parent / "views" / f"{MV_TARGET}.sql"
-SOURCES: tuple[str, ...] = ("decisions", "player_hands")
-"""The two fact tables the rollup unions, and so the two views. One view per source: a
-materialized view triggers on exactly one table."""
 
-DEFAULT_MARGIN = 5.0
-"""Seconds to put the boundary into the future. It only has to exceed the time between writing
-the boundary row and the view existing -- two DDL statements -- so it is small on purpose: every
-second of it is a second of rows the backfill has to sweep instead of the view catching them."""
+DEFAULT_MARGIN = 30.0
+"""Seconds to put the boundary into the future. It must exceed the time between a batch's
+stamp being taken and its rows reaching `marts.*` through the worker's hot path, or a batch in
+flight during --create would be fenced out of the view AND missed by the backfill. A 5,000-hand
+batch derives in a few seconds; every second of margin beyond that is a second of waiting once."""
 
 
 def view_name(source: str) -> str:
@@ -116,6 +130,15 @@ def boundaries(client: Client) -> dict[str, datetime]:
     return {row[0]: row[1] for row in rows}
 
 
+def present_views(client: Client) -> set[str]:
+    """The materialized views that exist in the marts database."""
+    rows = client.query(
+        "SELECT name FROM system.tables WHERE database = %(db)s AND engine = 'MaterializedView'",
+        parameters={"db": _db("marts")},
+    ).result_rows
+    return {row[0] for row in rows}
+
+
 def backfill(client: Client, source: str, at: datetime) -> int:
     """Roll up every row stamped before the boundary, one day-partition at a time.
 
@@ -131,7 +154,7 @@ def backfill(client: Client, source: str, at: datetime) -> int:
     for (day,) in days:
         client.command(
             f"INSERT INTO {marts}.{MV_TARGET}\n"
-            + select_body(registry(), source)  # type: ignore[arg-type]
+            + select_body(registry(), source)
             # Aliased and qualified for the same reason the view is: `src_parsed_at` is also
             # the name of an aggregate alias in the shared SELECT body.
             + f"\nFROM {marts}.{source} AS {MV_ALIAS}\n"
@@ -143,8 +166,22 @@ def backfill(client: Client, source: str, at: datetime) -> int:
     return len(days)
 
 
-def create(client: Client, margin: float = DEFAULT_MARGIN) -> None:
-    """The full boundary-marker path: fence the views into the future, then sweep up behind them."""
+def create(client: Client, margin: float = DEFAULT_MARGIN) -> bool:
+    """The full boundary-marker path, unless both views already exist. True if it ran.
+
+    Idempotent because `api/provision.py` runs it on every provision: a second run over a
+    fenced, backfilled target would append a second backfill and double every counter.
+    """
+    missing = {view_name(s) for s in SOURCES} - present_views(client)
+    if not missing:
+        log.info("views present; nothing to do (use --recreate to rebuild the target)")
+        return False
+    return recreate(client, margin)
+
+
+def recreate(client: Client, margin: float = DEFAULT_MARGIN) -> bool:
+    """Empty the target, fence the views into the future, then sweep up behind them."""
+    client.command(f"TRUNCATE TABLE {_db('marts')}.{MV_TARGET}")
     at = datetime.now(UTC) + timedelta(seconds=margin)
     for source in SOURCES:
         set_boundary(client, source, at)
@@ -157,19 +194,44 @@ def create(client: Client, margin: float = DEFAULT_MARGIN) -> None:
         time.sleep(remaining)
     for source in SOURCES:
         backfill(client, source, at)
+    return True
+
+
+def _count(client: Client, sql: str) -> int:
+    return int(client.query(sql).result_rows[0][0])
+
+
+def verify(client: Client) -> tuple[int, int]:
+    """(group-rows dbt has that the view does not match, the other way round), over every day.
+
+    Both zero means the two rollups mean the same thing everywhere. A non-zero answer on a
+    quiet chain -- `scripts.backfill` caught up, no upload in flight -- means the view target
+    is stale from a re-parse or a bulk import and `--recreate` is due; the days are logged.
+    One day-partition at a time, for the reason the backfill is: the whole-table comparison
+    needs more memory than a query may have on the 4 GB node.
+    """
+    marts, reg = _db("marts"), registry()
+    days = client.query(
+        f"SELECT day FROM {marts}.{ROLLUP} UNION DISTINCT SELECT day FROM {marts}.{MV_TARGET}"
+        " ORDER BY day"
+    ).result_rows
+    missing = extra = 0
+    for (day,) in days:
+        where = f"day = toDate('{day:%Y-%m-%d}')"
+        m = _count(client, disagreements_sql(marts, ROLLUP, MV_TARGET, reg, where))
+        e = _count(client, disagreements_sql(marts, MV_TARGET, ROLLUP, reg, where))
+        if m or e:
+            log.warning("%s: %d group-rows only dbt has, %d only the view has", day, m, e)
+        missing, extra = missing + m, extra + e
+    log.info("verified %d day-partitions", len(days))
+    return missing, extra
 
 
 def status(client: Client) -> None:
     """Print what exists and what each view covers."""
     marts, meta = _db("marts"), _db("_meta")
     current = boundaries(client)
-    views = {
-        row[0]
-        for row in client.query(
-            f"SELECT name FROM system.tables WHERE database = '{marts}' "
-            "AND engine = 'MaterializedView'"
-        ).result_rows
-    }
+    views = present_views(client)
     total = client.query(f"SELECT count() FROM {marts}.{MV_TARGET}").result_rows[0][0]
     print(f"{marts}.{MV_TARGET}: {total:,} rows")
     print(f"{meta}.{BOUNDARY}: {len(current)} boundaries")
@@ -187,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--status", action="store_true", help="show what exists")
     group.add_argument("--refresh", action="store_true", help="re-apply the view DDL only")
     group.add_argument("--create", action="store_true", help="boundary + views + backfill")
+    group.add_argument("--recreate", action="store_true", help="empty the target, then --create")
+    group.add_argument("--verify", action="store_true", help="compare the two rollups")
     ap.add_argument(
         "--margin",
         type=float,
@@ -201,8 +265,14 @@ def main(argv: list[str] | None = None) -> int:
         status(client)
     elif args.refresh:
         apply_views(client)
-    else:
+    elif args.create:
         create(client, args.margin)
+    elif args.recreate:
+        recreate(client, args.margin)
+    else:
+        missing, extra = verify(client)
+        print(f"group-rows dbt has that the view does not match: {missing}; the other way: {extra}")
+        return 0 if (missing, extra) == (0, 0) else 1
     return 0
 
 

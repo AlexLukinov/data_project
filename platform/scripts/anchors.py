@@ -22,6 +22,13 @@ from monthly to daily while the loop still counted months, so it saw 10 units of
 there were 164 and would have stopped believing it was finished. Changing partition granularity
 means changing it in three places -- the model configs, the macro, and here."""
 
+HOT_TABLES: tuple[str, ...] = ("decisions", "player_hands")
+"""The fact tables the ingest worker writes into directly (plan E.1b, ADR-047)."""
+
+HOT_PROVENANCE = "hot"
+"""`built_by` of a row the worker derived. Must match `scripts/hot_path_sql.py` and the
+`hot_partitions()` macro in macros/incremental.sql."""
+
 
 def parse_anchors(raw: list[str] | None) -> tuple[Anchor, ...]:
     """`TABLE:DATE_COLUMN` strings to anchors; the default when none were given."""
@@ -56,6 +63,20 @@ def anchor_sql(prefix: str, anchors: tuple[Anchor, ...]) -> str:
     )
 
 
+def hot_partitions_sql(prefix: str) -> str:
+    """Partitions the worker has written into since dbt last built them.
+
+    Mirrors `hot_partitions()` in macros/incremental.sql. A partition holding any hot-path row
+    is dirty whatever the watermarks say: that is the guard against the worker's insert and
+    dbt's partition swap interleaving so that half a batch survives (ADR-047).
+    """
+    return " UNION ALL ".join(
+        f"SELECT {PARTITION_EXPR}(played_at_utc) AS m FROM {prefix}marts.{table}"
+        f" WHERE built_by = '{HOT_PROVENANCE}'"
+        for table in HOT_TABLES
+    )
+
+
 def partition_of(day: str) -> int:
     """`YYYY-MM-DD` to the `toYYYYMMDD` partition integer the gate compares against."""
     parts = day.split("-")
@@ -64,17 +85,18 @@ def partition_of(day: str) -> int:
     return int(f"{parts[0]}{parts[1]:0>2}{parts[2]:0>2}")
 
 
-def dirty_where(rebuild_from: int | None) -> str:
+def dirty_where(rebuild_from: int | None, prefix: str = "") -> str:
     """The gate itself: which partitions a pass must still (re)build.
 
-    The watermark half asks "has the source changed since this partition was built", which is
-    the right question for new or re-parsed hands and the WRONG one after a bare
-    `ALTER TABLE ... ADD COLUMN`: the new column is empty but no source row moved, so the
-    partition looks clean and keeps its zeroes forever. `rebuild_from` is the override for
-    exactly that case -- everything from that partition on is dirty whatever the watermark says.
+    Two clauses always: the watermark ("has the source changed since this partition was built")
+    and provenance ("does a fact table still hold a row the worker derived"). The watermark is
+    the wrong question after a bare `ALTER TABLE ... ADD COLUMN`: the new column is empty but no
+    source row moved, so the partition looks clean and keeps its zeroes forever. `rebuild_from`
+    is the override for exactly that case -- everything from that partition on is dirty whatever
+    the other clauses say.
     """
-    gate = "src.src_max > built.built_max"
-    return f"({gate} OR src.m >= {rebuild_from})" if rebuild_from else gate
+    gate = f"src.src_max > built.built_max OR src.m IN ({hot_partitions_sql(prefix)})"
+    return f"({gate} OR src.m >= {rebuild_from})" if rebuild_from else f"({gate})"
 
 
 def advance(rebuild_from: int | None, highest_built: int) -> int | None:
@@ -103,7 +125,7 @@ def dirty_sql(prefix: str, anchors: tuple[Anchor, ...], rebuild_from: int | None
         f"  SELECT {PARTITION_EXPR}(played_at_utc) AS m, count() AS rows"
         f"  FROM {prefix}core.hand_players GROUP BY m"
         ") AS pr ON pr.m = src.m "
-        f"WHERE {dirty_where(rebuild_from)} ORDER BY m FORMAT TSV"
+        f"WHERE {dirty_where(rebuild_from, prefix)} ORDER BY m FORMAT TSV"
     )
 
 

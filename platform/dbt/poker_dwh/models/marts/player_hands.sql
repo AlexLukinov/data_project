@@ -69,7 +69,9 @@ select
     rake_paid_bb                                                 as rake_paid_bb,
 
     hb.parser_version                                            as parser_version,
-    hb.src_parsed_at                                             as src_parsed_at
+    hb.src_parsed_at                                             as src_parsed_at,
+    -- Last, always: see macros/provenance.sql and decision_state.sql (ADR-047).
+    {{ built_by() }}                                             as built_by
 from (
     select
         h.*,

@@ -164,14 +164,16 @@ lint-arch: ## Enforce the module-boundary contracts in .importlinter (ADR-023)
 	$(UV) lint-imports
 
 .PHONY: gen
-gen: ## Regenerate files derived from core/schema (staging models) and the stat registry (rollup, seed, law test)
+gen: ## Regenerate files derived from core/schema (staging models), the stat registry (rollup, seed, law test, MV) and the dbt models (the worker's hot path)
 	$(UV) python -m scripts.gen_schema
 	$(UV) python -m scripts.gen_stats
+	$(UV) python -m scripts.gen_hot_path
 
 .PHONY: gen-check
 gen-check: ## Fail if a generated file is stale (run `make gen`)
 	$(UV) python -m scripts.gen_schema --check
 	$(UV) python -m scripts.gen_stats --check
+	$(UV) python -m scripts.gen_hot_path --check
 
 .PHONY: size-check
 size-check: ## Functions <= 40 lines, files <= 300 (baseline in scripts/size_baseline.txt)

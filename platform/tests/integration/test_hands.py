@@ -173,8 +173,12 @@ async def test_search_finds_the_hand_and_the_seat_that_made_the_decision() -> No
 
         body = {"filter": {"all": [{"dim": "street", "op": "eq", "value": "flop"}]}}
         found = (await c.post("/v1/hands/search", json=body, headers=_auth(token))).json()
-        assert [(h["hand_uid"], h["seat"]) for h in found] == [(wanted["hand_uid"], wanted["seat"])]
-        assert found[0]["board"] == wanted["board"] and found[0]["position"] == wanted["position"]
+        # Since plan E.1b the worker derives the upload's own decisions into the mart, so the
+        # flop holds real decisions beside the synthetic one; the bridge is proven by finding it.
+        pairs = [(h["hand_uid"], h["seat"]) for h in found]
+        assert (wanted["hand_uid"], wanted["seat"]) in pairs
+        hit = found[pairs.index((wanted["hand_uid"], wanted["seat"]))]
+        assert hit["board"] == wanted["board"] and hit["position"] == wanted["position"]
 
 
 async def test_pool_hands_list_runs_and_is_scoped_to_the_pool() -> None:

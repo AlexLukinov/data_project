@@ -10,12 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.settings import get_settings
 from stats.ast import All
 from stats.compiler import Compiler, Params
 from stats.definitions import Table
 from stats.errors import RegistryError, ReportError
-from stats.query import DATE_COLUMN, PHYSICAL, scope
+from stats.query import DATE_COLUMN, scope, source_of
 from stats.registry import Registry
 from stats.request import ReportRequest
 from stats.resolve import dimensions_used
@@ -53,10 +52,10 @@ def build_timeline(
             f"sum(s.{column}) AS {alias}"
             for column, alias in zip(FACT_COLUMNS, ALIASES, strict=True)
         ]
-    physical = f"{get_settings().db('marts')}.{PHYSICAL[table]}"
+    prologue, physical = source_of(table)
     sql = (
-        f"SELECT s.{DATE_COLUMN[table]} AS day, {', '.join(measures)} FROM {physical} AS s "
-        f"WHERE {' AND '.join(where)} GROUP BY day ORDER BY day"
+        f"{prologue}SELECT s.{DATE_COLUMN[table]} AS day, {', '.join(measures)} "
+        f"FROM {physical} AS s WHERE {' AND '.join(where)} GROUP BY day ORDER BY day"
     )
     return sql, {**scalars, **params.values}
 

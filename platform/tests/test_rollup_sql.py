@@ -15,10 +15,15 @@ import re
 
 from scripts.rollup_sql import (
     BOUNDARY,
+    DBT_PROVENANCE,
     KEYS,
+    MV_MIGRATION,
     MV_TARGET,
+    MV_WATERMARK_TYPE,
     ROLLUP,
+    WATERMARK,
     _branch,
+    mv_target_column_types,
     render_mv_migration,
     render_mv_views,
     rollup_column_types,
@@ -87,10 +92,44 @@ def test_the_target_table_has_a_column_per_rollup_column() -> None:
     `marts.decisions` does not exist when migrations run -- so the column list must match."""
     reg = registry()
     migration = render_mv_migration(reg)
-    columns = rollup_column_types(reg)
+    columns = mv_target_column_types(reg)
     assert len(columns) == len(_select_lines(_branch(reg, "decisions", "decisions")))
+    assert [n for n, _ in columns] == [n for n, _ in rollup_column_types(reg)]
     for name, ch_type in columns:
         assert f"    {name} {ch_type}" in migration, f"{name} missing from the target table"
+
+
+def test_the_target_watermark_is_an_aggregate_maximum() -> None:
+    """A plain DateTime64 in a SummingMergeTree keeps whichever row a merge saw first (ADR-044
+    measured it); the read path compares this column with the dbt rollup's to decide which
+    slices the view serves, so it must be the maximum whatever the merge state (ADR-047)."""
+    reg = registry()
+    assert dict(mv_target_column_types(reg))[WATERMARK] == MV_WATERMARK_TYPE
+    assert MV_WATERMARK_TYPE.startswith("SimpleAggregateFunction(max, ")
+    assert dict(rollup_column_types(reg))[WATERMARK] != MV_WATERMARK_TYPE, "dbt's stays plain"
+
+
+def test_the_migration_drops_the_views_and_the_old_target_before_creating() -> None:
+    """0011's target had the plain type; the runner is append-only, so 0012 replaces it. The
+    views go first: a view whose target is gone fails every insert into its source."""
+    migration = render_mv_migration(registry())
+    assert MV_MIGRATION == "0012_mv_stats_daily_v2"
+    order = [
+        migration.index(f"DROP VIEW IF EXISTS marts.{MV_TARGET}_decisions;"),
+        migration.index(f"DROP VIEW IF EXISTS marts.{MV_TARGET}_player_hands;"),
+        migration.index(f"DROP TABLE IF EXISTS marts.{MV_TARGET};"),
+        migration.index(f"CREATE TABLE IF NOT EXISTS marts.{MV_TARGET} ("),
+    ]
+    assert order == sorted(order)
+
+
+def test_the_model_aggregates_dbt_rows_only_and_the_view_aggregates_everything() -> None:
+    """The other half of the race guard: rows the worker derived reach the rollup through the
+    view alone, so dbt's watermark for a day never says more than dbt itself derived."""
+    reg = registry()
+    for source in SOURCES:
+        assert f"and built_by = '{DBT_PROVENANCE}'" in _branch(reg, source, source)
+    assert "built_by" not in render_mv_views(reg)
 
 
 def test_the_target_orders_by_every_group_key() -> None:

@@ -4,8 +4,9 @@
 ADR-003 allows that only on the condition that they express the same logic. The condition is met
 structurally rather than by review: `select_body()` below is the single renderer, and both the
 dbt model (`scripts/gen_stats.py`) and the view DDL (`render_mv_views()`) are that body with a
-different wrapper around it. `scripts/mv_sync.py` uses it a third time for the boundary backfill,
-and `tests/integration/test_mv_reconciliation.py` proves the three agree in fact.
+different wrapper around it. `scripts/mv_sync.py` uses it a third time for the boundary backfill
+and a fourth for `--verify`, and `tests/integration/test_mv_reconciliation.py` proves they agree
+in fact.
 
 Nothing here reaches a user's input: values are inlined as literals (`Literals`), which is safe
 only because every one of them comes from the registry in this repository.
@@ -44,9 +45,26 @@ ZERO_MONEY = "toDecimal128(0, 4)"
 TYPE_OF_ZERO = {ZERO_COUNT: "UInt64", ZERO_MONEY: "Decimal(38, 4)"}
 WATERMARK = "src_parsed_at"
 WATERMARK_TYPE = "DateTime64(3, 'UTC')"
+MV_WATERMARK_TYPE = f"SimpleAggregateFunction(max, {WATERMARK_TYPE})"
+"""The MV target's watermark keeps the MAXIMUM across a SummingMergeTree merge; a plain
+DateTime64 keeps whichever row came first (ADR-044 measured it, ADR-047 measured it again). The
+read path decides which (dataset, day) slices to take from the view by comparing this maximum
+with the dbt rollup's, so it must be exact whatever the merge state. The dbt rollup keeps the
+plain type: dbt writes each group once per build, so nothing ever merges there."""
 
-MV_MIGRATION = f"0011_mv_{ROLLUP}"
+DBT_PROVENANCE = "dbt"
+"""`built_by` of a fact row dbt derived. The generated rollup aggregates these rows only, so a
+row the ingest worker derived (`'hot'`, scripts/hot_path_sql.py) can never advance the anchor
+watermark before dbt has derived the same hand itself (ADR-047)."""
+
+MV_MIGRATION = f"0012_mv_{ROLLUP}_v2"
+"""`0011` created the first target and is frozen: the runner is append-only, so the type change
+needs a new file, and one that drops what 0011 made -- a derived table, rebuilt by
+`scripts/mv_sync.py --recreate` from `marts.*` in minutes."""
 MV_ALIAS = "fact"
+SOURCES: tuple[Table, ...] = ("decisions", "player_hands")
+"""The two fact tables the rollup unions, and so the two views. One view per source: a
+materialized view triggers on exactly one table."""
 MV_TARGET = f"{ROLLUP}_mv"
 """The MV writes HERE, never into `marts.stats_daily` (ADR-044).
 
@@ -125,10 +143,16 @@ def select_body(reg: Registry, table: Table) -> str:
 
 
 def _branch(reg: Registry, table: Table, ref: str) -> str:
-    """One UNION ALL branch of the dbt rollup: the shared body over a dbt `ref`, behind the gate."""
+    """One UNION ALL branch of the dbt rollup: the shared body over a dbt `ref`, behind the gate.
+
+    `built_by = 'dbt'` is the second half of ADR-047's race guard: rows the ingest worker
+    derived are aggregated by the materialized view, never by this model, so the rollup's
+    watermark for a day only ever says what dbt itself has derived.
+    """
     return (
         select_body(reg, table)
         + f"\nfrom {{{{ ref('{ref}') }}}}\nwhere {{{{ dirty_partitions('played_at_utc') }}}}"
+        + f" and built_by = '{DBT_PROVENANCE}'"
         + f"\ngroup by {_group_by()}"
     )
 
@@ -151,31 +175,77 @@ def rollup_column_types(reg: Registry) -> list[tuple[str, str]]:
     return columns
 
 
-def render_mv_migration(reg: Registry) -> str:
-    """`ch/migrations/00NN_mv_stats_daily.sql`: the two tables the views need.
+def mv_target_column_types(reg: Registry) -> list[tuple[str, str]]:
+    """The MV target's columns: the rollup's, with the watermark as an aggregate maximum."""
+    return [
+        (name, MV_WATERMARK_TYPE if name == WATERMARK else ch_type)
+        for name, ch_type in rollup_column_types(reg)
+    ]
 
-    Only the tables -- the views themselves are in `ch/views/` because they depend on
+
+def value_columns(reg: Registry) -> list[str]:
+    """Every rollup column that carries a number: what a reconciliation must compare."""
+    keys = {target for _, target, _ in KEYS}
+    return [n for n, _ in rollup_column_types(reg) if n not in keys and n != WATERMARK]
+
+
+def group_sums_sql(marts: str, table: str, reg: Registry, where: str = "1") -> str:
+    """A rollup table's meaning: one row per group key, every counter summed.
+
+    Sums rather than rows because both rollups are `SummingMergeTree` and can hold a different
+    NUMBER of rows while meaning the same thing (one part per dbt build, one per insert block
+    through the view); summing per group compares what they mean whatever the merge state.
+    `where` narrows both sides the same way -- a day, a tenant -- and is never caller text.
+    """
+    keys = ", ".join(target for _, target, _ in KEYS)
+    sums = ", ".join(f"sum({c}) as {c}" for c in value_columns(reg))
+    return f"select {keys}, {sums} from {marts}.{table} where {where} group by {_group_by()}"
+
+
+def disagreements_sql(marts: str, left: str, right: str, reg: Registry, where: str = "1") -> str:
+    """How many group-rows of `left` `right` does not match exactly, within `where`.
+
+    On the real corpus the two rollups hold ~2.5M group-rows of 113 counters each, and an
+    EXCEPT over the whole of both needs more than the 2.33 GiB query ceiling; `scripts/mv_sync.py
+    --verify` therefore runs this once per day-partition, which is also how it names the days
+    that differ.
+    """
+    return (
+        f"select count() from ( {group_sums_sql(marts, left, reg, where)}"
+        f" except {group_sums_sql(marts, right, reg, where)} )"
+    )
+
+
+def render_mv_migration(reg: Registry) -> str:
+    """`ch/migrations/0012_mv_stats_daily_v2.sql`: the MV target, recreated with an exact watermark.
+
+    Only the table -- the views themselves are in `ch/views/` because they depend on
     `marts.decisions`, which dbt owns and which does not exist when migrations run
     (`api/provision.py` migrates, THEN builds the empty marts). A migration that referenced it
-    would fail on every fresh environment.
+    would fail on every fresh environment. `_meta.mv_boundaries` is 0011's and stays.
+
+    Drops before it creates, views first: the target is derived data (a materialized view's
+    output plus a backfill from `marts.*`), rebuilt by `scripts/mv_sync.py --recreate`, and a
+    view whose target is gone would fail every insert into its source. `api/provision.py` runs
+    `--create` after every migration, so a fresh or a migrated environment ends up with the
+    views in place.
     """
-    columns = ",\n".join(f"    {name} {ch_type}" for name, ch_type in rollup_column_types(reg))
+    columns = ",\n".join(f"    {name} {ch_type}" for name, ch_type in mv_target_column_types(reg))
+    drops = "".join(f"DROP VIEW IF EXISTS marts.{MV_TARGET}_{source};\n" for source in SOURCES)
     return (
         f"{HEADER}\n"
-        "-- The materialized-view half of the rollup (ADR-003, ADR-025, ADR-044): a target table\n"
-        "-- shaped exactly like `marts.stats_daily`, and the boundary that makes a forward-only\n"
-        "-- view safe to create on a populated table.\n"
+        "-- The materialized-view half of the rollup (ADR-003, ADR-025, ADR-044, ADR-047): a\n"
+        "-- target table shaped exactly like `marts.stats_daily`, except that its watermark is\n"
+        "-- an aggregate MAXIMUM -- a plain DateTime64 keeps whichever row a SummingMergeTree\n"
+        "-- merge saw first, and the read path compares this watermark with the dbt rollup's\n"
+        "-- to decide which (dataset, day) slices the view serves. Supersedes 0011's target.\n"
         "--\n"
         "-- The MV does NOT write into `marts.stats_daily`, and that is the whole point: that\n"
         "-- table is the incremental chain's anchor, and a second writer in it makes the\n"
         f"-- dirty-partition gate compare a value against itself. See {MV_TARGET} in\n"
-        "-- scripts/gen_stats.py for the failure in full.\n\n"
-        f"CREATE TABLE IF NOT EXISTS _meta.{BOUNDARY} (\n"
-        "    view String,\n"
-        "    source String,\n"
-        f"    boundary_at {WATERMARK_TYPE},\n"
-        f"    created_at {WATERMARK_TYPE} DEFAULT now64(3)\n"
-        ") ENGINE = ReplacingMergeTree(created_at) ORDER BY view;\n\n"
+        "-- scripts/rollup_sql.py for the failure in full.\n\n"
+        f"{drops}"
+        f"DROP TABLE IF EXISTS marts.{MV_TARGET};\n\n"
         f"CREATE TABLE IF NOT EXISTS marts.{MV_TARGET} (\n"
         f"{columns}\n"
         ") ENGINE = SummingMergeTree()\n"
@@ -194,7 +264,7 @@ def render_mv_views(reg: Registry) -> str:
     """
     boundary = f"(select boundary_at from _meta.{BOUNDARY} final where view = "
     views = []
-    for table in ("decisions", "player_hands"):
+    for table in SOURCES:
         name = f"{MV_TARGET}_{table}"
         views.append(
             f"DROP VIEW IF EXISTS marts.{name};\n\n"

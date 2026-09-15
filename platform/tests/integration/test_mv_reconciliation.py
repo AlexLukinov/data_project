@@ -44,8 +44,8 @@ from scripts.rollup_sql import (
     MV_TARGET,
     ROLLUP,
     WATERMARK,
-    _group_by,
-    rollup_column_types,
+    disagreements_sql,
+    value_columns,
 )
 from stats.registry import registry
 
@@ -81,20 +81,16 @@ def _dbt(*args: str) -> None:
 
 def _value_columns() -> list[str]:
     """Every rollup column that carries a number, so every one of them gets compared."""
-    keys = {target for _, target, _ in KEYS}
-    return [n for n, _ in rollup_column_types(registry()) if n not in keys and n != WATERMARK]
-
-
-def _rollup_select(table: str) -> str:
-    """The table's meaning: one row per group key, every counter summed."""
-    keys = ", ".join(target for _, target, _ in KEYS)
-    sums = ", ".join(f"sum({c}) as {c}" for c in _value_columns())
-    return f"select {keys}, {sums} from {get_settings().db('marts')}.{table} group by {_group_by()}"
+    return value_columns(registry())
 
 
 def _disagreements(client: Client, left: str, right: str) -> int:
-    """Group-rows present in `left` that `right` does not match exactly."""
-    sql = f"select count() from ( {_rollup_select(left)} except {_rollup_select(right)} )"
+    """Group-rows present in `left` that `right` does not match exactly.
+
+    The SQL is `scripts/rollup_sql.py`'s, which `scripts/mv_sync.py --verify` runs on the
+    real database; this test is that check with traffic driven through the view first.
+    """
+    sql = disagreements_sql(get_settings().db("marts"), left, right, registry())
     return int(client.query(sql).result_rows[0][0])
 
 
@@ -146,11 +142,18 @@ def _ingest_corpus() -> int:
 
 @pytest.fixture(scope="module")
 def built() -> Client:
-    """Hands in `core`, the whole chain built by dbt, and the views created over it."""
+    """Hands in `core`, the whole chain built by dbt, and the views re-fenced over it.
+
+    `recreate`, not `create`: the views exist since provisioning (ADR-047) and the ingest
+    below reaches them through the worker's hot path, so the target already holds a
+    hot-derived copy of the corpus. Emptying it and backfilling from dbt's own rows is what
+    keeps this the test of the BACKFILL path; the hot-derived copy is compared with dbt's in
+    `test_hot_path.py`.
+    """
     client = clickhouse()
     assert _ingest_corpus() > 0, "the seed corpus must parse"
     _dbt("run")
-    mv_sync.create(client, margin=2.0)
+    mv_sync.recreate(client, margin=2.0)
     return client
 
 

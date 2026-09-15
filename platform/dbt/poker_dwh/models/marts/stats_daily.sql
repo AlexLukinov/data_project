@@ -142,7 +142,7 @@ select
     toUInt64(0) as wsd_action,
     max(src_parsed_at) as src_parsed_at
 from {{ ref('decisions') }}
-where {{ dirty_partitions('played_at_utc') }}
+where {{ dirty_partitions('played_at_utc') }} and built_by = 'dbt'
 group by user_id, dataset, player_key, day, site, stake_level, game_type, table_format, position, is_hero, is_anonymized
 
 union all
@@ -274,5 +274,5 @@ select
     countIf(went_to_showdown = 1 AND won_hand = 1) as wsd_action,
     max(src_parsed_at) as src_parsed_at
 from {{ ref('player_hands') }}
-where {{ dirty_partitions('played_at_utc') }}
+where {{ dirty_partitions('played_at_utc') }} and built_by = 'dbt'
 group by user_id, dataset, player_key, day, site, stake_level, game_type, table_format, position, is_hero, is_anonymized

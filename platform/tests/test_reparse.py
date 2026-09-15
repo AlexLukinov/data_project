@@ -32,7 +32,8 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         return IngestResult(found=3, stored=2, failed=1)
 
     monkeypatch.setattr(reparse, "ingest_text", fake_ingest)
-    monkeypatch.setattr(reparse.sinks, "hand_sink", lambda: object())
+    # The re-parse asks for the core tables only (`hot_path=False`, ADR-047).
+    monkeypatch.setattr(reparse.sinks, "hand_sink", lambda *, hot_path: object())
     monkeypatch.setattr(reparse, "get_parser", lambda site: object())
     return seen
 

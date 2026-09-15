@@ -42,7 +42,9 @@ class FakeRunner:
                  "site_list", "stake_list"],
                 [(1, start, end, 120, 12.5, 10.0, ["pokerstars"], ["NL50"])],
             )  # fmt: skip
-        grouped = re.search(r"GROUP BY (.+?) ORDER BY", sql)
+        # The report's own GROUP BY is the one after the FROM alias; the fresh-rollup
+        # prologue (ADR-047) groups its stamp subqueries by (dataset, day) before it.
+        grouped = re.search(r"GROUP BY (.+?) ORDER BY", sql.rsplit(" AS s WHERE", 1)[-1])
         keys = grouped.group(1).split(", ") if grouped else []
         codes = re.findall(r" AS ([a-z0-9_]+)__n", sql)
         columns = [*keys, *[c for code in codes for c in (code, f"{code}__n")], "__hands"]

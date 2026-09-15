@@ -113,7 +113,9 @@ def reparse_one(source: SourceObject, dataset: str, totals: Totals) -> None:
         totals.missing += 1
         return
     result = ingest_text(
-        sinks.hand_sink(),
+        # Core tables only: the re-parse is followed by `scripts.backfill` (plan §5b), and a
+        # hot-path insert of a re-parsed hand would be skipped as already present anyway.
+        sinks.hand_sink(hot_path=False),
         get_parser(Site(source.site)),
         text,
         tenant_id=source.user_id,

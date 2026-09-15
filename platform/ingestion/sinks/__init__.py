@@ -36,9 +36,13 @@ __all__ = [
 ]
 
 
-def hand_sink() -> HandSink:
-    """The process's real hand sink: ClickHouse, via the shared client."""
-    return ClickHouseHandSink()
+def hand_sink(*, hot_path: bool = True) -> HandSink:
+    """The process's real hand sink: ClickHouse, via the shared client.
+
+    `hot_path=False` stores hands in `core.*` only, for the bulk paths that are followed by a
+    dbt backfill (ADR-047); the default also derives each batch into the fact tables.
+    """
+    return ClickHouseHandSink(hot_path=hot_path)
 
 
 def raw_store() -> RawStore:

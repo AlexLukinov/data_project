@@ -12,10 +12,12 @@ import pytest
 
 from scripts.anchors import (
     DEFAULT_ANCHORS,
+    HOT_TABLES,
     anchor_sql,
     dbt_vars,
     dirty_sql,
     dirty_where,
+    hot_partitions_sql,
     parse_anchors,
     partition_of,
 )
@@ -62,10 +64,23 @@ def test_dbt_vars_carry_batch_and_anchors() -> None:
     )
 
 
-def test_the_watermark_alone_is_the_gate_by_default() -> None:
-    """The ordinary case: only a changed source makes a partition dirty."""
-    assert dirty_where(None) == "src.src_max > built.built_max"
-    assert dirty_where(0) == "src.src_max > built.built_max"
+def test_the_gate_is_the_watermark_or_a_hot_path_row_by_default() -> None:
+    """Two clauses always (ADR-047): a changed source, or a fact table still holding a row the
+    ingest worker derived -- the partition swap and the worker's insert can interleave so that
+    half a batch survives with the watermark saying clean, and provenance is what sees it."""
+    hot = hot_partitions_sql("")
+    assert dirty_where(None) == f"(src.src_max > built.built_max OR src.m IN ({hot}))"
+    assert dirty_where(0) == dirty_where(None)
+    prefixed = hot_partitions_sql("test_")
+    assert dirty_where(None, "test_") == f"(src.src_max > built.built_max OR src.m IN ({prefixed}))"
+
+
+def test_hot_partitions_are_read_from_both_fact_tables_under_the_prefix() -> None:
+    sql = hot_partitions_sql("test_")
+    assert HOT_TABLES == ("decisions", "player_hands")
+    for table in HOT_TABLES:
+        assert f"FROM test_marts.{table} WHERE built_by = 'hot'" in sql
+    assert sql.count("toYYYYMMDD(played_at_utc) AS m") == 2 and " UNION ALL " in sql
 
 
 def test_rebuild_from_forces_partitions_the_watermark_calls_clean() -> None:
@@ -77,7 +92,8 @@ def test_rebuild_from_forces_partitions_the_watermark_calls_clean() -> None:
     OR: partitions that are dirty for the ordinary reason stay dirty too.
     """
     where = dirty_where(20260801)
-    assert where == "(src.src_max > built.built_max OR src.m >= 20260801)"
+    assert where.startswith("(src.src_max > built.built_max OR src.m IN (")
+    assert where.endswith(") OR src.m >= 20260801)")
     assert dirty_sql("", DEFAULT_ANCHORS, 20260801).count("20260801") == 1
 
 

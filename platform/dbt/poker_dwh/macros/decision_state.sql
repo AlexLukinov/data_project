@@ -35,7 +35,7 @@ select
     hand_class, hand_shape, hole_cards, made_hand,
     action, is_allin, amount_bb, size_pct, raise_to_bb,
     saw_next_street, went_to_showdown, won_hand, net_won_bb, ev_won_bb,
-    parser_version, src_parsed_at
+    parser_version, src_parsed_at, built_by
 from (
     select
         -- ---- identity ----------------------------------------------------------------
@@ -231,7 +231,10 @@ from (
         hb.s_net_won_bb[si]                                          as net_won_bb,
         hb.s_ev_won_bb[si]                                           as ev_won_bb,
         hb.parser_version                                            as parser_version,
-        hb.src_parsed_at                                             as src_parsed_at
+        hb.src_parsed_at                                             as src_parsed_at,
+        -- Last, always: the real tables gained it by ALTER ... ADD COLUMN AFTER src_parsed_at,
+        -- and REPLACE PARTITION needs the temp table's column order to match (ADR-047).
+        {{ built_by() }}                                             as built_by
     from (
         select
             h.*,

@@ -59,7 +59,8 @@ def test_player_lookup_groups_the_rollup_by_player_with_a_bound_prefix() -> None
     db = Recorder()
     players("vill", 7, limit=10_000, run=db)
     sql, params = db.calls[0]
-    assert "GROUP BY player_key ORDER BY player_key" in sql and "marts.stats_daily AS s" in sql
+    # The rollup arrives as the union of its two producers (ADR-047), aliased `s` as before.
+    assert "GROUP BY player_key ORDER BY player_key" in sql and "marts.stats_daily AS r" in sql
     assert "startsWith(s.player_key, {p0:String})" in sql and params["p0"] == "vill"
     assert params["limit"] == MAX_PLAYERS and "s.is_hero = 1" not in sql
 

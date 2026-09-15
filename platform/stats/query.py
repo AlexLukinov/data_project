@@ -33,6 +33,13 @@ PHYSICAL: dict[Table, str] = {
 }
 """Registry table -> mart table."""
 
+FRESH_ROLLUP = "stats_daily_mv"
+"""The rollup's second producer's target (ADR-044): the same shape as `stats_daily`, kept
+seconds-fresh by a materialized view over what the ingest worker derives. Read through
+`rollup_from()` only."""
+
+DIRTY_ALIAS = "__dirty"
+
 DATE_COLUMN: dict[Table, str] = {
     "stats_daily": "day",
     "player_hands": "played_date",
@@ -82,8 +89,8 @@ def build_query(
         members = cohort_subquery(request.cohort, reg, params)
         where.append(f"s.{PLAYER_COLUMN[plan.table]} IN ({members})")
 
-    table = f"{get_settings().db('marts')}.{PHYSICAL[plan.table]}"
-    sql = f"SELECT {', '.join(select)} FROM {table} AS s WHERE {' AND '.join(where)}"
+    prologue, table = source_of(plan.table)
+    sql = f"{prologue}SELECT {', '.join(select)} FROM {table} AS s WHERE {' AND '.join(where)}"
     if request.group_by:
         keys = ", ".join(request.group_by)
         sql += f" GROUP BY {keys} ORDER BY {keys}"
@@ -92,6 +99,51 @@ def build_query(
     sql += " LIMIT {limit:UInt32}"
     scalars["limit"] = request.limit
     return sql, {**scalars, **params.values}
+
+
+def source_of(table: Table) -> tuple[str, str]:
+    """(prologue, relation) to read `table` from: a fact table as itself, the rollup fresh."""
+    marts = get_settings().db("marts")
+    if table == ROLLUP:
+        return rollup_from(marts)
+    return "", f"{marts}.{PHYSICAL[table]}"
+
+
+def rollup_from(marts: str) -> tuple[str, str]:
+    """The rollup read fresh: every (dataset, day) from exactly one of its two producers.
+
+    `stats_daily` is what dbt built; `stats_daily_mv` is a complete second copy that the
+    ingest worker keeps ahead of it (ADR-044, ADR-047). A slice is taken from the view target
+    when the view holds a newer stamp for it than dbt's rollup does -- the read-side twin of
+    dbt's own dirty-partition gate, over the two rollups alone (a tenant's ClickHouse user may
+    read nothing else) -- and from dbt's rollup otherwise, so nothing is ever counted twice.
+
+    The dirty set is one scalar, computed once and passed to `has()` as a constant: ClickHouse
+    evaluates an identical `IN (subquery)` once per occurrence and refuses a scalar there. The
+    outer date range is pushed into both branches, so partition pruning is unchanged. Per
+    (dataset, day), not per day: a hero upload must not route the same day's population slice
+    through the view target, which is only as fresh as its last backfill for bulk imports.
+    """
+    rollup, fresh = f"{marts}.{PHYSICAL[ROLLUP]}", f"{marts}.{FRESH_ROLLUP}"
+
+    def stamps(table: str, alias: str) -> str:
+        return (
+            f"SELECT dataset, day, max(src_parsed_at) AS {alias} FROM {table}"
+            " WHERE user_id = {tenant_id:UInt32} GROUP BY dataset, day"
+        )
+
+    dirty = (
+        f"(SELECT groupArray((f.dataset, f.day)) FROM ({stamps(fresh, 'fresh_max')}) AS f"
+        f" LEFT JOIN ({stamps(rollup, 'built_max')}) AS b"
+        " ON b.dataset = f.dataset AND b.day = f.day WHERE f.fresh_max > b.built_max)"
+    )
+    union = (
+        f"(SELECT * EXCEPT (src_parsed_at) FROM {rollup} AS r"
+        f" WHERE r.user_id = {{tenant_id:UInt32}} AND NOT has({DIRTY_ALIAS}, (r.dataset, r.day))"
+        f" UNION ALL SELECT * EXCEPT (src_parsed_at) FROM {fresh} AS f"
+        f" WHERE f.user_id = {{tenant_id:UInt32}} AND has({DIRTY_ALIAS}, (f.dataset, f.day)))"
+    )
+    return f"WITH {dirty} AS {DIRTY_ALIAS} ", union
 
 
 def scope(request: ReportRequest, tenant_id: int, table: Table) -> tuple[list[str], dict[str, Any]]:

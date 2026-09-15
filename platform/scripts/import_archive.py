@@ -100,7 +100,10 @@ def _init_worker(
     """
     global _WORKER
     _WORKER = _WorkerContext(
-        sink=sinks.hand_sink(),
+        # Core tables only: an archive is followed by `scripts.backfill`, which derives every
+        # partition anyway, and the per-batch hot path would run ~1,800 times for a 9M-hand
+        # pool import for nothing (ADR-047).
+        sink=sinks.hand_sink(hot_path=False),
         store=sinks.raw_store(),
         parser=get_parser(Site(site)),
         site=site,

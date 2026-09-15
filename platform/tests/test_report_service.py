@@ -21,7 +21,10 @@ class FakeDB:
 
     def __call__(self, sql: str, params: Mapping[str, Any]) -> tuple[list[str], list[Row]]:
         self.calls.append((sql, dict(params)))
-        table = sql.split(" AS s")[0].rsplit(".", 1)[1]
+        # The rollup is read as a union of its two producers (ADR-047); a fact table as itself.
+        table = (
+            "stats_daily" if "stats_daily_mv" in sql else sql.split(" AS s")[0].rsplit(".", 1)[1]
+        )
         key = (
             f"{table}:{params['dataset']}"
             if f"{table}:{params['dataset']}" in self.answers

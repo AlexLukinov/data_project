@@ -176,7 +176,7 @@ def test_limit_is_bounded() -> None:
 
 def test_cached_stats_on_coarse_dimensions_read_the_rollup() -> None:
     sql, _ = _one(ReportRequest(stats=["vpip", "threebet"], group_by=["position"]))
-    assert "marts.stats_daily AS s" in sql
+    assert "marts.stats_daily AS r" in sql and ") AS s WHERE s.user_id" in sql
     assert "sum(s.threebet_action)" in sql and "sum(s.threebet_opp)" in sql
     assert "sum(s.hands) AS __hands" in sql
 

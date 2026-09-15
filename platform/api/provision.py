@@ -9,6 +9,7 @@ environment. Two stores, two mechanisms:
 - ClickHouse: the numbered SQL migrations run with the configured prefix (`ch.migrate`).
 - Object storage: the raw-text bucket named in settings is created if missing.
 - dbt: every model's table is created empty, so the stats API has something to read.
+- The rollup's materialized views: fenced and backfilled (`scripts/mv_sync.py --create`).
 
 Run:  uv run python -m api.provision
 """
@@ -106,6 +107,27 @@ def build_empty_marts() -> None:
     )
 
 
+def create_rollup_views() -> None:
+    """Fence and backfill the rollup's materialized views (ADR-044, ADR-047). Idempotent.
+
+    After the marts exist, because the views read `marts.decisions`; a subprocess, because the
+    script lives in `scripts/`, which nothing imports (`.importlinter`). Margin zero: nothing
+    can be ingesting while an environment is being provisioned, and on an empty chain the
+    backfill is instant. Without this a fresh environment would be read through a union with
+    an empty half (`stats/query.py: rollup_from`).
+    """
+    env = {**os.environ, "CLICKHOUSE_PORT": str(get_settings().clickhouse_port)}
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.mv_sync", "--create", "--margin", "0"],
+        cwd=PLATFORM,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"scripts.mv_sync --create failed:\n{result.stderr[-2000:]}")
+
+
 def provision() -> None:
     """Create what is missing and apply every pending migration in every store."""
     ensure_postgres_database()
@@ -113,6 +135,7 @@ def provision() -> None:
     ch_migrate.migrate()
     ensure_raw_bucket()
     build_empty_marts()
+    create_rollup_views()
 
 
 def drop_postgres_database() -> None:

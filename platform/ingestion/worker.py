@@ -29,6 +29,7 @@ from core.enums import Site
 from core.settings import get_settings
 from ingestion import sinks
 from ingestion.bus import make_consumer
+from ingestion.cache import invalidate_tenant
 from ingestion.messages import UploadMessage
 from ingestion.pipeline import ingest_text
 from ingestion.sinks.protocols import HandSink, RawStore
@@ -140,6 +141,10 @@ def _handle(msg: Message) -> bool:
         record_upload_result(message.upload_id, {}, f"{type(exc).__name__}: {exc}")
         return True
     record_upload_result(message.upload_id, counts)
+    if counts.get("parsed", 0):
+        # The hands are in the fact tables already (the sink's hot path); a report cached
+        # before this upload would hide them for the cache's whole TTL (ADR-047).
+        invalidate_tenant(message.tenant_id)
     return True
 
 

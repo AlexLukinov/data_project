@@ -51,7 +51,9 @@ def test_cohort_becomes_a_rollup_subquery_bound_by_parameters() -> None:
         dataset="population", hero_only=False, stats=["vpip"], group_by=["position"], cohort=REGS
     )
     ((sql, params),) = _queries(request)
-    assert "marts.stats_daily AS s" in sql
+    # The rollup is read as the union of its two producers (ADR-047); the cohort itself is
+    # evaluated on dbt's rollup alone, whole-history stats being what a cohort is defined by.
+    assert "marts.stats_daily AS r" in sql and ") AS s WHERE s.user_id" in sql
     assert f"s.player_key IN ({MEMBERS})" in sql
     assert params["p0"] == 25 and params["p1"] == 1000 and params["dataset"] == "population"
     assert params["tenant_id"] == 7

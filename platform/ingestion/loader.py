@@ -90,11 +90,22 @@ def to_rows(
     return hand_rows, player_rows, action_rows, winner_rows
 
 
+def batch_stamp() -> datetime:
+    """The `parsed_at` for one batch: now, to the millisecond the column keeps.
+
+    Truncated here rather than left to the driver so that the value the hot path later binds
+    (`ingestion/hot_path.py`) is the value the column holds, not one that merely rounds to it.
+    """
+    now = datetime.now(UTC)
+    return now.replace(microsecond=now.microsecond // 1000 * 1000)
+
+
 def insert_hands(
     client: Client,
     hands: list[CanonicalHand],
     tenant_id: int,
     dataset: str = DATASET_HERO,
+    parsed_at: datetime | None = None,
 ) -> dict[str, int]:
     """Insert a batch of hands into every core table. Returns per-table row counts."""
     if not hands:
@@ -102,7 +113,7 @@ def insert_hands(
 
     core = get_settings().db("core")
     counts: dict[str, int] = {}
-    for spec, rows in zip(TABLES, to_rows(hands, tenant_id, dataset), strict=True):
+    for spec, rows in zip(TABLES, to_rows(hands, tenant_id, dataset, parsed_at), strict=True):
         if rows:
             client.insert(f"{core}.{spec.name}", rows, column_names=spec.column_names)
         counts[spec.name] = len(rows)
