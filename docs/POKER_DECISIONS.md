@@ -59,6 +59,10 @@ not a change I've made.
 | [047](#adr-047--the-hot-path-renders-the-dbt-models-own-sql-for-one-batch-provenance-not-a-lock-guards-dbts-swap-the-fresh-rollup-serves-only-what-dbt-has-not-built) | The hot path renders the dbt models' own SQL for one batch; provenance, not a lock, guards dbt's swap; the fresh rollup serves only what dbt has not built | ✅ |
 | [048](#adr-048--a-tag-filter-is-an-id-list-not-a-registry-dimension-a-note-lives-in-postgres-on-a-hand-that-lives-in-clickhouse-and-ownership-is-decided-at-the-edge) | A tag filter is an id list, not a registry dimension; a note lives in Postgres on a hand that lives in ClickHouse, and ownership is decided at the edge | ✅ |
 | [049](#adr-049--the-cohort-form-is-a-small-vocabulary-of-its-own-offers-what-the-registry-marks-cached-and-shows-a-refusal-in-the-servers-words) | The cohort form is a small vocabulary of its own, offers what the registry marks cached, and shows a refusal in the server's words | ✅ |
+| [051](#adr-051--an-upload-is-followed-by-its-own-row-to-the-end-a-failure-is-retried-by-dropping-the-file-again-a-file-that-stored-nothing-is-a-failure-and-the-uploader-reads-sentences-never-exceptions) | An upload is followed by its own row to the end: a failure is retried by dropping the file again, a file that stored nothing is a failure, and the uploader reads sentences, never exceptions | ✅ |
+| [052](#adr-052--the-winnings-curve-is-a-hero-route-over-the-timeline-query-not-a-day-dimension-the-v1-api-is-deleted-and-every-probe-of-it-re-pointed) | The winnings curve is a hero route over the timeline query, not a day dimension; the v1 API is deleted and every probe of it re-pointed | ✅ |
+| [053](#adr-053--a-number-is-typed-as-text-and-read-with-either-separator-a-fraction-is-labelled-a-fraction-a-situation-travels-in-a-link-as-its-canonical-key) | A number is typed as text and read with either separator; a fraction is labelled a fraction; a situation travels in a link as its canonical key | ✅ |
+| [054](#adr-054--ci-lives-at-the-repository-root-calls-the-make-targets-instead-of-restating-them-and-runs-on-every-push) | CI lives at the repository root, calls the make targets instead of restating them, and runs on every push | ✅ |
 
 ---
 
@@ -1553,6 +1557,16 @@ four rows on `/progress`.
 
 ---
 
+### Correction, found at the round-5 merge (2026-09-15)
+
+`apply_update` stamped `confirmed_at` with `datetime.now(UTC)` in the API process, while `created_at` is the
+database's `now()`, and `review_due_at` compares the two. So answering "still true?" could move the next
+review **earlier** than the one just answered, by however far the clocks disagreed: the integration test
+saw 0.22 s while Docker Desktop's VM ran ahead of the host, and two production machines can disagree by
+seconds. `confirmed_at` is now `func.now()`, which the router's refresh reads back — one clock for both
+ends of the rule (`1d8be0e`). The store's database-free unit test asserts the clock; the round trip
+stays in `tests/integration/test_heuristics.py`.
+
 ## ADR-039 — All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened
 
 **Status:** ✅ Recommended by me · **Date:** 2026-09-11 · **Plan step:** E.5
@@ -2705,3 +2719,555 @@ is because `auth/api.ts` was not this lane's file. The lane's gate, `make web-ch
 over the combined tree** at the end of the session (846 tests / 79 files); its first run had been
 red on one line outside the lane — `app/hands/notes.ts:92`, lane B's `createAutosave` at 47 lines
 against the 40-line rule — which that lane fixed before the final run.
+
+---
+
+## ADR-051 — An upload is followed by its own row to the end: a failure is retried by dropping the file again, a file that stored nothing is a failure, and the uploader reads sentences, never exceptions
+
+**Date:** 2026-09-15 · **Status:** accepted · **Plan step:** D.8 (amended before it was built) · **Features:** F-110, F-703 · **Supersedes:** nothing
+Constrained by [ADR-014](#adr-014--the-ingestion-contract-is-versioned-and-frozen-early) (content-addressed idempotency, tenancy from the token), [ADR-029](#adr-029--hand-histories-are-parsed-server-side-only) and [ADR-047](#adr-047--the-hot-path-renders-the-dbt-models-own-sql-for-one-batch-provenance-not-a-lock-guards-dbts-swap-the-fresh-rollup-serves-only-what-dbt-has-not-built) (the hot path that makes an upload visible without dbt).
+
+### Context
+
+D.8 said: "`DropZone` with progress via `/v1/uploads/{id}` polling, dataset choice, poker accounts · **Done means** a real file uploaded through the UI produces stats without manual steps". It was audited before anything was built (a read-only workflow of six auditors and a critic whose load-bearing claims were each re-read against the code). The ingestion contract existed — `POST /v1/uploads` with `site` and `dataset`, `GET /v1/uploads[/{id}]`, `GET /v1/sites`, `GET`/`POST /v1/auth/poker-accounts` — and **no line of the web app called any of it**. The hot path runs for both Kafka topics and both datasets, so upload size and dataset do not change freshness. But between the drop and the report, five things would each have made "without manual steps" false with nothing red:
+
+1. **A failed upload could never be retried.** Dedupe on `(user_id, sha256)` answered `duplicate` whatever the row's status, and the worker commits the offset of a failed message. One transient error (object storage, ClickHouse, a worker that died) locked that file for that user for good.
+2. **The worker's cache drop deleted nothing.** `ingestion/cache.py` scanned `stats:{tenant}:*`; every report is cached by `ReportRequest.cache_key` as `report:{tenant}:{digest}`. A report viewed before an upload stayed as it was for `stats_cache_ttl_seconds` (300 s) after the upload landed. E.1b wired the call in, with no test that it removed a key.
+3. **A file that stored no hands ended `completed`** — a site declared wrongly splits into zero hands, a file of refused hands stores none, and both read as success.
+4. **`error_text` was the exception**, `f"{type(exc).__name__}: {exc}"`, returned verbatim by `GET /v1/uploads`. A ClickHouse or S3 exception carries hosts, bucket names and SQL — the one internal error that reached a client, through a table instead of a response.
+5. **A hero upload whose seat did not resolve is stored and invisible.** Every hero stat filters `is_hero = 1`; nothing counted such hands. A pool export dropped under "My hands" ends `completed, N parsed` and My game does not move.
+
+Also found: `Producer.flush()`'s return (messages still undelivered) was ignored, so a broker outage answered 202 and left the row `queued` for ever; `decode_upload` tried UTF-16 second and blind, so an even-length cp1251 file decoded as garbage and was refused as an unknown format while the same file one byte longer was read; `dataset` was stored nowhere, so the list could not show it and the same bytes under the other dataset were silently "duplicate"; poker accounts had no delete, accepted any string as a site (stored, never matched) and did not trim a name; `/v1/sites` returned a bare dict against §2.7.
+
+Two premises of the step were wrong. **"Progress" could only have been a spinner** — nothing wrote `processing`, and counts were written once, at the end. And **an account is not a precondition of a hero upload**: PokerStars falls back to the first `Dealt to X [cards]` line and GGPoker defaults `hero_names` to its `Hero` alias (`parser/sites/pokerstars/finalize.py:109-114`, `parser/sites/ggpoker.py:88`), so a self-export resolves its hero with no account at all.
+
+### Decisions
+
+1. **The upload row is the page's only view of the worker, and it is kept true to the end.** The API writes `queued`; the worker writes `processing` when it takes the file, the counts so far after every stored batch (`ingest_text(progress=…)`, every 5,000 hands), and `completed` or `failed` last (`ingestion/upload_status.py`). A poller needs no other signal: `queued` for long means no worker, `processing` means one is reading, and `updated_at` moves with every batch.
+
+2. **A failure is retried by dropping the same file again** (`api/upload_store.py`). When the earlier upload of the same bytes is `failed` — or `processing` with no word from a worker for `STALE_PROCESSING` (15 minutes; the worker moves `updated_at` after every batch) — the route resets that row, puts the bytes back under its content-addressed key and publishes it again, answering `dedupe: "requeued"`. Idempotency is otherwise unchanged: `completed`, a live `processing` and `queued` answer `duplicate`. The stale-`processing` rule is what makes every status write safe to lose: a `record_outcome` or `record_failure` swallowed during a Postgres blip leaves the row `processing`, and the next drop finishes it. A stuck `queued` row is deliberately **not** requeued on a time-out: with the publish checked (decision 5) it means no worker is running, and republishing would only queue the same file twice behind it.
+
+3. **A file that stored nothing is `failed`, in words.** `failure_sentence` gives three: no hands found ("Check that it is a *site* hand history"), one hand refused, *N* hands refused ("They are kept for the parser's backlog"). A file with at least one stored hand is `completed` with its refused count beside it.
+
+4. **The uploader reads sentences, never exceptions.** The worker logs the exception in full (a test asserts the log carries it) and writes "Processing failed on our side. Upload the file again to retry." — which is also true, because of decision 2. Every refusal at the door is a sentence that says what to do: a zip is told to be unzipped (415, detected by its magic bytes), a file over the limit is told the limit (413), a declared site the text contradicts is refused (422 — the mislabelling that used to become an empty `completed` upload), a file no parser recognises asks for the site (422), an unknown site lists the supported ones (400), and object storage that does not answer is a 503 of its own ("Storage did not answer…") rather than a 500 — which Starlette serves outside the CORS middleware, so the browser would have read it as "the API did not answer". **A declared site is checked against every line, not the first:** detection reads the start of the file, so a file with a preamble is undetectable, and choosing its site has to work or the 422's own advice loops; the headers of the two sites never overlap, so the other site's hands are still refused. The upload page shows these exactly as sent.
+
+5. **A publish the broker did not acknowledge fails the upload, and cannot come back to life later.** Success is **this pointer's own delivery report**, not `flush()`'s count, which covers every message in the process-wide producer. `message.timeout.ms` is 5,000, so librdkafka drops an unacknowledged pointer instead of retrying it for its default five minutes — measured against the real broker: an acknowledgement in 0.11 s; with no broker a `_MSG_TIMED_OUT` report at 5.02 s and an empty producer queue. The route then marks the row `failed` with "The upload queue did not answer. Upload the file again in a minute." (only if it is still `queued`) and answers 503, so the next drop requeues it. A pointer that timed out *in flight* may still have been stored by the broker, so **the worker skips a pointer whose upload is already `failed`** (`upload_status.claim`); a requeue sets `queued` before it publishes, so a real retry is never skipped.
+
+6. **The cache drop scans every prefix a tenant's entries are written under** (`TENANT_PREFIXES = (stats, report)`), and it runs **before** the terminal status is written — a page re-reads its reports the moment it sees the upload end — and on a failure too, since earlier batches of the file may already be in stats. `tests/test_cache_invalidation.py` pins both writers to the scanned prefixes, so a third writer with a new prefix turns a test red instead of a screen stale.
+
+7. **`uploads.dataset` and `uploads.hands_without_hero`, one migration (`a8b9c0d1e2f3`, from `f7a8b9c0d1e2`).** `dataset` is **nullable** on purpose: no row before this revision recorded one, and a `'hero'` default would state something false about every pool file already imported. The same bytes under the other dataset are refused in words (409, "This file is already uploaded as My hands. A file belongs to one dataset.") rather than answered "duplicate" — **and this is checked before a failed row is retried, which keeps its dataset**: a failed upload may already have hands in the marts from its earlier batches, and the hot path's anti-join skips a hand already there whatever its dataset, so a retry under the other dataset would leave those hands under the first one, silently, until dbt rebuilt their days. Only a row with no recorded dataset takes the retry's. The page labels a re-dropped row by the row's dataset, never the form's, and a row with none as "Dataset not recorded", with no link. `hands_without_hero` counts a `hero` file's stored hands with no seat resolved as the uploader's — the only trace that a pool export went in under the wrong dataset — and the page turns it into a warning. Both columns are metadata-only additions on Postgres 16. The bulk importer's ledger writes both too, and follows decision 3: a file it stored nothing from is `failed` in words, so neither a re-run nor the upload page skips it as an empty `completed`.
+
+8. **Poker accounts: list, add, remove — and they are the fix, not the gate.** `DELETE /v1/auth/poker-accounts/{id}` scoped by `user_id` (another user's id is the same 404 as a missing one); a site must have a parser; a name is trimmed and compared without case, because the parser compares without case. The page says what the audit found: most exports need no name, and **a name applies to files uploaded after it is added**. Re-attributing a stored hand is not offered: its core rows would be re-parsed, but the hot path's anti-join skips a hand already in the marts, so the fix would not reach stats until dbt rebuilt its day — a manual step presented as a button.
+
+9. **The page** (`pages/upload/index.vue`): the dataset (My hands / Pool hands, locked while a folder is read and while files are sending — a switch during the walk would have sent the whole folder under the other dataset), the site (detected unless chosen), a drop of files or a folder, a queue that sends one file at a time and follows them through `GET /v1/uploads/{id}` every 2 s, **at most five at once**, oldest first, the recent uploads, and the poker accounts. The clock that words "Is the parser worker running?" (after 20 s) and gives up (after 10 minutes) measures the time since **anything** in the queue last moved, so files waiting behind a busy single worker are not told it is down. **Leaving the page stops the queue**: nothing more is sent and nothing polled — without it, a sign-out followed by another sign-in on the same tab would have sent the rest of the first user's folder with the second user's token. A completed hero file links to My game, a pool file to the pool. One nav entry, appended; `/hands`' empty state and `/account` point at it. `account.vue` shows `describeApiError`'s sentence instead of the fetch library's message, and `describeApiError` now reads a 422's list detail (ADR-049's follow-up, in `auth/api.ts`; `pool/rules.ts`' private copy is left for its owner).
+
+### Alternatives
+
+*Requeue a stuck `queued` row after a time-out.* Rejected (decision 2): with the publish checked, a stuck `queued` row means no worker is running, and republishing adds a duplicate message and hides the real cause behind "trying again". A silent `processing` row is different — a worker took it and its last word was lost — and is requeued.
+*Let a lost status write raise, so Kafka redelivers.* Rejected: `_handle` returning without a commit does not redeliver — the consumer's position is already past the message, and the next message on the partition commits past it — so the pointer would be lost, not retried.
+*Retry a failed upload under the dataset the new drop chose.* Rejected (decision 7): it looks harmless when the failure stored nothing, and `hands_parsed = 0` is not proof of that — a failure inside the first batch's hot path leaves decisions written and the count at zero.
+*Keep the worker's offset uncommitted after a failure, so Kafka retries.* Rejected: a deterministic failure (a raw object that is gone) becomes a poison message that blocks its partition for every tenant keyed to it. The uploader's own second drop is the retry, and it is idempotent.
+*Refuse, or dead-letter, a hero hand with no hero seat.* Rejected: the shared ingest loop also serves the bulk importer, and the hand is a valid hand — the mistake is the dataset, and a count the page can word is the honest signal.
+*A non-null `dataset` with `'hero'` as the server default.* Rejected (decision 7).
+*Put E.3's per-tenant request budget on the upload routes.* Rejected: 300 requests a minute is spent by the page itself on a 40-file folder; the poll is bounded in the client (decision 9) instead, and a byte budget is F-706.
+*Widen `FetchOptions.body` to carry a `FormData`.* The right type, and a one-line change in `app/auth/api.ts` — but it turns `nuxt typecheck` red in `app/ranges/api.test.ts`, which reads `.body.node_key` and belongs to no lane this round. The one multipart call site casts, with the reason beside it; **the widening and its two-line test narrowing are a merge follow-up.**
+*Union the GG `Hero` alias with registered names* (`(hero_names or set()) | {"hero"}`). Deferred: today a registered GG name replaces the alias and resolution falls back to `Dealt to` with cards, which every GG self-export prints; changing the parser changes re-parse output and is not this step's.
+
+### Verification
+
+**In a browser, end to end, on the test environment** — the Done means. A headless Chrome of its own (CDP on :9268, its own profile; the shared MCP profile was held by another lane), the app on :3008, an API of its own on :8808, and `make worker`, **both under `TEST_ENV`**; the founder's :8000/:3000 and the real databases untouched. A script drove the real UI and ran the worker itself, so it could stop it. **29 of 29 checks**:
+- an account registered through the UI; My game's report before any upload answered **0 hands** (and was cached — the entry the old invalidation would have left in place);
+- **Upload** is the last nav entry; `/hands`' empty state and `/account` link to `/upload`; the page opens on My hands, offers *Detect* + `ggpoker` + `pokerstars`, and says the accounts and uploads are empty;
+- `cash_6max_nl50.txt` handed to the file input → the line went `sending → processing → completed` in **2.8 s**, read "2 hands in", linked "See them in My game", and the recent uploads re-read to `Done 2 / 2 / 0`;
+- following the link, My game's `POST /v1/reports/run` answered **hands 2, `cached: false`**, 12.3 s after the drop (the script's own page waits included) — with **`stats_daily` 0 rows and `stats_daily_mv` 12 rows for that tenant**: no dbt run produced it;
+- the same file again → "Uploaded before"; `export.zip` → refused before sending, in words; the observed GG table under My hands → "1 hand in" with the warning that no seat is yours and that it cannot be moved to Pool; the same bytes under Pool → the 409 sentence; `Hero` added, `hero` refused with the 409 sentence, removed after the confirm; a row with its dataset nulled (a pre-D.8 row) re-dropped → "Dataset not recorded", no link;
+- the worker stopped → a file waits "Waiting for the parser", and after 20 s asks whether the worker is running; its raw object deleted and the worker started → **"Processing failed on our side. Upload the file again to retry."** in 5.1 s; dropped again → "Failed before — trying again" → **4 hands in** in 8.3 s.
+Failed requests: the bootstrap `POST /v1/auth/refresh` 401 (D.2's design) and the two deliberate 409s; no page exception. The first run, before the review, was 26/28 — both misses were the check script's own selectors.
+
+**Tests.** `tests/integration/test_upload_to_report.py` (4): an upload over HTTP counted by a report **warmed first with the cache on** (`cached` false afterwards, `stats_daily` empty for the tenant); a pool export under My hands counted as `hands_without_hero` and absent from My game; a pool upload in the pool report; a file over the bulk threshold on the bulk topic and in stats. `tests/integration/test_upload_contract.py` (8): a real failure (the raw object deleted) worded, refused under the other dataset, retried, stored once; a file of unreadable hands `failed` in words and its counts reset on requeue; the other dataset's 409; another tenant's upload 404; poker accounts added, refused case-insensitively, listed and removed per user; **an unacknowledged publish → 503, the row `failed`, a late pointer delivered by hand skipped by the worker, then the retry `completed`**; storage down → 503 and no row; a `processing` row silent for an hour requeued while one touched a moment ago is a duplicate. Unit (no stack, 43 new): the intake's refusals and the preamble case, the worker's order (claim → progress → cache drop → outcome) and its log, the failure sentences, both cache writers pinned to the scanned prefixes, cp1251 at both parities, the delivery report and `message.timeout.ms`, the ledger's failed status, the pipeline's counters and progress hook, and the route refusals over ASGI. Web: 83 Vitest tests over `upload/`, `components/upload/` and `auth/`, failure paths first — among them an unmount while a POST is held open sends nothing more and polls nothing.
+**Proved by mutation:** reverting `TENANT_PREFIXES` to `stats` alone turns the warm-report integration test and both cache unit tests red.
+
+**Reviewed adversarially before ticking** — a workflow of six lenses (backend, security, web, contract, tests, rules), each finding given to a skeptic told to refute it: **30 findings, 8 refuted, 22 upheld (14 confirmed, 8 in part), 21 fixed** and the last answered by a data check (no `failed` row exists on the real Postgres). The fixes that changed a decision are in decisions 2, 4, 5, 7 and 9: the dataset checked before a retry, stale `processing`, the per-message delivery report and the late-pointer skip, the storage 503, the declared site read on every line, the poll cap and shared clock, the reading lock, the null-dataset label, and the queue stopping on unmount (which closed a cross-tenant send on sign-out). Two of the refuters' corrections were load-bearing: making `_handle` return without a commit on a lost status write would have *skipped* the message, and `message.timeout.ms` below the wait without a per-message report would have answered 202 for a pointer that expired.
+
+**Found by the gate, fixed:** `make test-all` failed once on the worker's log assertion, which passed alone. `migrations/env.py` called `fileConfig()` with its default `disable_existing_loggers=True`, so every in-process migration — `api.provision` in the test session — silenced every logger already imported, the worker's among them, for the rest of the process. It now passes `disable_existing_loggers=False`; the failing order was reproduced, and reverting the line makes it fail again.
+
+**Gates:** `make check` green (7 contracts, size check clean, gen-check unchanged) · `make web-check` green (1,013 tests / 99 files; 2 lint warnings, both in lane C's `analyze/index.test.ts`) · `make seed && make test-all` **1,783 passed, 6 skipped** (dbt 35/35 in the seed), with both new integration files confirmed by name with `--collect-only`.
+
+### Consequences
+
+- **The Phase-1 exit criterion is met**: a file dropped in the browser is in My game's numbers seconds later with no command typed, verified on the test environment (decision 9 and the verification above).
+- **Operator step for the real stack:** `make pg-migrate` applies `a8b9c0d1e2f3` (two metadata-only `ADD COLUMN`s; the downgrade drops them — back up `uploads` first). The API on the real database needs it before `/v1/uploads` answers; the long-running `:8000` process predates D.7b and was not reloaded by this work. And "without manual steps" assumes a running worker: `make worker` is still a foreground process, not a compose service.
+- **Not this step, recorded:** moving or deleting an upload — a pool export dropped under My hands is flagged, and the page says it cannot be moved, because the retry would need the affected days rebuilt or a dataset-aware anti-join in the hot path first; a `.zip` is refused in words (archive upload is F-116); no per-tenant upload budget (F-706); cohort membership still reads dbt's `stats_daily` only (`stats/query.py` `cohort_subquery`), so a just-uploaded pool hand moves pool reports but not who is in a cohort until dbt runs; `api/hand_query.py`'s hero hand list has no `dataset` predicate, so a GG self-export uploaded as Pool shows its Hero seat in My hands; the GG alias union (above); `pool/rules.ts#validationMessages` can now import `auth/api.ts`'s; `FetchOptions.body` (above).
+- Rows written before this step keep their old `error_text`; the real Postgres holds **no** `failed` upload (2,539 `completed`, 17 `queued`, checked read-only 2026-09-15), so no exception text is there to scrub, and the migration rewrites nothing.
+- The two catch-less deletes the UX audit's §2.13 lists are in `pages/analyze/index.vue` and `components/reports/ReportWorkbench.vue`, not `account.vue`; they are F.12a's.
+
+---
+
+## ADR-052 — The winnings curve is a hero route over the timeline query, not a day dimension; the v1 API is deleted and every probe of it re-pointed
+
+**Date:** 2026-09-15 · **Status:** accepted · **Plan step:** D.9a (round 5, lane B) · **Settles:** the obligation ADR-045 left on D.9
+
+### Context
+
+D.9 had to delete the v1 adapters (`GET /v1/stats`, `POST /v1/stats/custom`, `GET /v1/stats/timeline`
+in `api/routers/stats.py`) and the static dashboard at `/`. One of them could not simply go: the
+timeline is the API's only time series, and My game's winnings curve is drawn from it through
+`heroApi.winnings()` (ADR-045). The plan named two replacements and called the first the better
+answer: **register a `day` dimension and move the curve onto `POST /v1/reports/run`**, or **add
+`GET /v1/hero/winnings` over `stats.timeline.build_timeline`**. Either way `winnings()` keeps its
+return type, so no consumer changes. Three tests also used `/v1/stats*` as probes, one of them the
+tenant-isolation suite, which exists to break isolation on purpose.
+
+### Decision
+
+**`GET /v1/hero/winnings`.** The day dimension was checked against the code, not weighed in the
+abstract. The cheapest version of it that works is smaller than the plan's wording suggested, and
+it is still the wrong trade for this step:
+
+1. **The cheapest working day dimension is a fact-table one.** A dimension is its column on
+   every table it lists (`group_expr` emits `s.<code>`), and the calendar date is `day` on
+   `stats_daily` but `played_date` on both fact tables (`stats/query.py`, `DATE_COLUMN`). A
+   `played_date` dimension on `[player_hands, decisions]` needs no rename. Its cost is that every
+   report grouped by it leaves the rollup for the fact tables. (An adversarial review corrected
+   the first draft of this ADR, which said a rename and a marts rebuild were unavoidable.)
+2. **Exact sums are possible, but not through a built-in stat.** A built-in stat's cell is a rate
+   rounded to three decimals (`ROUNDING`, `value_expr`), so rebuilding a day's sum as
+   `value × n / 100` drifts day over day. An inline `CustomStatSpec` with `format: count` and
+   `numerator: {sum: net_won_bb}` is not rounded and is exact. `analysis/pool/realization.py`
+   already builds one that way. So the curve could be four inline custom stats grouped by day,
+   with no new rollup columns, migration or backfill. A rollup-served curve would still need four
+   new cached stats.
+3. **A report row cannot hold a date today.** `ReportRow.group` is
+   `dict[str, str | int | float | None]` (`stats/request.py`), and clickhouse-connect returns a
+   `Date` as `datetime.date`, which pydantic refuses (measured:
+   `ReportRow(group={'day': date(2026, 8, 18)}, …)` raises `string_type`). The engine's result
+   model would change before a single day could be grouped.
+4. **The registry has no date type, and a group-by dimension is offered everywhere.**
+   `DimType` is `enum | number | bool | line | string`. A day needs a type, date ops, binding in
+   the compiler, a place in `/v1/definitions` and in the TypeScript filter model (ADR-037). The
+   group-by picker offers every dimension on both the workbench and the pool page
+   (`reports/columns.ts`), so `day × player_key` over the 9M-hand pool would be one click away.
+   That is a product decision about time as a slice for every stat, not a detail of one graph.
+5. **A report is `LIMIT`ed (default 500) and ordered by its group key, ascending.** A curve
+   request that forgets to raise `limit` loses its most recent days first, and `ReportResult`
+   carries no truncation flag, so nothing turns red.
+
+So the report route could serve the curve, but only by adding a date type, a result-model change
+and a UI-wide group-by in the same step as a deletion. That step was scoped and parallel. The
+route gives identical numbers now, from code that already exists. The running totals stay on the
+server either way, as the `WinningsPoint` contract written in D.4 (`web/apps/web/app/hero/api.ts`)
+asks. A server-side wrapper over a report could meet that contract too, so it decides nothing
+between the two.
+
+**It is not the duplication ADR-022 forbids.** Today the report engine cannot ask this question,
+and everything that can be shared is shared. `build_timeline` is unchanged, and it scopes through
+`stats.query.scope` (tenant first, dataset, hero seat, dates) and reads the fresh rollup through
+`source_of` (ADR-047), exactly as a report does.
+
+**The shape of the route.**
+- The work lives in `analysis/hero/winnings.py`: My game owns the graph (ADR-026). The router is
+  thin, like `/v1/hero/sessions`.
+- **Dates only.** My game has no filter bar (ADR-045). The v1 route's `dataset` and four coarse
+  filters were not carried over, because no caller sent them and the hero area is hero-only by
+  definition.
+- **The names say what a number is.** `hands` is that day's hands; the four sums beside it are
+  `cumulative_net_bb`, `cumulative_ev_bb`, `cumulative_showdown_bb` and
+  `cumulative_nonshowdown_bb`. v1's `total_hands` is `hands`, matching `SessionsResult`. The
+  running-total arithmetic is v1's, moved unchanged, so the numbers are identical by construction
+  and were checked to be.
+- **Cached under `stats:{tenant}:hero_winnings:…`** through `api.cache.stats_key`, whose prefix is
+  the constant `invalidate_tenant` scans. It deliberately does not use `ReportRequest.cache_key`
+  (`report:{tenant}:…`), which that invalidation misses. That was measured here in a scratch
+  Redis: `invalidate_tenant(1)` removed both `stats:1:hero_winnings` keys and left `report:1:…`.
+  Round 5's lane A found the same thing independently and fixes the report side (ADR-051). Because
+  the key is built from the shared constant, it stays in the invalidated namespace whichever side
+  that fix changes.
+
+**Deleted:** `api/routers/stats.py`; the six v1 schemas in `api/schemas.py` (`StatValue`,
+`CustomStatSpec`, `CustomStatsRequest`, `StatsResponse`, `TimelinePoint`, `TimelineResponse`);
+`api/static/index.html`; and the `/` route and `/static` mount in `api/main.py`. The UI has been
+the Nuxt app since D.1.
+
+**Every probe was re-pointed, none deleted:**
+
+| test | was | now | intent kept, and what changed |
+|---|---|---|---|
+| `integration/test_tenant_isolation.py` · unauthenticated | `GET /v1/stats`, `/v1/stats/timeline`, `/v1/hands`, `/v1/uploads` | `POST /v1/reports/run`, `GET /v1/hero/winnings`, the same two | 401 on every data route |
+| · forged bearer | `GET /v1/stats` | `POST /v1/reports/run` and `GET /v1/hero/winnings` | 401; now on both successors |
+| · tenant in the query string | `GET /v1/stats` clean vs forged | both successors, clean vs forged, **each computed from an empty cache** | Both routes cache under the token's tenant, so the second of two calls was answered from the first's entry and never reached ClickHouse — a forgery honoured in the query but not in the key would have passed. `_forget_cached_answers()` drops the report and curve keys (prefixes read from the code that writes them) before each call. A first draft instead pinned both answers to `0`; the review showed that goes red when the probing account is itself tenant 1 with hands, so it was withdrawn |
+| · **new:** tenant in the body | — | `POST /v1/reports/run` with `tenant_id` / `user_id` | The report route reads a body, so the body is the other place to forge. Refused 422 `extra_forbidden`, not ignored |
+| · a fresh tenant sees nothing | `/v1/stats` hands, `/v1/stats/timeline` total | report `hands == 0`, winnings `hands == 0` and `points == []` | unchanged |
+| `integration/test_rate_limits.py` · tenant budget | `GET /v1/stats` ×3 | `POST /v1/reports/run` ×3, body `{}` | An empty body is a valid report, so every refusal is the budget. Also dropped the file's stale **NOT YET RUN**: it ran at the round-3 and round-4 merges |
+| `test_api_v2.py` · scoping | `/v1/stats?site=` | `POST /v1/reports/run` with a `site in` filter | bound `IN`, tenant parameter, hero seat by default |
+| · binding / enums | `/v1/stats?stake_level=<injection>` | the same payload as a report filter | bound, never in the SQL; a bad `site` is a 400 **and never reaches the runner** (new assertion) |
+| · timeline shape | `/v1/stats/timeline` | `/v1/hero/winnings` | every field of both days; tenant, dataset and hero seat bound |
+| · **new:** forged scope on the curve | — | `?tenant_id=1&dataset=population&hero_only=false&player_key=…` | parameters stay exactly `{tenant_id: 7, dataset: 'hero'}` |
+| · **new:** the retired surface | — | 5 paths | 404, not hidden behind a 401 |
+
+Dropped with the adapter, and only because they tested the adapter's own response shape:
+`test_v1_stats_adapter_keeps_the_dashboard_shape`'s `groups` / `StatValue` assertions, and
+`test_v1_custom_counters_are_gone`. The latter's route no longer exists, and the 404 test covers
+it.
+
+### Alternatives
+
+- **The day dimension**, deferred rather than refuted (above). It is the right answer for a
+  different question: a stat over time (VPIP by month, the pool's drift). When the first consumer
+  needs that, it should be its own step: a `date` type with week and month buckets, a date-capable
+  `ReportRow.group`, the rollup-or-facts decision, and a truncation signal on `LIMIT`. The curve
+  can move then if it gains anything, and `winnings()` would again be the only function body that
+  changes.
+- **Keep `/v1/stats/timeline` and delete the rest.** That keeps a v1 path, a `dataset` switch
+  nobody uses on a hero graph, and a `report:` cache key the worker cannot invalidate.
+
+### Consequences
+
+- `stats.timeline.build_timeline` keeps its filter support and its fact-table branch, although its
+  only caller now passes dates and nothing else. It is the function's own contract and was not
+  this step's to narrow. If no filtered consumer arrives by F.12, the branch should go.
+- A pydantic range error reads as pydantic prints it (`1 validation error for ReportRequest …
+  date_from is after date_to`), exactly as `/v1/hero/sessions` does. It is a 400 naming the
+  caller's own input, not a stack trace.
+- **Two lines in other lanes' files are now stale**, handed to the merge: `platform/Makefile:117`'s
+  `api` help text ("dashboard at /", lane D's) and the comment in `pages/index.vue` saying the
+  winnings series "accepts dates and four coarse dimensions" (lane C's). A third, the
+  `cors_origins` docstring in `core/settings.py` ("the same-origin dashboard at `/` needs no
+  entry"), was in no lane and was corrected here.
+- **`test_tenant_isolation.py`'s query-string probe detects a forgery only when tenant 1 owns
+  hands and the probing account is not tenant 1, and nothing in the file guarantees either.** In
+  the full, alphabetical `make test-all` both hold: `test_analyses.py` registers the first account,
+  and `test_mv_reconciliation.py` ingests the seed corpus as `TENANT = 1` before this file runs.
+  **Run alone, it is vacuous:** the session starts from an empty Postgres, `iso-a` becomes tenant 1,
+  and `tenant_id=1` forges its own id. So the merge should confirm it **by name inside the full
+  `make test-all -v` output, not in a separate single-file run.** This predates D.9a (the
+  `/v1/stats` version had it). The real fix is a victim tenant the file ingests itself, forged by
+  id and checked to hold hands before the probe. That is left as a follow-up, because it is new
+  ingestion code in a suite this lane cannot run.
+- The re-pointed integration tests **have not run**: this lane may not run `make test-all`. D.9a
+  stays `[ ]` until the merge runs them by name.
+
+### Verification
+
+The recipe D.4 used: an API of this lane's own on `:8859` over the **real** ClickHouse, read-only;
+auth in a scratch Postgres `poker_d9a_verify`, whose first account is tenant 1 (dropped
+afterwards); Redis db 9; Nuxt on `:3059`; a headless Chrome on its own profile and port `:9259`.
+**Before any code changed**, the v1 timeline gave 18 days, 19,802 hands, ending at
+**−272.0 actual, +55.64 EV, +1,819.2 showdown, −2,091.2 non-showdown**, bb/100 −1.37, EV +0.28,
+and My game drew **−272 · 56 · 1,819 · −2,091** from `GET /v1/stats/timeline?dataset=hero`.
+**After:** `GET /v1/hero/winnings` matched it field by field on all 18 days, and on a sub-range
+(2026-08-25 → 09-01: 8 days, 7,895 hands, −287.2 / −304.68). The page drew the same four end
+labels from one `GET /v1/hero/winnings`, made no `/v1/stats` call, and logged 0 console errors
+and 0 failed requests. The KPI report was byte-identical apart from `cached`. `/v1/stats`,
+`/v1/stats/timeline`, `/` and `/static/index.html` answered 404. A cached answer equalled a
+computed one (6 ms against 306 ms cold), a backwards range answered 400, and no token answered
+401.
+
+---
+
+## ADR-053 — A number is typed as text and read with either separator; a fraction is labelled a fraction; a situation travels in a link as its canonical key
+
+**Status:** accepted · 2026-09-15 · plan F.12a (split out of F.12; round 5, lane C)
+
+**Context.** F.12a is the mechanical half of the UX audit — [POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) §7
+item 1 and the three known issues of §4 — run beside D.8, D.9a and F.1. Most of it is fixes with known
+files. Three items needed a choice, and one of them touches 28 controls in both packages, which is
+exactly what drifts into three conventions unless it is written down. The browser pass then turned up
+two things the audit could not see from the source; they are decisions 7 and 8.
+
+**Decisions.**
+
+1. **Every numeric input is `NumberInput`: a text box in `inputmode="decimal"` that reads `2.5` and
+   `2,5` alike.** Measured in a headless Chrome launched `--lang=ru-RU` (the founder's `AppleLocale` is
+   `ru_RU`): a native `<input type="number">` holding 2.5 **displays `2,5`** — screenshotted — while it
+   *accepts* either separator when typed (`value` is `'2.5'` both ways). So the defect is the display,
+   which disagrees with every figure the app prints beside it. The options:
+   - *`lang="en"` on the document or the element* — already set; Chrome ignores it for number inputs.
+   - *Keep `type="number"` and accept the display* — the one control on the page that writes `2,5`,
+     and the display follows a browser setting the app cannot see.
+   - *A directive over native inputs* — still a number input underneath; the display stays.
+
+   So `poker-ui/src/components/NumberInput.vue` over `src/number.ts` (`parseDecimal`, `formatDecimal`,
+   `cleanDecimal`, `sameDecimal`), exported from `@poker/ui`, used by all 28 — `grep 'type="number"'`
+   finds nothing in either package:
+   - A comma is **always** the decimal separator, never a thousands separator (`1,000` is one); `2..5`,
+     `1e3`, `5%` and anything else that is not one plain number are refused. Nothing more is guessed.
+   - Unreadable or out-of-range text is **not emitted**: the box is `aria-invalid`, red, with a `title`
+     saying what it takes ("A number from 0 to 100 — 2.5 and 2,5 both work."), and the last good value
+     stays in use. Leaving the box writes back that value, with a dot, so the screen never shows a number
+     other than the one computed. Typed key by key, `2..5` passes through a readable `2`, which *is*
+     applied; the box then ends on `2`, which is honest.
+   - Emptying the box emits `clear`, not `null`: a value that can never be empty binds `v-model` alone,
+     a nullable one also listens for `clear`. This is why the component declares props and emits instead
+     of `defineModel` — the two directions have different types (vue-tsc types a `defineModel<number |
+     null>` emit as nullable, which a pot's `Ref<number>` rejects).
+   - Half-typed text is left alone when the value it already says comes back with float noise, so a
+     percent-scaled consumer binds the **unrounded** scaled number (`0.285 × 100` shows `28.5`, not `29`).
+   - `lazy` emits on change where the old input used `@change`; ArrowUp/ArrowDown step by `step` within
+     `min`/`max`; a disabled box looks disabled.
+   - Anything that stored the typed *text* now stores `formatDecimal(number)`: a prediction commits
+     `45,5` as `45.5` (`scorePrediction` reads it with `Number()`), a filter clause and a cohort rule send
+     `0.75`.
+   - Two neighbours of the same problem, found by the review: a filter clause's **list** of numbers
+     (`big_blind in …`) is separated by `;` or spaces, because `0,05, 0,1` split on commas was four wrong
+     numbers sent silently; and `PotOddsPanel`'s *to call* shows the bet as a **placeholder** — as its
+     value it was written back under the cursor of a reader who had just emptied the box.
+
+2. **`facing_size_pct` and `size_pct` are relabelled "(fraction of pot)", not given a percent control.**
+   The value is a fraction end to end (the mart, the buckets `[0, 0.37] … [1.10, ∞)`, the descriptions).
+   A percent control needs a registry concept ("fraction shown as percent") carried through
+   `/v1/definitions` into `ClauseValue` and `filter/label.ts` for two dimensions, and would make the
+   number typed differ from the one in the URL, which STATUS recorded must not happen. Label only:
+   `gen_stats.py` writes stat labels, not dimension labels, so `make gen` changed no file.
+
+3. **A situation travels in a link as its canonical key, in one parameter: `?node=`.** `HandStudy`'s
+   "Compare here" sent `?hero=…&street=…`, which `/ranges/compare` never read — and two fields cannot name
+   a node (seats, street, the sized action sequence, stack, table, stake, texture). `app/ranges/situation.ts`
+   writes `canonicalNodeKey(key)` and reads it back through `parseNodeKey`. A readable field-per-parameter
+   form in the style of `filter/url.ts` was rejected: a second serialisation of a type that has a
+   canonical one, for a link nobody types. Reading is strict where the filter's is lenient — a situation
+   read halfway is a different situation — so an unreadable `?node=`, and a `?range=` id that cannot be
+   opened (which the page used to swallow), say so in a sentence and open on the default.
+
+4. **The pot-odds and MDF panels on the replayer and in the pot-odds trainer are bound, not made
+   read-only.** Both mounted the panels without handlers, so their inputs took typing and changed
+   nothing. The trainer's own comment said they were editable on purpose; on the replayer "what if the
+   bet were bigger" is the study. `composables/useEditableOdds.ts` seeds pot, bet and rake from the step or
+   the spot, re-seeds on every new one, and a line says when the numbers are no longer the hand's, with a
+   button back. The call is seeded as `null` — it follows the bet — because a pinned call made a bigger
+   bet ask for *less* equity.
+
+5. **Step 4 grades by the nut definition on screen, and locks it once an answer is committed.**
+   `RangeComparisonPanel` exposes its Advanced definition as an optional `v-model:nutOptions` (core's
+   units; unbound it keeps a local copy) and `Step4Nuts` passes the same object to `nutAdvantage()`. The
+   definition is **not persisted** — `StepWork` is the API's schema, not this lane's — so it is locked after
+   commit (`nutLockedReason`, which says why and that reopening grades by the default): changing it
+   afterwards re-graded an answer already given and autosaved the new grade.
+
+6. **The header wraps.** Its links overflowed below ~1000 px; it is a wrapping flex row. A disclosure menu
+   was rejected for a laptop-width problem that wrapping solves with no state.
+
+7. **A page that loads its subject renders while it loads.** Every reworded "Loading…" was unreachable:
+   the pages awaited `useAsyncData` in setup, and with the request held in the browser **nothing rendered —
+   not even the layout's `<main>`** — until it answered. `/hands`, `/hands/[id]`, `/ranges/[id]` and the
+   compare page's lookups are `lazy`; `/analyze/[id]` does not await `store.open()` but gates the page on
+   its own `opened` flag, because the store still holds the analysis opened before this one and a lazy
+   load would have shown — and autosaved into — the wrong one. `/hands` hides its count until the list
+   has answered, instead of saying "0 hands" above "Finding the hands…".
+
+8. **What a compare column shows is one tested function, in one order.** `app/ranges/compareColumn.ts`:
+   still asking → the column says so, whatever the previous situation left behind; a failed call → an
+   error, **never "insufficient data"**, which needs an answer that said so; an unasked pool says that.
+   The diff heatmap and the disagreement table wait until both lookups have settled, and a tier-3
+   reconstruction for a superseded situation is dropped rather than drawn on the new one.
+
+Smaller, recorded here so no one re-derives them: step 1 names the chart it loaded ("started from your
+chart …"), loads an **own** chart only (a solver range is not "your chart"), and tells an API that did not
+answer from a library with nothing stored (`library.lookup` now marks the store ready on success); the
+equity trainer prints the reference-chart provenance; `MDFPanel`'s "after rake" and `EquityCalculator`'s
+exact / Monte Carlo go through `MetricLabel`, with counts written `1,176` on any locale; the replayer's
+developer sentence about `invested_bb` is a sentence for the reader; the two deletes with no `catch`
+say a refusal (and the saved-report library drops a deleted row before re-reading, so a failed re-read is
+not reported as a failed delete); a combo weight keeps Float32's seven digits so `0.0004` can be zeroed.
+
+**Verification.** A headless Chrome of its own (`--lang=ru-RU`, port 9253, its own profile) driven over
+CDP with request interception, the app on `:3053`, an API on `:8853` over a scratch Postgres
+`poker_f12a_verify` (tenant 1, **dropped afterwards**) and the real ClickHouse read-only. **113 of 113
+checks**, typing `2,5` and `2.5` key by key into the Lab's panels, the rake and nut-cutoff Advanced folds,
+the EQR box, the brush, a drilldown weight, the trainer's gate, the situation editor, step 6 (read back
+from the server as 0.455), a filter clause on the relabelled dimension and the cohort form; the header and
+pages at 1280 and 700 px, light and dark, with no horizontal overflow; loading, empty, failure and
+link-problem states forced by holding or refusing the requests that answer them. Before any of it ran, an
+adversarial review over the combined diff (four lenses, a skeptic per lens) returned 31 findings,
+several the same defect seen from two lenses: 4 refuted (the iPad decimal pad, an intended `edited`
+rule, the `defineModel` deviation, the Upload link — lane A's); every confirmed one fixed with a test,
+except the error unwrap and one component test listed below. The 700 px pass also caught a pre-existing overflow
+in `NodeKeyEditor`'s grid (a text box holds a 7rem column open), fixed with `min-width: 0`.
+Gates: `make web-check` green (typecheck, ESLint, **1,015 tests / 99 files**, licences unchanged);
+`make check` green (`make gen` changed nothing, 1,676 unit tests over the combined tree).
+
+**Consequences and follow-ups.**
+- **Persist the nut definition with step 4** — optional `nut_mode`/`nut_cutoff`/`nut_top_percent` on
+  `StepWork` (JSONB, no migration) — then drop the lock's "reopening grades by the default" caveat. An API
+  change, so not this lane's.
+- **`describeApiError` should unwrap `useAsyncData`'s error** (`error.cause ?? error`): Nuxt wraps a
+  failed `$fetch` in an H3Error with status 500, so `/hands`, `/hands/[id]` and `/analyze` print "The API
+  answered with status 500." for an API that is not running. `compare.vue` unwraps locally; the fix
+  belongs in `app/auth/api.ts` (lane A's).
+- `ReportWorkbench`'s refused delete is verified in the browser only — mounting it needs three stores,
+  the route and the columns model; `/analyze`'s has a component test.
+- Not this step: `pages/account.vue`'s "Loading…" and raw `error.message` (lane A). Left for F.12: the
+  replayer's first step prints core's "pot must be positive, got 0" on screen (§2.13's generic errors).
+
+---
+
+## ADR-054 — CI lives at the repository root, calls the make targets instead of restating them, and runs on every push
+
+**Status:** accepted · 2026-09-15 · plan F.1 (its last clause, "green … in CI") · round 5, lane D
+
+**Context.** CI has never run. Four findings, each confirmed against the tree before anything changed:
+
+1. **Wrong place.** The workflow was committed at `platform/.github/workflows/ci.yml` (`64ea6cf`,
+   extended by F.1 in `e74c148`). GitHub reads workflows only from `.github/workflows/` at the
+   repository root, and the git root is `ru_de/`, one level up. As far as GitHub was concerned,
+   the repository had no workflow.
+2. **Wrong trigger.** `on: push: branches: [main]` plus `pull_request`. The work lives on
+   `feat/range-lab`, nothing is pushed and no pull request is open, so the file would not have
+   fired even at the right path.
+3. **Drift.** Its steps restated the Makefile's commands, and the copy had already fallen behind.
+   E.1b added `scripts.gen_hot_path --check` to `make gen-check` (ADR-047), the workflow never got
+   it, and `make check` still called itself "Everything CI runs". The integration job restated
+   `TEST_ENV`, `dbt-install`, the provisioning, the seed and the dbt build, and ran
+   `pytest -m integration` where `make test-all` runs every test.
+4. **Toolchains that disagreed.** The workflow ran `uv sync --group dev` against the rule
+   "`uv sync --frozen` in CI"; Node 24 in CI against Homebrew's `node` 23.11.0 locally; no Python
+   pin (uv takes whatever satisfies `>=3.12`: a managed 3.12.14 here, the runner's system Python
+   there); `ubuntu-latest`; and v4 actions on the retired node20 runtime.
+
+**Decisions.**
+
+1. **Moved, not copied.** `git mv platform/.github/workflows/ci.yml .github/workflows/ci.yml`, so
+   history follows the file. `defaults.run.working-directory: platform` keeps every step in the product.
+2. **Jobs call targets, and restate none of them.** `quality` runs `make install` + `make check`;
+   `web` runs `make web-install` + `make web-check`; `integration` runs `make install` + `make up` +
+   `make seed` + `make test-all`. The only raw command is the failure-only `docker compose logs`,
+   which is a diagnostic, not a gate: `make logs` follows with `-f` and would never return. **The
+   rule for every later edit:** if a target cannot run in CI as written, change the target, never
+   a copy of it in the workflow. It has applied once already. A fresh clone's `make seed` and
+   `make test-all` failed on a missing `.venv-dbt` (`api/provision.py` runs dbt too), so the dbt
+   binary became a file prerequisite of every target that runs dbt. Locally it is a no-op; on a
+   fresh tree `make -n seed` prints `make dbt-install` first.
+3. **`--frozen` in the Makefile, not only in CI.** `make install` is `uv sync --frozen` and
+   `UV := uv run --frozen`, so a developer and CI run literally the same command. `--group dev` was
+   redundant: `dev` is uv's default group, and the fresh sync below installed pytest, ruff, mypy and
+   lint-imports without it. Freezing only the sync would not have been enough. The `uv run` calls
+   inside `make check` would still re-lock a stale `uv.lock` on the runner, and CI would pass on a
+   resolution nobody committed. **Consequence:** after a hand edit to `pyproject.toml`, run
+   `uv lock` (`uv add` already does). **Not `--locked`:** the rule names `--frozen`. `--locked` would
+   also fail a lock that has gone stale against `pyproject.toml`; that is a one-word change if the
+   founder wants it.
+4. **One source per tool version.**
+   - Node: `platform/web/.nvmrc` = `24`, read by `actions/setup-node` (`node-version-file`) and by
+     nvm/fnm locally. 24, not 23: 23 is an odd-numbered release, end of life since June 2025, and the
+     dependency tree already refuses it. A fresh `npm ci` on 23.11.0 prints 38 `EBADENGINE` warnings,
+     among them nuxt 4.5.2 (`^22.19.0 || ^24.11.0 || >=26.0.0`), vitest 4.1.11 and
+     license-checker-rseidelsohn 5.0.1 (`node >=24`). The gate passes on 23 today, but outside the
+     range each of those supports.
+   - Python: `platform/.python-version` = `3.12`, the version mypy's `python_version` and ruff's
+     `target-version` already name. The existing `.venv` (3.12.14) satisfies it, so no environment
+     is rebuilt (`uv sync --frozen --dry-run`: "Would make no changes").
+   - uv: `UV_VERSION` 0.12.5 in the workflow, the version that wrote `uv.lock`.
+   - Runner: `ubuntu-24.04`, not `ubuntu-latest`. Actions: `checkout`, `setup-node` and `setup-uv`
+     at `@v7`, all on the node24 runtime (read from each `action.yml`).
+5. **Triggers: every push to every branch, pull requests into `main`, and by hand.**
+   - `push: branches: ["**"]`: the founder works on long-lived branches without pull requests, so
+     the check has to run where the work is. F.1's clause is reached by pushing `feat/range-lab`
+     alone.
+   - `pull_request: branches: [main]`: checks the merge result, which a branch push never builds.
+   - `workflow_dispatch`: a re-run without an empty commit.
+   - `concurrency: ci-${{ github.ref }}` with `cancel-in-progress`: a newer push supersedes the run
+     on the older commit.
+   - **No `paths` filter.** A docs-only commit costs one run. Any skip rule is one more way for "CI
+     did not run" to happen quietly, which is the bug this ADR fixes. Revisit if Actions minutes
+     become a constraint.
+   - **Rejected:** `main` plus pull requests (the status quo, which checks nothing on a branch until
+     a PR is opened) and a schedule (nothing changes without a push). **Expected cost:** a branch
+     with an open PR runs twice per push, once on the head and once on the merge ref. They are
+     different commits, and that is deliberate.
+6. **`permissions: contents: read`.** The workflow writes nothing, so `GITHUB_TOKEN` gets nothing
+   more. **`timeout-minutes`** 20 / 20 / 60 guard against a hang; the integration value is loose
+   because no full `make test-all` duration had been recorded. Tighten it after the first run.
+
+**Verified before any push** — in a git worktree of `856c06d` with only this lane's four files
+applied, and no `.venv`, `.venv-dbt`, `node_modules`, caches or ignored files:
+
+- `make install`: CPython 3.12.14, 77 packages.
+- `make check`, 192 s: ruff; format (242 files); mypy (125 files); 7 import contracts kept; all
+  three generated-file checks including `gen_hot_path`; the size check; 1,621 passed, 100 deselected.
+- The unit tests again with every service pointed at a closed port: 1,621 passed. No unit test
+  leans on a running stack, which the quality job will not have.
+- `make web-install` + `make web-check` on Node 24.21.0 / npm 11.19.0: 79 files, 846 tests,
+  licence audit green. On the local 23.11.0 / npm 11.4.2: green too, with the 38 engine warnings.
+  `npm ci` needed no `--legacy-peer-deps` under either npm.
+
+**Checked statically, for linux x86_64** (the adversarial review's five agents all hit the session
+limit, so these were done by hand):
+
+- `uv.lock`: every one of the 78 packages the default and dev groups can install, extras included,
+  has a CPython 3.12 manylinux x86_64 or pure-Python wheel, so nothing builds from source.
+- `package-lock.json`: every darwin-arm64 native has its linux-x64 counterpart (esbuild, rollup,
+  rolldown, lightningcss, tailwind oxide, napi-rs lzma), and all 12 linux-x64 entries are MIT or
+  MPL-2.0, inside the allowlist.
+- The compose images: kafka, clickhouse, postgres and redis publish amd64; both minio images are
+  multi-arch manifest lists. The two mounted ClickHouse configs are tracked.
+- The seed corpus (three files) is tracked. No code that `make seed` or `make test-all` runs reads
+  an ignored path; the equity cache is read only by `scripts/backfill_equity.py`, and its unit test
+  passed without the file. There is no `packages.yml`, so no `dbt deps` is needed.
+- The YAML parses to the intended triggers, concurrency, permissions and steps. setup-uv's default
+  cache glob `**/uv.lock` matches `platform/uv.lock`, and the explicit `version` skips its
+  root-`pyproject.toml` lookup.
+
+**What only a real run or the merge could settle** — as written before the push, with what the
+first runs showed:
+
+1. **`make up` on the runner** — ✗ on the first run, then fixed (see *The first runs* below).
+2. **Memory:** the containers' caps sum to 6.3 GiB — ✓. The repository is public, so it gets the
+   larger runners.
+3. **dbt:** `make dbt-install` resolves the newest dbt-core 1.x / dbt-clickhouse 1.x on the runner,
+   which is neither the local `.venv-dbt` (1.12.3 / 1.9.3) nor `uv.lock`'s `dbt` group
+   (1.11.14 / 1.10.2) — ✓ for now: `make seed` and `make test-all` passed on whatever it
+   resolved. Still unpinned, so the version can change under a later run.
+4. **The integration suite on Linux** — ✓, `make test-all` green in 269 s.
+5. **The actions themselves** (setup-uv's cache, setup-node's `.nvmrc`, the push trigger) — ✓.
+   The concurrency group and the `pull_request` trigger have not yet had an event to act on.
+6. **The merge** — still open. Only this lane's code was pushed. Round 5's other lanes reach CI with
+   the merge's push.
+
+**The first runs (2026-09-15, at the founder's request).** Lane D's four code files were committed
+alone as `7e4cfeb` and `feat/range-lab` was pushed. The round-5 docs, this ADR included, and the
+other lanes' work stayed in the working tree.
+
+- **Run 34955622749:** quality ✓ and web ✓ — the first time CI had passed anything — and integration
+  ✗ at `make up` after 18 s. A job log needs admin authentication, and the only annotation said
+  "exit code 2", so the cause was read from Compose v2.38.2, the runner image's version:
+  - `up --wait` waits on every service as "running or healthy", unless another service depends on
+    it with `service_completed_successfully` (`getDependencyCondition`, pkg/compose/start.go).
+  - It returns `container … exited (0)` for any exited container (`isServiceHealthy`,
+    pkg/compose/convergence.go), polled every 500 ms.
+  - `minio-init` is a one-shot job that nothing depends on. It passed only when a poll caught `mc`
+    still running — usually true under Docker Desktop's VM, and lost on a fast Linux runner. The
+    18 s, and the failure-only `docker compose logs` step parsing the file successfully, fit that
+    and nothing else examined.
+- **Fix, `3a4b2ea`:** `minio-init` has `profiles: ["init"]`, so `up --wait` leaves it out, and
+  `make up` runs `docker compose run --rm minio-init` once the stack is healthy. A failed bucket
+  creation still fails the target. `run` replaces `container_name` with a generated name
+  (pkg/compose/run.go), so a leftover `poker-minio-init` cannot collide. The rule held: the target
+  changed, not a copy of it.
+- **Run [34957886151](https://github.com/AlexLukinov/data_project/actions/runs/34957886151):
+  green in all three jobs.**
+
+  | job | total | make steps |
+  |---|---|---|
+  | integration | 355 s | `make up` 23 s · `make seed` 53 s · `make test-all` 269 s |
+  | quality | 82 s | `make check` 71 s |
+  | web | 57 s | `make web-install` 10 s · `make web-check` 40 s |
+
+  **F.1 ticked.** The test counts are in the job logs, which anonymous API calls cannot read.
+
+**Consequences.**
+- F.1 is `[x]`. Its other clauses were verified on 2026-09-10; its CI clause by run 34957886151.
+- **`feat/range-lab` is on `origin`, and the repository is public.** Every later push runs CI. The
+  round-5 merge's push is the first run over the combined tree.
+- **Local Node is 24.21.0** (Homebrew `node@24`, keg-only, linked with `--force`). 23.11.0 stays in
+  the Cellar; `brew unlink node@24 && brew link node` reverts. The unversioned `node` formula is
+  26.8.2, so `brew upgrade node` would skip past 24. Four Nuxt dev servers already running on 23
+  were unaffected, and the shared `node_modules` loads under 24.
+- The integration `timeout-minutes` (60) can come down to about 20 now that a duration is known.
+- **D.9b**'s E2E job follows the same rule: a fourth job calls a make target, and the workflow
+  restates nothing.
+- **Left as they are, and recorded here:**
+  - dbt is unpinned (item 3 above). Pinning it is its own change, with its own run of the mart chain.
+  - The actions are pinned by major tag, not by commit SHA.
+  - npm 11.19 warns that `esbuild` and `fsevents` install scripts are not covered by `allowScripts`.
+    A later npm may stop running them.
+  - The empty `platform/.github/workflows/` directories are still on disk. Git does not track empty
+    directories; `rmdir` was denied in this session.

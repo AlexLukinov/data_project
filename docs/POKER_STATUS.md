@@ -5,8 +5,10 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; CI run pending a push**
-**Last updated:** 2026-09-15 (session 19, **the round-4 merge** — E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a` and the F.12 audit `7f3e2bf` reconciled and committed. **D.7b ticked** after its six never-run integration tests passed by name; E.1 and E.1b ticked by their lane. `make check` green · `make web-check` green (846 / 79 files) · `make seed && make test-all` **1,715 passed, 6 skipped**. Found: the real Postgres is four create-only migrations behind head.)
+**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; **CI real and green since 2026-09-15, F.1 ticked (ADR-054)****
+**Last updated:** 2026-09-15 (session 20, **the round-5 merge** — D.9a `5c68433`, D.8 `00b6f8a`, F.12a `58d368a` committed, plus a heuristics clock fix `1d8be0e` and a fixture scrub `785ec83`; F.1 had committed and pushed itself. **D.9a ticked.** Gates green on the third run: `make check` 1,675 · `make web-check` 1,015 / 99 · `make seed && make test-all` **1,783 passed, 6 skipped**. **Found: fourteen real opponents' screen names in the public history** — the founder's decision, below.)
+
+**Previously:** 2026-09-15 (session 19, **the round-4 merge** — E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a` and the F.12 audit `7f3e2bf` reconciled and committed. **D.7b ticked** after its six never-run integration tests passed by name; E.1 and E.1b ticked by their lane. `make check` green · `make web-check` green (846 / 79 files) · `make seed && make test-all` **1,715 passed, 6 skipped**. Found: the real Postgres is four create-only migrations behind head.)
 
 **Previously:** 2026-09-14/15 (**round 4**, four parallel lanes: **E.1b** the hot path, owned the stack, applied 0012 and `built_by` to the real database and verified 0 / 0; **D.7b** notes and tags, owned the Alembic head; **D.6b** the cohort form, web only; the **F.12 audit**, docs only.)
 
@@ -40,25 +42,90 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ First: [POKER_PLAN.md](POKER_PLAN.md) **D.8** — upload & accounts
+### ✅ D.8 — upload & accounts: done 2026-09-15 (round 5, lane A, ADR-051) — committed `00b6f8a`
 
-E.1b landed on 2026-09-15 (ADR-047): an upload is in stats seconds after the worker stores it, on the real
-stack, and E.1 is ticked with it. D.8's "Done means" — *a real file uploaded through the UI produces stats
-without manual steps* — is now reachable: `DropZone` with progress via `/v1/uploads/{id}` polling, the
-dataset choice and the poker accounts, over the ingestion that already exists. Needs the stack and real
-ingestion; `make up && make seed`, then `make api` and `make web`.
+**A file dropped on `/upload` is counted in My game with no command typed after the click** — verified in
+a browser of its own against the test environment, with the API and `make worker` both under `TEST_ENV`:
+drop → `completed` in 2.8 s → My game's report 2 hands, `cached: false`, `stats_daily` empty for that
+tenant (no dbt run). 29/29 browser checks, `test_upload_to_report.py` (4) and `test_upload_contract.py`
+(8) green by name, `make check` · `make web-check` · `make seed && make test-all` (**1,783 passed, 6
+skipped**) green. File list: `scratchpad/lane-d8.files`. What the merge needs to know:
 
-**Before D.8 touches the real stack — the real Postgres is four migrations behind.** It is at
-`8b2f4c6d1e3a` (cohorts, C.7); head is `f7a8b9c0d1e2`. The four missing ones only create tables —
-`ranges` + `range_versions` (F.6), `analyses` (F.9), `heuristics` (F.11), `hand_notes` + `hand_tags`
-(D.7b) — so against the founder's own database the range library, the analyzer, the heuristic log and
-hand notes would all fail on a missing table. Every lane since F.6 verified against a scratch Postgres,
-which is why nothing noticed. One command, additive, not run by the merge because it writes to the
-founder's database:
+- **Operator step on the real stack: `make pg-migrate`** (after `pg_dump -t uploads`). Revision
+  `a8b9c0d1e2f3` adds `uploads.dataset` (nullable) and `uploads.hands_without_hero` — metadata-only on
+  Postgres 16. Any API started on the real database after this code needs it; the long-running `:8000`
+  predates D.7b and was not touched. The real Postgres holds no `failed` upload, so no old exception
+  text is exposed by the new page.
+- **"Without manual steps" assumes a running worker**: `make worker` is still a foreground process, not
+  a compose service. Under `TEST_ENV` it needs the same env as the API, or uploads wait in `queued`
+  (the page says so after 20 s).
+- **Merge follow-ups** (ADR-051): widen `FetchOptions.body` to carry a `FormData` and narrow two lines in
+  `app/ranges/api.test.ts`, then drop the one cast in `app/upload/api.ts`; `pool/rules.ts` can import
+  `auth/api.ts`'s `validationMessages`.
+- **Not done, recorded:** moving or deleting an upload (a pool export under My hands is flagged, not
+  movable); `.zip` upload (F-116); a per-tenant upload budget (F-706); cohort membership still reads
+  dbt's rollup only; `hand_query.hero_hands` has no dataset predicate.
+- `migrations/env.py` now calls `fileConfig(..., disable_existing_loggers=False)`: in-process
+  migrations (`api.provision`, every integration session) had been silencing every logger imported
+  before them, the worker's included.
+- The UX audit's "two delete handlers with no catch" are in `pages/analyze/index.vue` and
+  `ReportWorkbench.vue` (§2.13), not `account.vue` — F.12a's, not D.8's.
 
-```
-cd platform && make pg-migrate          # alembic upgrade head against POSTGRES_DB from .env
-```
+### ✅ F.12a — the audit's mechanical half: done 2026-09-15 (round 5, lane C, ADR-053) — committed `58d368a`
+
+**Every §7-item-1 fix and the three known issues are in, and seen in a browser of its own**: a headless
+Chrome launched `--lang=ru-RU`, driven over CDP with request interception, against the app on `:3053` and
+an API on `:8853` over a scratch Postgres (`poker_f12a_verify`, **dropped**) and the real ClickHouse
+read-only — **113/113 checks** at 1280 and 700 px, light and dark, typing `2,5` and `2.5` key by key.
+`make web-check` green (**1,015 tests / 99 files**, licences unchanged) · `make check` green (1,676; `make gen`
+changed no file). File list: `scratchpad/lane-f12a.files`. What the merge needs to know:
+
+- **One number convention**: `poker-ui`'s `NumberInput` (+ `src/number.ts`), appended to `src/index.ts`. All
+  28 former `type="number"` inputs use it; a native one on this machine *displays* `2,5` (measured, while it
+  accepts both separators when typed). A reader types either; the app writes a dot.
+- **Shared files with lane A**: `app.vue` — lane C changed only the `<nav>` classes (it wraps); the Upload
+  entry in `links` is lane A's. `pages/hands/index.vue` — lane C: `lazy: true`, the loading sentence, the
+  count hidden until the list answers; the `/upload` sentence is lane A's.
+- **Found in the browser, not in the audit:** an awaited `useAsyncData` held the whole app blank while it
+  loaded, so no "Loading…" could ever show; four pages and the compare lookups are now lazy
+  (`/analyze/[id]` behind its own `opened` gate — the store still holds the previous analysis).
+- **Follow-ups** (ADR-053): persist step 4's nut definition in `StepWork` (an API change) and drop the lock's
+  caveat; `describeApiError` should read `error.cause` for `useAsyncData` errors (lane A's `auth/api.ts`) —
+  `/hands`, `/hands/[id]` and `/analyze` print "status 500" for a stopped API; `ReportWorkbench`'s refused
+  delete has no component test (browser-verified). Left for F.12: the replayer's first step prints core's
+  "pot must be positive, got 0".
+- **F.12 stays `[ ]`** and solo: the glossary rule, undo and keyboard, explain-the-number, empty states /
+  Examples / the tour (ADR-050), acceptance 12.
+
+### ✅ D.9a — retire the v1 API: ticked at the merge 2026-09-15 (round 5, lane B, ADR-052) — committed `5c68433`
+
+*This block was rebuilt at the merge from `scratchpad/lane-d9a.files`; the lane's own was lost when another lane
+rewrote this file.* The winnings curve moved to **`GET /v1/hero/winnings`** (dates only, over
+`stats.timeline.build_timeline`), not a `day` dimension; `heroApi.winnings()` kept its return type, and the
+curve matched the v1 timeline field by field on all 18 days of the real hero data. `/v1/stats*`, the static
+dashboard and its mount are gone — the merge did the `git rm`, which the lane's session could not — and
+every probe of them was re-pointed, none deleted: `test_tenant_isolation.py` (5 passed, 2 demo-user tests
+skipped as before) and `test_rate_limits.py` (3) green **by name inside the full run**, where the
+query-string probe has teeth (alone, the prober is tenant 1 and it proves nothing).
+
+**The real Postgres is one migration behind again.** It was brought to `f7a8b9c0d1e2` on 2026-09-15
+(four create-only migrations, after a dump to `platform/backups/poker-pg-pre-f7a8b9c0d1e2-20260915.sql`);
+D.8 adds **`a8b9c0d1e2f3`** — `uploads.dataset` (nullable) and `uploads.hands_without_hero`, add-column only.
+Not applied by the merge. `cd platform && make pg-migrate` after a dump, before any API runs this code
+against the real database.
+
+**CI is real and green since 2026-09-15 — F.1 ticked** (ADR-054). The workflow sat at
+`platform/.github/workflows/ci.yml`, which GitHub never reads. It is now `.github/workflows/ci.yml`,
+runs on every push to every branch, and calls the make targets only: `make check`, `make web-check`,
+`make seed` + `make test-all`. At the founder's request, lane D's code was committed alone (`7e4cfeb`)
+and **`feat/range-lab` was pushed** (the repository is public). The first run was red at `make up`, on
+the one-shot `minio-init` under `docker compose up --wait`. `3a4b2ea` fixed it, and
+[run 34957886151](https://github.com/AlexLukinov/data_project/actions/runs/34957886151) is **green in all
+three jobs** (integration 6 min, quality 1.5 min, web 1 min). The round-5 merge committed ADR-054 and these docs;
+**nothing after `3a4b2ea` is pushed**, and the next push waits for the founder's decision on the public
+history (below). Job logs need a signed-in admin; anonymous API calls show only job and step results.
+**Local Node is now 24.21.0** (Homebrew `node@24`, per `platform/web/.nvmrc`); 23.11.0 stays in the
+Cellar, and `brew unlink node@24 && brew link node` reverts.
 
 **Two things E.1b leaves for the operator**, both in ADR-047: after a re-parse or a bulk import, once
 `scripts.backfill` has caught up, run `uv run python -m scripts.mv_sync --verify` and, if it reports
@@ -66,13 +133,84 @@ drift, `--recreate`; and `stats_cache_ttl_seconds` no longer bounds freshness fo
 invalidates the tenant's cache), but still does for dbt-only changes. ADR-047 also carries the exact
 upgrade recipe for any environment whose marts predate it.
 
-**Solo-only from here:** **F.12**, **D.9** and **B.5b** each need the tree to themselves. F.12
+**Solo-only from here:** **F.12** and **B.5b** each need the tree to themselves. F.12
 touches every page and the glossary — **its audit is done** (2026-09-14):
-[POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) is the checklist it starts from, §7 the order. D.9 deletes
-`api/static/index.html` and the old `/v1/stats*` adapters — and carries D.4's obligation, because the
-winnings curve is built on `/v1/stats/timeline` and `/v1/reports/run` cannot replace it (the registry
-has no `day` dimension, so a report cannot group by time at all). B.5b is a full `core.*` table
-rebuild. **F.1** stays open on a CI run, which needs a push.
+[POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) is the checklist it starts from, §7 the order. B.5b is a full
+`core.*` table rebuild. **D.9 was split on 2026-09-15:** **D.9a** (the v1 cleanup and D.4's timeline
+obligation) ran as round 5's lane B (below); **D.9b** (the Playwright E2E and its CI job) waits for
+D.8's upload page, and its CI half is now reachable since F.1. **F.1** is ticked: CI runs on every
+push (ADR-054).
+
+### ⚠ The public history holds real opponents' screen names — the founder's decision
+
+`feat/range-lab` was pushed to the **public** `origin` at `3a4b2ea` on 2026-09-15 for F.1's CI run. The
+round-5 merge scanned every blob reachable from that ref against the real pool's 94,278 player keys and
+found **fourteen real handles**: one pool player's key with their WTSD and
+WWSF in PLAN and STATUS (written in the round-3 merge), a real regular's key in
+`web/apps/web/app/pool/stats.test.ts` (D.6), two real hands with nine handles (two of them short enough
+to be found only by matching fixture lines exactly) in
+`tests/test_parser_ggpoker.py`, and three handles in an old version of `parser/sites/ggpoker.py`. **None are
+on `origin/main`**; they have been public for hours, not months. The tree is scrubbed (`785ec83`), with
+invented names checked against the same key list. **The history is not**, and changing it is yours to
+decide. The options, in the order I'd take them:
+
+1. **Make the repository private now** — GitHub → Settings → General → Danger Zone → Change visibility.
+   Immediate, reversible, and CI keeps working (private repos get Actions minutes).
+2. **Rewrite the branch's history** so the names are gone from every commit (`git filter-repo
+   --replace-text` with the fourteen name pairs), then **force-push** `feat/range-lab`. Destructive: every
+   commit hash on the branch changes, the CI run links in the docs go stale, and GitHub can keep
+   unreferenced commits reachable by hash for a while. Worth it only if the repository will be public.
+
+**No push until this is decided** — D.9b's CI half included. D.9c (round 6) turns "only aggregates get
+committed" from a rule three lanes and two merges broke into a check that runs before every push.
+
+### Round 5 is merged (2026-09-15)
+
+| commit | step |
+|---|---|
+| `7e4cfeb`, `3a4b2ea` | **F.1** CI at the repository root, calling the make targets (ADR-054) — committed and pushed by its lane at the founder's request; green in run 34957886151 |
+| `5c68433` | **D.9a** retire the v1 API; the winnings curve on `/v1/hero/winnings` (ADR-052) — **ticked on merge** |
+| `00b6f8a` | **D.8** upload & accounts: `/upload` → My game with no command (ADR-051) — ticked by its lane |
+| `58d368a` | **F.12a** one number input for `2,5` and `2.5`; the audit's mechanical fixes (ADR-053) — ticked by its lane |
+| `1d8be0e` | fix: the heuristic log stamps a review with the database's clock (ADR-038's correction) |
+| `785ec83` | test: real screen names in two fixtures replaced with invented ones |
+
+**The gates took three runs, and one of the reds was invisible.** Run 1 (full, verbose): 1 of 1,789
+failed — `test_heuristics.py` saw a confirmed review come due 0.22 s *earlier* than before, because
+`confirmed_at` came from the API's clock and `created_at` from the database's. Run 2 failed on the unit
+test the fix broke, **while both background-task notifications reported exit 0**: the wrapper's `echo`
+succeeded; the log's own `EXIT 2` did not lie. Every gate after that was read from its log. Run 3:
+`make check` **1,675** · `make web-check` **1,015 / 99 files** · `make seed && make test-all` **1,783
+passed, 6 skipped** · `uv lock --check` clean. By name in the verbose run: `test_tenant_isolation.py`
+(5 + 2 skipped), `test_rate_limits.py` (3), `test_upload_to_report.py` (4), `test_upload_contract.py` (8).
+
+**Two process findings.** (1) **A docs race:** D.9a's plan note, §6 row, STATUS block and session-log
+row were overwritten by another lane's later rewrite of the same files — rebuilt from its manifest. From
+round 6, **lanes do not edit `POKER_PLAN.md`, `POKER_STATUS.md`, `POKER_DECISIONS.md` or
+`POKER_UX_AUDIT.md`**; each writes its text to `scratchpad/lane-<name>.docs.md` and the merge places it.
+(2) **A lane session cannot delete files** (`rm` is denied); a lane lists deletions in its manifest and the
+merge runs `git rm`. Three files carried two lanes' hunks (`api/schemas.py`, `app.vue`,
+`pages/hands/index.vue`) and were committed hunk by hunk.
+
+**Still needs a human:** the history decision above · `make pg-migrate` for `a8b9c0d1e2f3` (above) ·
+the 30 leftover `@example.com` accounts on the real Postgres · `platform/.github/workflows/` is two empty
+directories (git ignores them; `rmdir` by hand) · local Node is 24.21.0 since lane D
+(`brew unlink node@24 && brew link node` reverts) · `docker compose rm poker-minio-init` if the old exited
+container bothers you · keep `platform/.equity-cache.pkl` · `platform/backups/` holds two dumps.
+
+### Round 6 — five lanes, who owns what (2026-09-15)
+
+| lane | step | owns | ADR |
+|---|---|---|---|
+| **A** | **D.9b** Playwright E2E + its CI job | **the stack** (`make up/seed/test-all`, API, worker, Nuxt for the E2E) · `.github/` · `platform/web/package.json` + lock (Playwright) · new `platform/web/e2e/**` · Makefile targets appended at the end | 055 |
+| **B** | **D.9c** privacy guard | new `scripts/privacy_check.py`, `tests/test_privacy_check.py`; one Makefile target appended at the end; the **real** ClickHouse, read-only | 058 |
+| **C** | **F.12b** words and keys, Range Lab side | `packages/poker-ui/**` (append-only `src/index.ts`) · `app/analyze/**`, `components/analyze/**` · `app/train/**`, `components/train/**` · `pages/lab.vue`, `pages/progress.vue`, `pages/train/**`, `pages/analyze/**`, `pages/ranges/[id].vue` | 056 |
+| **D** | **F.12c** words, empty states, errors, data side | `app/{auth,reports,pool,hands,hero,upload,filter,stats}/**`, `app/ranges/**` · `components/{reports,pool,hands,filter,hero,charts,upload,ranges}/**` · `pages/index.vue`, `pages/leaks.vue`, `pages/account.vue` · `pages/{reports,pool,hands,upload}/**` · `pages/ranges/{index,compare,import}.vue` | 057 |
+| **E** | **F.12d** Examples, first-run tour, `?` overlay | `app.vue` · new `app/help/**`, `components/help/**`, and the Examples' home it chooses | 050 |
+
+**Rules for every lane:** no `git add`/`git commit`/push; no edits to the four shared docs (text goes in
+`scratchpad/lane-<name>.docs.md`); deletions listed for the merge; `scratchpad/lane-<name>.files` as before;
+**never rename or remove a `data-testid`** (lane A's E2E selects by them); only A runs `make seed`/`make test-all`.
 
 ### Round 4 is merged (2026-09-15)
 
@@ -102,9 +240,11 @@ only a derived table; the `ADD COLUMN`s change no stored row). `test_quotas.py` 
 **NOT YET RUN** a round after it ran. The ADR bodies had landed 049, 048, 047 and are re-ordered;
 index 49/49 with every anchor valid.
 
-**Still needs a human:** `make pg-migrate` on the real Postgres (above). `d7-verify@example.com`
-(tenant 2) is still on the real Postgres from D.7's browser verification and there is no
-delete-account endpoint — remove it by hand. `make test-all` dropped `poker_test`, so re-run
+**Still needs a human:** the real Postgres holds **31 accounts, all `@example.com`, all created
+2026-09-08**, with 2,556 uploads between 27 of them — residue of integration runs from before B.4 gave
+the tests their own databases. Only tenant 1 owns hands in ClickHouse (19,802 hero, the pool). There
+is no delete-account endpoint; clean them by hand when convenient, after checking which is yours.
+(`d7-verify@example.com`, long listed here, is **not** on the real Postgres — that item was wrong.) `make test-all` dropped `poker_test`, so re-run
 `make seed` before any test-environment work. Keep `platform/.equity-cache.pkl` (3.9 MB, gitignored,
 69,364 solved match-ups): deleting it costs ~2 h. `platform/backups/` holds the dead-letter export
 (gitignored; restore command in plan §5b). Follow-up recorded in ADR-049: the 422-list reader in
@@ -1103,7 +1243,7 @@ dbt builds.
 - [x] F-B01 Structured JSON logging
 
 ### Phase 1 — MVP thin slice · `[~]` spine complete, breadth remaining
-**Exit criteria:** upload a real file → stats in the browser with no manual steps *(met)* ·
+**Exit criteria:** upload a real file → stats in the browser with no manual steps *(met through the UI on 2026-09-15, D.8 / ADR-051 — before that only the API route existed)* ·
 integration test covers ingest→stats *(met)* · tenant-isolation test in CI *(met)* · core
 stats verified by hand against a manually counted sample *(met for 8 corpus hands; needs
 redoing against ~50 REAL hands once exports exist)*.
@@ -1331,7 +1471,12 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
-| 2026-09-15 (session 19, **the round-4 merge** — no lane work of its own) | **Four lanes committed:** E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a`, F.12 audit `7f3e2bf`. **D.7b ticked**: its never-run `test_hand_notes.py` was green on the first run, confirmed by name and verbose (14/14 with `test_hot_path.py` and `test_mv_reconciliation.py`) beside `make test-all` **1,715 passed, 6 skipped**; `make check` and `make web-check` (846 / 79) green. **Found:** the real Postgres is at `8b2f4c6d1e3a`, four create-only migrations behind head, so the range library, the analyzer, the heuristic log and notes would fail on the founder's own database — not applied, flagged. ADR-047 gained the exact `built_by` upgrade recipe; `test_quotas.py`'s stale NOT YET RUN corrected; ADR bodies re-ordered, index 49/49. | **`make pg-migrate`** on the real Postgres if agreed, then **D.8**, D.10; F.12 / D.9 / B.5b solo |
+| 2026-09-15 (session 20, **the round-5 merge** — no lane work of its own) | D.9a `5c68433`, D.8 `00b6f8a`, F.12a `58d368a` committed; **D.9a ticked** (the merge did its `git rm`s; its isolation and rate-limit probes green by name in the full run). Three gate runs: a heuristic-log clock bug (`confirmed_at` from the API's clock, `created_at` from the database's; fixed `1d8be0e`), then the unit test that fix broke — and two background notifications that said exit 0 over logs that said `EXIT 2`. Final: `make check` 1,675 · `make web-check` 1,015 · `make test-all` **1,783 passed, 6 skipped**. **Fourteen real opponents' screen names found in the public history**; tree scrubbed `785ec83`. D.9a's doc rows had been lost to a concurrent rewrite; rebuilt. | **The founder's history decision**; `make pg-migrate`; round 6 (D.9b · D.9c · F.12b · F.12c · F.12d) |
+| 2026-09-15 (round 5, **lane B — D.9a**, ADR-052; row rebuilt at the merge) | `GET /v1/hero/winnings` replaces the v1 timeline (identical on all 18 days of real hero data); v1 routes and the static dashboard deleted; every `/v1/stats*` probe re-pointed, none deleted; found the worker's cache drop missing `report:` keys. Integration files left unrun, deletions left to the merge. | the merge |
+| 2026-09-15 (round 5, **lane C — F.12a**, ADR-053; web workspace + `dimensions.yaml`, no stack) | F.12a split out of F.12 in the plan, then done: `NumberInput` for all 28 numeric inputs (reads `2,5` and `2.5`, refuses what it cannot read, writes a dot), "(fraction of pot)" labels, `?node=<canonical key>` from the replayer to the compare page, bound pot-odds panels with a way back, step 4 graded by and locked to the definition on screen, step 1 naming (and only loading) your own chart, provenance line, `MetricLabel`s, the developer sentence, the two deletes, the header wrap. Found in the browser: every "Loading…" was unreachable behind an awaited `useAsyncData`; now lazy. A five-agent workflow lost three implementers to the session limit mid-edit — finished by hand. Adversarial review: 31 findings, 4 refuted, the rest fixed with tests. Browser 113/113 (`ru-RU` Chrome, scratch Postgres dropped). `make web-check` 1,015/99 · `make check` 1,676. | Round-5 merge; ADR-053's follow-ups (persist step 4's nut definition; unwrap `useAsyncData` errors in `auth/api.ts`); F.12 proper, solo. |
+| 2026-09-15 (round 5, **lane A — D.8 upload & accounts**, ADR-051; owned the stack and the Alembic head) | Audited first (six auditors + a critic): the ingestion routes existed and nothing in the web app called them; five silent defects between drop and report (no retry for a failed upload; a cache drop that deleted nothing; empty files `completed`; raw exceptions in `error_text`; unattributed hero hands invisible). Amended D.8, built the backend fixes, migration `a8b9c0d1e2f3`, poker-account DELETE and the `/upload` page; reviewed adversarially (30 findings, 21 fixed); browser 29/29 on `TEST_ENV` with `make worker` — drop → My game 2 hands, no dbt. `make check` 1,676 · `make web-check` 1,013 · `make seed && make test-all` 1,783 passed, 6 skipped. Nothing written to the real databases. | Round-5 merge; `make pg-migrate` on the real Postgres; D.9b, D.10 |
+| 2026-09-15 (round 5, **lane D — F.1 make CI real**, ADR-054) | The workflow was moved to the repository root with `git mv`, and its jobs now call `make check` / `make web-check` / `make seed` + `make test-all` instead of restating them. It runs on every branch push, PRs into `main`, and by hand. `make install` = `uv sync --frozen` and `UV := uv run --frozen`; dbt is a prerequisite of the targets that run it; `.nvmrc` 24 and `.python-version` 3.12. Fresh-worktree gate green: `make check` (1,621) and `make web-check` (846) on Node 24.21.0 and 23.11.0. Integration job checked by reading and statically only. Then, at the founder's request: committed `7e4cfeb` (lane D's code only) and pushed. Run 34955622749 was red at `make up` (`minio-init` under `up --wait`); fixed in `3a4b2ea`; **run 34957886151 green in all three jobs → F.1 ticked**. Local Node switched to 24.21.0. | The round-5 merge commits ADR-054 and the docs with the other lanes; its push runs CI over the combined tree. The empty `platform/.github/workflows/` directories are still on disk (`rmdir` was denied). |
+| 2026-09-15 (session 19, **the round-4 merge** — no lane work of its own) | **Four lanes committed:** E.1b `1b11db0`, D.7b `ac1be5e`, D.6b `3cd1c2a`, F.12 audit `7f3e2bf`. **D.7b ticked**: its never-run `test_hand_notes.py` was green on the first run, confirmed by name and verbose (14/14 with `test_hot_path.py` and `test_mv_reconciliation.py`) beside `make test-all` **1,715 passed, 6 skipped**; `make check` and `make web-check` (846 / 79) green. **Found:** the real Postgres is at `8b2f4c6d1e3a`, four create-only migrations behind head, so the range library, the analyzer, the heuristic log and notes would fail on the founder's own database — not applied, flagged. ADR-047 gained the exact `built_by` upgrade recipe; `test_quotas.py`'s stale NOT YET RUN corrected; ADR bodies re-ordered, index 49/49. Then, same session: **`make migrate`** on the real stack after a `pg_dump` (Postgres to head `f7a8b9c0d1e2`, ClickHouse nothing pending); found CI has never run — the workflow sits under `platform/.github/`. | **Round 5**: D.8 · D.9a · F.12a · F.1 (see Next action) |
 | 2026-09-15 (**E.1b** — owned the stack; three other lanes in the tree) | **E.1b done, E.1 ticked with it** (ADR-047). Provenance guards the swap race (`built_by`, the rollup on dbt's rows only, a second gate clause); the union is in the query builder below the router (one rollup per (tenant, dataset, day), a once-computed scalar and `has()`); the hot path is the dbt models rendered again by Jinja, keyed by the batch stamp, idempotent by anti-join, off for bulk paths; 0012 gives the view target an aggregate-max watermark. Legacy analyzer for the decisions statement (3.2 s → 0.18 s to plan, same rows). Real database migrated, altered, backfilled in 100 s and verified **0 / 0 over 160 day-partitions**; hero fingerprint 19,802 hands, VPIP 22.96, PFR 18.85, WTSD 29.92 (n 2,239), −1.374 bb/100 — identical to the read-only check taken before any write. `make check` 1,621 · `make seed && make test-all` **1,715 passed, 6 skipped**. | **D.8** |
 | 2026-09-14 (**D.7b** — lane B: `api/` notes and tags, the round's one migration, `app/hands/**`) | **Hand notes and tags, built and verified, left `[ ]`** (ADR-048). Migration `f7a8b9c0d1e2` (`hand_notes`, `hand_tags`) from head `e6f7a8b9c0d1`; `owned_hand` asks `core.hands` and 404s like the hand itself; one `normalize_tag` everywhere; **no registry dimension — `?tag=` is an id-list intersection**; 500 distinct tags per user; blank note deletes; `HandNotes.vue` under the replayer with a tested autosave, tags column and "Tagged" select on `/hands`. **Chrome 30/30** on the real hands read-only (scratch `poker_d7b_verify`, dropped). **One bug found in the browser:** `IN arrayMap(unhex…)` refused by ClickHouse — now a subquery, unit test corrected. **One found by the tests:** 500 POSTs hit E.3's 300/min budget — seeded instead. **Four found by the adversarial review and fixed:** a tag with `/` could never be removed (`{tag:path}`), the note's first save was a read-then-insert race (upsert), a NUL byte was a 500 (422 now), a vacuous `extra=forbid` test. `make check` 1,597 on this lane's files (lane A's in-flight files carry lint and size violations of their own) · `make web-check` 846 · `tests/postgres/` 12. | **`make seed && make test-all`** to run `tests/integration/test_hand_notes.py` (6, unrun), then tick D.7b. |
 | 2026-09-14 (**D.6b** — web workspace only, one of three parallel lanes) | **D.6b done and ticked** (ADR-049), amended first: the backend was complete (six routes, `cohorts` table, the 409/400/422 sentences measured over HTTP) and the client bound only the reads, so the step became `stats.ts`'s write half + `app/pool/rules.ts` (the builder's vocabulary, 21 tests) + `CohortForm.vue` (cached stats offered, uncached greyed, from the registry) + `cohorts.vue` (New · Edit · Save as mine · Delete). Reviewed adversarially before the tick — two real page defects fixed (stale open panel after an edit; write and read-back sharing one `try`), three tautological tests pinned, one follow-up recorded (the 422-list reader belongs in `auth/api.ts`). Verified 37/37 in a headless Chrome of its own against a scratch Postgres (dropped) and the real pool read-only. Gate: `make web-check` green over the combined tree (846 tests / 79 files). | **E.1b** unchanged |
