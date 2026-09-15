@@ -19,6 +19,10 @@
  *     them as one argument so that is not expressible.
  *  3. **`GET /v1/pool/players` cannot serve a name a person types**, so the search here does not
  *     use it. See `searchPlayers` for the measurement and the reason.
+ *  4. **A refused write is the server's sentence, not ours** (plan D.6b). A duplicate name is a 409
+ *     whose detail names the cohort (`uq_cohorts_user_name`); a rule on an uncached stat is a 400 at
+ *     *create* (`stats/query.py`), never at query time; an eleventh rule is a 422. Nothing here
+ *     rewrites any of them — `pool/rules.ts#describeCohortError` shows each in the server's words.
  */
 
 import type { Fetcher } from '../auth/api';
@@ -48,6 +52,14 @@ export interface PoolCohortDetail extends PoolCohort {
   players: number;
 }
 
+/** What `POST /v1/pool/cohorts` and `PUT /v1/pool/cohorts/{id}` take (`CohortIn`): a name and the rules. */
+export type CohortIn = {
+  name: string;
+  criteria: CohortSpec;
+};
+/* A type alias, not an interface, for the reason `reports/api.ts#SavedReportIn` gives: `Fetcher`
+   takes a `Record<string, unknown>` body, and only an alias carries the implicit index signature. */
+
 /** A cohort a report can be scoped to, from either source: the shipped presets or a saved row. */
 export interface CohortChoice {
   /** `preset:<code>` or the saved row's uuid, unique across both lists. */
@@ -66,6 +78,12 @@ export interface PoolStatsApi {
   cohorts(): Promise<PoolCohort[]>;
   cohort(id: string): Promise<PoolCohortDetail>;
   members(id: string, limit?: number): Promise<ReportResult>;
+  /** 201 with the row; 409 for a name this user already has; 400 for a rule the engine cannot compile. */
+  createCohort(body: CohortIn): Promise<PoolCohort>;
+  /** Replaces the name and every rule; the same refusals as a create, and 404 for another tenant's id. */
+  updateCohort(id: string, body: CohortIn): Promise<PoolCohort>;
+  /** 204; 404 for another tenant's id, so a stale link and a stranger's cohort look the same. */
+  deleteCohort(id: string): Promise<void>;
 }
 
 /**
@@ -155,5 +173,8 @@ export function createPoolStatsApi(fetch: Fetcher): PoolStatsApi {
     cohorts: () => fetch<PoolCohort[]>('/v1/pool/cohorts'),
     cohort: (id) => fetch<PoolCohortDetail>(`/v1/pool/cohorts/${id}`),
     members: (id, limit = 100) => fetch<ReportResult>(`/v1/pool/cohorts/${id}/members?limit=${limit}`),
+    createCohort: (body) => fetch<PoolCohort>('/v1/pool/cohorts', { method: 'POST', body }),
+    updateCohort: (id, body) => fetch<PoolCohort>(`/v1/pool/cohorts/${id}`, { method: 'PUT', body }),
+    deleteCohort: (id) => fetch<void>(`/v1/pool/cohorts/${id}`, { method: 'DELETE' }),
   };
 }

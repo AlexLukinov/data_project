@@ -103,6 +103,27 @@ describe('createPoolStatsApi', () => {
     expect((spy.calls[0]?.init as { body: { cohort: CohortSpec } }).body.cohort).toEqual({ rules: REGS.rules });
   });
 
+  /* The write half (plan D.6b): the body is `CohortIn` exactly, and the id travels in the path. */
+  it('creates a cohort with a POST of the name and the rules', async () => {
+    const spy = recorder();
+    await createPoolStatsApi(spy.fetch).createCohort({ name: 'Regs', criteria: SPEC });
+    expect(spy.calls[0]?.path).toBe('/v1/pool/cohorts');
+    expect(spy.calls[0]?.init).toEqual({ method: 'POST', body: { name: 'Regs', criteria: SPEC } });
+  });
+
+  it('replaces a cohort with a PUT to its id', async () => {
+    const spy = recorder();
+    await createPoolStatsApi(spy.fetch).updateCohort('a', { name: 'Regs', criteria: SPEC });
+    expect(spy.calls[0]?.path).toBe('/v1/pool/cohorts/a');
+    expect(spy.calls[0]?.init).toEqual({ method: 'PUT', body: { name: 'Regs', criteria: SPEC } });
+  });
+
+  it('deletes a cohort by its id and sends no body', async () => {
+    const spy = recorder();
+    await createPoolStatsApi(spy.fetch).deleteCohort('a');
+    expect(spy.calls[0]?.path).toBe('/v1/pool/cohorts/a');
+    expect(spy.calls[0]?.init).toEqual({ method: 'DELETE' });
+  });
 });
 
 /** The one leaf a player search compiles to — `FilterNode` is a union, so it is narrowed once here. */
