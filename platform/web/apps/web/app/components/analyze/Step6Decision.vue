@@ -4,7 +4,7 @@
 // answer appear beside it. We structure the comparison; we do not generate a solver's answer.
 import type { EquityResult } from '@poker/core';
 import { rangeAdvantage } from '@poker/core';
-import { EquityCalculator, PoolDataBadge } from '@poker/ui';
+import { EquityCalculator, NumberInput, PoolDataBadge } from '@poker/ui';
 import { computed, shallowRef } from 'vue';
 
 import type { AnalysisStep } from '~/analyze/api';
@@ -52,15 +52,24 @@ const unavailable = computed(() => poolGap(props.ctx.pool));
 const poolActions = computed(() => Object.entries(props.ctx.pool?.frequencies ?? {}).sort((a, b) => b[1] - a[1]));
 const committed = computed(() => props.ctx.step.prediction !== null);
 
-function setSize(event: Event): void {
-  const value = Number((event.target as HTMLInputElement).value);
-  emit('patch', workPatch(props.ctx.step, { size_pct: Number.isFinite(value) && value > 0 ? value / PERCENT : null }));
+/** A stored share as its box shows it, in percent. Unrounded: rounding here would rewrite a `28.5` still being typed. */
+function asTyped(share: number | null): number | null {
+  return share === null ? null : share * PERCENT;
 }
 
-function setFrequency(event: Event): void {
-  const value = Number((event.target as HTMLInputElement).value);
-  const share = Number.isFinite(value) ? Math.min(Math.max(value / PERCENT, 0), 1) : null;
-  emit('patch', workPatch(props.ctx.step, { frequency: share }));
+/** How often, typed in percent (0–100, which the box enforces) and stored as a share; an empty box is no answer. */
+function setFrequency(percent: number | null): void {
+  emit('patch', workPatch(props.ctx.step, { frequency: percent === null ? null : percent / PERCENT }));
+}
+
+/**
+ * How big, typed in percent of the pot and stored as a share; an empty box is no answer. A size of
+ * 0 is not a bet (the server refuses one), so it leaves the size that stood rather than clearing it
+ * under the reader's cursor — `0` is also where `0.5` starts.
+ */
+function setSize(percent: number | null): void {
+  if (percent === 0) return;
+  emit('patch', workPatch(props.ctx.step, { size_pct: percent === null ? null : percent / PERCENT }));
 }
 </script>
 
@@ -78,12 +87,12 @@ function setFrequency(event: Event): void {
     <div class="flex flex-wrap items-end gap-4">
       <label class="text-sm">
         <span class="block">How often would you take this line?</span>
-        <input type="number" min="0" max="100" step="any" class="w-24 rounded border border-zinc-300 bg-transparent p-1 tabular-nums dark:border-zinc-700" data-testid="step6-frequency" :value="ctx.step.work.frequency === null ? '' : (ctx.step.work.frequency * PERCENT).toFixed(0)" @input="setFrequency" />
+        <NumberInput :model-value="asTyped(ctx.step.work.frequency)" :min="0" :max="PERCENT" class="w-24 rounded border border-zinc-300 bg-transparent p-1 tabular-nums dark:border-zinc-700" data-testid="step6-frequency" @update:model-value="setFrequency" @clear="setFrequency(null)" />
         <span class="ml-1 text-zinc-500">%</span>
       </label>
       <label class="text-sm">
         <span class="block">And how big, as a share of the pot?</span>
-        <input type="number" min="0" step="any" class="w-24 rounded border border-zinc-300 bg-transparent p-1 tabular-nums dark:border-zinc-700" data-testid="step6-size" :value="ctx.step.work.size_pct === null ? '' : (ctx.step.work.size_pct * PERCENT).toFixed(0)" @input="setSize" />
+        <NumberInput :model-value="asTyped(ctx.step.work.size_pct)" :min="0" class="w-24 rounded border border-zinc-300 bg-transparent p-1 tabular-nums dark:border-zinc-700" data-testid="step6-size" @update:model-value="setSize" @clear="setSize(null)" />
         <span class="ml-1 text-zinc-500">% of pot</span>
       </label>
     </div>

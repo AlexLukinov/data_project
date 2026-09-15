@@ -2,7 +2,9 @@
 /**
  * Pot odds for a node (spec §8, acceptance 6): pot, bet and call in; every figure raw and
  * rake-adjusted side by side; implied odds as a labelled estimate; the rake behind "Advanced".
- * Amounts are in one unit (big blinds or chips) and the panel does not care which.
+ * Amounts are in one unit (big blinds or chips) and the panel does not care which. An empty "to
+ * call" box means the call is the bet, which it shows as its placeholder: showing the bet as the
+ * box's value would write it back under the cursor of a reader who has just emptied it.
  */
 import type { PotOddsFigures, RakeConfig } from '@poker/core';
 import { NO_RAKE, impliedOddsEquity, potOdds } from '@poker/core';
@@ -12,6 +14,7 @@ import { explainPotOdds } from '../explain';
 import { num, percent } from '../format';
 import type { GlossaryKey } from '../glossary';
 import MetricLabel from './MetricLabel.vue';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const PERCENT = 100;
+const RAKE_STEP = 0.5;
 
 interface Row {
   key: GlossaryKey;
@@ -62,24 +66,21 @@ const outcome = computed<{ figures: { raw: PotOddsFigures; rakeAdjusted: PotOdds
 const implied = computed(() => (props.impliedExtra > 0 && outcome.value.figures !== null ? impliedOddsEquity(callAmount.value, props.pot, props.bet, props.impliedExtra) : null));
 const rakeText = computed(() => `${num(PERCENT * props.rakeConfig.rakePct)}%${props.rakeConfig.rakeCapBB === null ? ', no cap' : `, capped at ${num(props.rakeConfig.rakeCapBB)}`}`);
 
-function number(event: Event): number {
-  return Number((event.target as HTMLInputElement).value);
+function setRakePct(percentage: number): void {
+  emit('update:rakeConfig', { ...props.rakeConfig, rakePct: percentage / PERCENT });
 }
-function setRakePct(event: Event): void {
-  emit('update:rakeConfig', { ...props.rakeConfig, rakePct: number(event) / PERCENT });
-}
-function setRakeCap(event: Event): void {
-  const value = (event.target as HTMLInputElement).value;
-  emit('update:rakeConfig', { ...props.rakeConfig, rakeCapBB: value === '' ? null : Number(value) });
+/** An emptied cap box means no cap. */
+function setRakeCap(cap: number | null): void {
+  emit('update:rakeConfig', { ...props.rakeConfig, rakeCapBB: cap });
 }
 </script>
 
 <template>
   <div class="pk-odds">
     <div class="pk-inputs">
-      <label>pot <input type="number" min="0" step="any" :value="pot" @input="emit('update:pot', number($event))" /></label>
-      <label>bet <input type="number" min="0" step="any" :value="bet" @input="emit('update:bet', number($event))" /></label>
-      <label>to call <input type="number" min="0" step="any" :value="callAmount" @input="emit('update:call', number($event))" /></label>
+      <label>pot <NumberInput :model-value="pot" :min="0" @update:model-value="emit('update:pot', $event)" /></label>
+      <label>bet <NumberInput :model-value="bet" :min="0" @update:model-value="emit('update:bet', $event)" /></label>
+      <label>to call <NumberInput :model-value="call" :min="0" :placeholder="num(bet)" @update:model-value="emit('update:call', $event)" @clear="emit('update:call', null)" /></label>
     </div>
     <p v-if="outcome.error" class="pk-error" role="alert">{{ outcome.error }}</p>
     <template v-else-if="outcome.figures">
@@ -110,9 +111,9 @@ function setRakeCap(event: Event): void {
     <details class="pk-advanced">
       <summary>Advanced: rake and implied odds</summary>
       <div class="pk-inputs">
-        <label>rake % <input type="number" min="0" max="100" step="0.5" :value="PERCENT * rakeConfig.rakePct" @input="setRakePct" /></label>
-        <label>cap <input type="number" min="0" step="any" :value="rakeConfig.rakeCapBB ?? ''" placeholder="none" @input="setRakeCap" /></label>
-        <label>extra won after hitting <input type="number" min="0" step="any" :value="impliedExtra" @input="emit('update:impliedExtra', number($event))" /></label>
+        <label>rake % <NumberInput :model-value="PERCENT * rakeConfig.rakePct" :min="0" :max="PERCENT" :step="RAKE_STEP" @update:model-value="setRakePct" /></label>
+        <label>cap <NumberInput :model-value="rakeConfig.rakeCapBB" :min="0" placeholder="none" @update:model-value="setRakeCap" @clear="setRakeCap(null)" /></label>
+        <label>extra won after hitting <NumberInput :model-value="impliedExtra" :min="0" @update:model-value="emit('update:impliedExtra', $event)" /></label>
       </div>
     </details>
   </div>

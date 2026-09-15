@@ -12,8 +12,10 @@
  */
 import { computed, ref, watch } from 'vue';
 
+import { formatDecimal, parseDecimal } from '../number';
 import type { AnswerType, PredictionOutcome } from '../prediction';
 import { explainPrediction, isNumeric, scorePrediction } from '../prediction';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -51,8 +53,25 @@ const outcome = computed<PredictionOutcome | null>(() =>
     : null,
 );
 const sentence = computed(() => (outcome.value === null ? '' : explainPrediction(outcome.value, props.answerType, props.unit)));
-/** A number input hands back a number; the answer is stored and compared as text. */
-const typed = computed(() => String(draft.value).trim());
+/**
+ * Whether the number box holds text that is not a number (`45,5x`). The box emits nothing for it,
+ * so the draft still says the last number that read; committing that would commit an answer the
+ * reader is no longer showing.
+ */
+const unreadable = ref(false);
+/** The answer is stored and compared as text; a numeric one always with a dot (`45,5` is `45.5`). */
+const typed = computed(() => (unreadable.value ? '' : draft.value.trim()));
+
+/** A number the box read — typed, or stepped with an arrow key, which fires no `input` event. */
+function onNumber(value: number): void {
+  draft.value = formatDecimal(value);
+  unreadable.value = false;
+}
+
+function onNumberText(event: Event): void {
+  const text = (event.target as HTMLInputElement).value;
+  unreadable.value = text.trim() !== '' && parseDecimal(text) === null;
+}
 
 // The reveal is an event so the parent can record it on the step; it fires once per truth.
 watch(outcome, (next) => {
@@ -82,15 +101,19 @@ function commit(answer: string): void {
       </template>
       <template v-else>
         <label class="pk-field">
-          <input
-            v-model="draft"
-            :type="numeric ? 'number' : 'text'"
-            step="any"
+          <NumberInput
+            v-if="numeric"
+            :model-value="parseDecimal(draft)"
             class="pk-input"
             data-testid="gate-input"
-            :placeholder="numeric ? 'your estimate' : 'your answer'"
+            placeholder="your estimate"
+            @update:model-value="onNumber"
+            @clear="draft = ''"
+            @input="onNumberText"
+            @blur="unreadable = false"
             @keyup.enter="commit(typed)"
           />
+          <input v-else v-model="draft" type="text" class="pk-input" data-testid="gate-input" placeholder="your answer" @keyup.enter="commit(typed)" />
           <span v-if="unitLabel" class="pk-unit">{{ unitLabel }}</span>
         </label>
         <button type="button" class="pk-commit" data-testid="gate-commit" :disabled="typed === ''" @click="commit(typed)">Commit</button>

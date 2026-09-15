@@ -2,7 +2,7 @@
 import type { EquityRequest, EquityResult } from '@poker/core';
 import { computeEquity, parseCards, parseRange } from '@poker/core';
 import { flushPromises, mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import EquityCalculator from '../src/components/EquityCalculator.vue';
 import type { EquityServiceLike, EquityServiceOptions } from '../src/service';
@@ -45,7 +45,10 @@ describe('EquityCalculator', () => {
     expect(results.length).toBe(2);
     expect(results[0]!.exact).toBe(false);
     expect(results[1]!.exact).toBe(true);
-    expect(wrapper.find('[data-testid="equity-label"]').text()).toMatch(/^exact · \d+ runouts/);
+    const method = wrapper.find('[data-testid="equity-label"] .pk-term-text');
+    expect(method.attributes('data-term')).toBe('exact');
+    expect(method.text()).toBe('exact');
+    expect(wrapper.find('[data-testid="equity-work"]').text()).toMatch(/^\d{1,3}(,\d{3})* runouts$/);
     expect(wrapper.find('[data-testid="equity-0"]').text()).toMatch(/\d+\.\d%/);
     expect(service.calls).toEqual(['fast-1', 'exact-1']);
   });
@@ -85,12 +88,42 @@ describe('EquityCalculator', () => {
     expect(service.calls).toEqual(['fast-1', 'exact-1', 'fast-2', 'exact-2']);
   });
 
-  it('shows a preflop answer as Monte Carlo only', async () => {
-    const service = fakeService();
-    const wrapper = mount(EquityCalculator, { props: { ranges: [parseRange('AA').range, parseRange('KK').range], board: [], service, fastIterations: 2000, debounceMs: 0 } });
-    await wait(300);
-    await flushPromises();
-    expect(wrapper.find('[data-testid="equity-label"]').text()).toMatch(/^Monte Carlo · 2,000 samples · ±/);
-    expect(wrapper.emitted('result')).toHaveLength(1);
+  it('writes an exact count of a thousand runouts or more with a comma on a ru-RU machine', async () => {
+    const toLocaleString = Number.prototype.toLocaleString;
+    const onRussianMachine = vi.spyOn(Number.prototype, 'toLocaleString').mockImplementation(function (this: number, locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions) {
+      return toLocaleString.call(this, locales ?? 'ru-RU', options);
+    });
+    try {
+      const service = fakeService();
+      // On a flop the exact pass enumerates turn and river: 1,176 runouts for these ranges.
+      const wrapper = mount(EquityCalculator, { props: { ranges: [parseRange('AA,KK').range, parseRange('QQ,AKs').range], board: parseCards('Kh 7d 2c'), service, fastIterations: 2000, debounceMs: 0 } });
+      const work = () => wrapper.find('[data-testid="equity-work"]');
+      for (let tries = 0; tries < 40 && !(work().exists() && work().text().includes('runouts')); tries += 1) await wait(100);
+      await flushPromises();
+      expect(work().text()).toBe('1,176 runouts');
+    } finally {
+      onRussianMachine.mockRestore();
+    }
+  });
+
+  it('shows a preflop answer as Monte Carlo only, its count written with a comma on any machine', async () => {
+    // The founder's Mac is ru_RU, where a bare toLocaleString() prints "2 000".
+    const toLocaleString = Number.prototype.toLocaleString;
+    const onRussianMachine = vi.spyOn(Number.prototype, 'toLocaleString').mockImplementation(function (this: number, locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions) {
+      return toLocaleString.call(this, locales ?? 'ru-RU', options);
+    });
+    try {
+      const service = fakeService();
+      const wrapper = mount(EquityCalculator, { props: { ranges: [parseRange('AA').range, parseRange('KK').range], board: [], service, fastIterations: 2000, debounceMs: 0 } });
+      await wait(300);
+      await flushPromises();
+      const method = wrapper.find('[data-testid="equity-label"] .pk-term-text');
+      expect(method.attributes('data-term')).toBe('monteCarlo');
+      expect(method.text()).toBe('Monte Carlo');
+      expect(wrapper.find('[data-testid="equity-work"]').text()).toMatch(/^2,000 samples · ±\d+\.\d{2} pp$/);
+      expect(wrapper.emitted('result')).toHaveLength(1);
+    } finally {
+      onRussianMachine.mockRestore();
+    }
   });
 });

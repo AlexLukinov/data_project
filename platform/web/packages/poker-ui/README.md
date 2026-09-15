@@ -29,10 +29,11 @@ import '@poker/ui/theme.css';
 | `EQRPanel` | `equity`, `pot`, `ev`, `poolEqr` | `update:ev` |
 | `EquityDistributionChart` | `heroEquities`, `villainEquities`, `heroWeights`, `villainWeights`, `heroLabel`, `villainLabel`, `threshold` | — |
 | `EquityBucketBars` | `heroBuckets`, `villainBuckets`, `heroLabel`, `villainLabel` | — |
-| `RangeComparisonPanel` | `hero`, `villain`, `heroEquities`, `villainEquities`, `exact` | — |
+| `RangeComparisonPanel` | `hero`, `villain`, `heroEquities`, `villainEquities`, `exact`, `v-model:nutOptions` (the Advanced nut definition, shared with a parent that grades against it) | `update:nutOptions` |
 | `RangeDiffView` | `ranges: { label, range }[]` (the first is the reference) | `cellClick` |
 | `RangeDisagreementTable` | `a`, `b`, `aLabel`, `bLabel`, `limit` — the hand classes two ranges disagree on most | `cellClick` |
 | `NodeKeyEditor` | `v-model` of a `NodeKey` (spec §10.1): seats, street, stack, stake, texture, the action sequence | `update:modelValue` |
+| `NumberInput` | `modelValue`, `min`, `max`, `step`, `lazy` — a number typed as text that reads `2.5` and `2,5` alike and never emits what it cannot read (ADR-053); every numeric control in the package uses it | `update:modelValue`, `clear` |
 
 Every metric label goes through `MetricLabel`, which reads `glossary.ts` (spec §13: one sentence
 and the formula per term, in one place); `explain.ts` holds the "explain the number" templates.

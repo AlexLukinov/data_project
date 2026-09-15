@@ -57,9 +57,18 @@ const pool = ref<NodeFrequencies | null>(null);
 const poolFacing = ref<NodeFrequencies | null>(null);
 const hand = ref<ReplayHand | null>(null);
 
-await store.open(id).catch((error: unknown) => (failure.value = error));
+/**
+ * Not awaited, so the page — and its "Opening the analysis…" — renders while the request runs; an
+ * awaited open held the whole app blank until it answered. The store still holds the analysis
+ * opened before this one, so nothing reads it until this id's open has finished.
+ */
+const opened = ref(false);
+void store
+  .open(id)
+  .catch((error: unknown) => (failure.value = error))
+  .finally(() => (opened.value = true));
 
-const analysis = computed(() => store.analysis);
+const analysis = computed(() => (opened.value ? store.analysis : null));
 const current = computed(() => analysis.value?.current_step ?? FIRST_STEP);
 const step = computed(() => stepOf(analysis.value, current.value));
 const node = computed(() => analysis.value?.node_key ?? null);
@@ -175,6 +184,6 @@ onBeforeUnmount(() => void store.flush());
       </div>
     </div>
 
-    <p v-else class="text-sm text-zinc-500">Loading…</p>
+    <p v-else class="text-sm text-zinc-500" data-testid="analysis-loading">Opening the analysis…</p>
   </section>
 </template>

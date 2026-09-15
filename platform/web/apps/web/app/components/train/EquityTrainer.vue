@@ -4,6 +4,7 @@
 import { RangeMatrix } from '@poker/ui';
 import { computed } from 'vue';
 
+import { CHART_PROVENANCE } from '~/train/charts';
 import type { EquitySpot } from '~/train/types';
 import { boardOf, rangeOf } from '~/train/view';
 
@@ -41,5 +42,7 @@ const TIERS: Readonly<Record<EquitySpot['tier'], string>> = {
         <RangeMatrix :range="villain" mode="view" :blocked-cards="board" />
       </div>
     </div>
+
+    <p class="text-xs text-zinc-500" data-testid="equity-provenance">{{ CHART_PROVENANCE }}</p>
   </div>
 </template>

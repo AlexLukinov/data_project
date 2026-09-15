@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { WeightedRange } from '@poker/core';
+import type { NutOptions, WeightedRange } from '@poker/core';
 import { COMBO_COUNT, combosIn, equityBuckets, parseRange } from '@poker/core';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
@@ -86,6 +86,38 @@ describe('RangeComparisonPanel', () => {
     await wrapper.find('input[value="topPercent"]').setValue();
     // The top 5% of the 22 combos together is 1.1 weight: reached inside AA, so the threshold is 85%.
     expect(wrapper.find('[data-testid="compare-nut-explain"]').text()).toContain('the top of both ranges, equity ≥ 85.0%');
+  });
+
+  const compared = { hero: hero.range, villain: villain.range, heroEquities: hero.equities, villainEquities: villain.equities };
+
+  it('refuses a cutoff above 100% and a top share below 0.1%, keeping the definition in use', async () => {
+    const wrapper = mount(RangeComparisonPanel, { props: compared });
+    await wrapper.find('input[aria-label="nut cutoff, percent"]').setValue('120');
+    await wrapper.find('input[aria-label="top percent of both ranges"]').setValue('0');
+    expect(wrapper.emitted('update:nutOptions')).toBeUndefined();
+    expect(wrapper.find('[data-testid="compare-nut-threshold"]').text()).toBe('80.0%');
+  });
+
+  it('shares the nut definition with a bound parent as a new object, in core units', async () => {
+    // Frozen: a panel that mutated the parent's object instead of replacing it would throw here.
+    const bound: Required<NutOptions> = Object.freeze({ mode: 'cutoff', cutoff: 0.8, topPercent: 5 });
+    const wrapper = mount(RangeComparisonPanel, { props: { ...compared, nutOptions: bound, 'onUpdate:nutOptions': (next: Required<NutOptions>) => wrapper.setProps({ nutOptions: next }) } });
+    const cutoff = wrapper.find('input[aria-label="nut cutoff, percent"]');
+    expect((cutoff.element as HTMLInputElement).value).toBe('80');
+
+    await cutoff.setValue('37,5');
+    expect(wrapper.emitted('update:nutOptions')![0]).toEqual([{ mode: 'cutoff', cutoff: 0.375, topPercent: 5 }]);
+    // At 37.5% villain's QQ (50%) counts as nutted too: 6 combos each side.
+    expect(wrapper.find('[data-testid="compare-nut-threshold"]').text()).toBe('37.5%');
+    expect(wrapper.find('[data-testid="compare-nut-explain"]').text()).toContain('split 50% / 50%');
+
+    await wrapper.find('input[value="topPercent"]').setValue();
+    expect(wrapper.emitted('update:nutOptions')![1]).toEqual([{ mode: 'topPercent', cutoff: 0.375, topPercent: 5 }]);
+    await wrapper.find('input[aria-label="top percent of both ranges"]').setValue('50');
+    expect(wrapper.emitted('update:nutOptions')![2]).toEqual([{ mode: 'topPercent', cutoff: 0.375, topPercent: 50 }]);
+    // Half of the 22 combos is 11 weight: AA (6) and then QQ (6) reach it, so the edge is QQ's 50%.
+    expect(wrapper.find('[data-testid="compare-nut-threshold"]').text()).toBe('50.0%');
+    expect(bound).toEqual({ mode: 'cutoff', cutoff: 0.8, topPercent: 5 });
   });
 });
 

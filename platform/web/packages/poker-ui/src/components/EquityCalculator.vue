@@ -12,6 +12,7 @@ import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue';
 
 import { percent } from '../format';
 import type { EquityServiceLike } from '../service';
+import MetricLabel from './MetricLabel.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -52,10 +53,11 @@ const request = computed<EquityRequest>(() => ({
  */
 const key = computed(() => equityKey(request.value));
 const exactPossible = computed(() => isExactlySolvable(request.value));
-const label = computed(() => {
+/** What stands behind the numbers, after the method's name: `1,176 runouts` or `2,000 samples · ±0.21 pp`. */
+const work = computed(() => {
   if (result.value === null) return '';
-  if (result.value.exact) return `exact · ${result.value.work.toLocaleString()} runouts`;
-  return `Monte Carlo · ${result.value.iterations?.toLocaleString()} samples · ±${result.value.confidence95?.toFixed(2)} pp`;
+  if (result.value.exact) return `${result.value.work.toLocaleString('en-US')} runouts`;
+  return `${result.value.iterations?.toLocaleString('en-US')} samples · ±${result.value.confidence95?.toFixed(2)} pp`;
 });
 
 function cancelAll(): void {
@@ -122,7 +124,7 @@ onBeforeUnmount(() => {
     </div>
     <p class="pk-status">
       <span v-if="status === 'error'" class="pk-error" role="alert">{{ error }}</span>
-      <span v-else-if="result" data-testid="equity-label">{{ label }}<span v-if="status === 'running' && !result.exact && exactPossible"> · exact on the way</span></span>
+      <span v-else-if="result" data-testid="equity-label"><MetricLabel :term="result.exact ? 'exact' : 'monteCarlo'" :label="result.exact ? 'exact' : 'Monte Carlo'" /> · <span data-testid="equity-work">{{ work }}</span><span v-if="status === 'running' && !result.exact && exactPossible"> · exact on the way</span></span>
     </p>
     <progress v-if="status === 'running'" class="pk-progress" :value="progress" max="1" />
   </div>

@@ -47,6 +47,55 @@ describe('PredictionGate', () => {
     expect(wrapper.find('[data-testid="gate-answer"]').text()).toContain('55');
   });
 
+  it('commits nothing while the number box holds text that is not a number', async () => {
+    const wrapper = gate();
+    const input = wrapper.find('[data-testid="gate-input"]');
+    await input.setValue('45');
+    await input.setValue('45x');
+    expect(input.attributes('aria-invalid')).toBe('true');
+    expect(wrapper.find<HTMLButtonElement>('[data-testid="gate-commit"]').element.disabled).toBe(true);
+    await input.trigger('keyup', { key: 'Enter' });
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    // Leaving the box puts back the number that stood, and that one can be committed.
+    await input.trigger('blur');
+    expect((input.element as HTMLInputElement).value).toBe('45');
+    await wrapper.find('[data-testid="gate-commit"]').trigger('click');
+    expect(wrapper.emitted('submit')).toEqual([['45']]);
+  });
+
+  it('commits a number typed with a comma with a dot, on Enter', async () => {
+    const wrapper = gate();
+    const input = wrapper.find('[data-testid="gate-input"]');
+    expect(input.attributes('inputmode')).toBe('decimal');
+    await input.setValue('45,5');
+    await input.trigger('keyup', { key: 'Enter' });
+    expect(wrapper.emitted('submit')).toEqual([['45.5']]);
+    expect((input.element as HTMLInputElement).value).toBe('');
+  });
+
+  it('lets an arrow key turn unreadable text back into an answer that can be committed', async () => {
+    const wrapper = gate();
+    const input = wrapper.find('[data-testid="gate-input"]');
+    await input.setValue('4');
+    await input.setValue('4x');
+    expect(wrapper.find('[data-testid="gate-commit"]').attributes('disabled')).toBeDefined();
+    await input.trigger('keydown', { key: 'ArrowUp' });
+    expect((input.element as HTMLInputElement).value).toBe('5');
+    expect(wrapper.find('[data-testid="gate-commit"]').attributes('disabled')).toBeUndefined();
+    await input.trigger('keyup', { key: 'Enter' });
+    expect(wrapper.emitted('submit')).toEqual([['5']]);
+  });
+
+  it('takes a text answer as typed', async () => {
+    const wrapper = gate({ answerType: 'text', question: 'Which hands bluff here?' });
+    const input = wrapper.find('[data-testid="gate-input"]');
+    expect(input.attributes('type')).toBe('text');
+    expect(input.attributes('inputmode')).toBeUndefined();
+    await input.setValue(' 2,5 and wheel draws ');
+    await wrapper.find('[data-testid="gate-commit"]').trigger('click');
+    expect(wrapper.emitted('submit')).toEqual([['2,5 and wheel draws']]);
+  });
+
   it('reveals the comparison only when the truth arrives, and says how far off it was', async () => {
     const wrapper = gate({ committed: '55' });
     expect(wrapper.find('[data-testid="gate-waiting"]').exists()).toBe(true);

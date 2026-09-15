@@ -3,16 +3,18 @@
 // (spec §9.3). The panels ask the range library what is written down for this situation and for
 // what the other seat just did, so stepping forward walks both the hand and my own charts.
 import type { EquityResult, HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
-import { canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/core';
+import { NO_RAKE, canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/core';
 import { ComboDistributionPanel, EQRPanel, EquityCalculator, HandReplayer, MDFPanel, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, RangeMatrix, poolEqr } from '@poker/ui';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 import { createAnalysesApi } from '~/analyze/api';
+import { useEditableOdds } from '~/composables/useEditableOdds';
 import type { NodeRanges } from '~/hands/panels';
 import { NO_RANGES, createNodeRangeReader } from '~/hands/panels';
 import type { NodeFrequencies, NodeRealization } from '~/pool/api';
 import { createPoolApi } from '~/pool/api';
 import { classEquity } from '~/pool/estimate';
+import { situationQuery } from '~/ranges/situation';
 import { useRangesStore } from '~/stores/ranges';
 
 const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null; handText?: string }>();
@@ -93,6 +95,14 @@ const board = computed(() => parseCards((state.value?.board ?? []).join(' ')));
 const toCall = computed(() => state.value?.toCall ?? 0);
 const potBefore = computed(() => Math.max(0, (state.value?.pot ?? 0) - toCall.value));
 
+/**
+ * The pot-odds and MDF panels start on this step's numbers and take the reader's own. A step
+ * with different numbers starts again on the hand's; one with the same numbers keeps the edit,
+ * and the line under the panels still says so. The hand has no rake to offer, and the call is
+ * left to follow the bet (`null`), so a bigger bet typed in asks for a bigger call.
+ */
+const odds = reactive(useEditableOdds(() => ({ pot: potBefore.value, bet: toCall.value, call: null, rakeConfig: NO_RAKE })));
+
 function body(range: NodeRanges['mine']): WeightedRange | null {
   return range === null ? null : { ...parseRange(range.weights).range, label: range.name };
 }
@@ -138,7 +148,7 @@ async function analyzeThisNode(): Promise<void> {
         <div class="flex flex-wrap items-baseline gap-2">
           <h2 class="font-medium">Situation</h2>
           <span class="text-sm text-zinc-500" data-testid="study-node">{{ node ? nodeKeyLabel(node) : 'before the first decision' }}</span>
-          <NuxtLink v-if="node" :to="`/ranges/compare?hero=${node.hero_position}&street=${node.street}`" class="ml-auto text-sm underline">Compare here</NuxtLink>
+          <NuxtLink v-if="node" :to="{ path: '/ranges/compare', query: situationQuery(node) }" class="ml-auto text-sm underline" data-testid="study-compare">Compare here</NuxtLink>
           <button v-if="node" type="button" class="rounded border border-zinc-300 px-2 py-0.5 text-sm dark:border-zinc-700" data-testid="study-analyze" :disabled="starting" @click="analyzeThisNode">Analyze this node</button>
         </div>
         <p v-if="watched" class="text-sm text-zinc-500" data-testid="study-watching">Watching {{ watched.position }} {{ watched.name }}<span v-if="watched.cards.length"> with {{ watched.cards.join(' ') }}</span></p>
@@ -165,8 +175,12 @@ async function analyzeThisNode(): Promise<void> {
 
       <div class="space-y-4">
         <div v-if="toCall > 0" class="space-y-4">
-          <PotOddsPanel :pot="potBefore" :bet="toCall" :call="toCall" data-testid="study-pot-odds" />
-          <MDFPanel :pot="potBefore" :bet="toCall" :range="mine" />
+          <PotOddsPanel v-model:pot="odds.pot" v-model:bet="odds.bet" v-model:call="odds.call" v-model:implied-extra="odds.impliedExtra" v-model:rake-config="odds.rakeConfig" data-testid="study-pot-odds" />
+          <MDFPanel v-model:pot="odds.pot" v-model:bet="odds.bet" :rake-config="odds.rakeConfig" :range="mine" />
+          <p v-if="odds.edited" class="text-sm text-zinc-500" data-testid="study-odds-edited">
+            These are no longer the hand's numbers.
+            <button type="button" class="underline" data-testid="study-odds-reset" @click="odds.reset()">Back to the hand's numbers</button>
+          </p>
         </div>
         <p v-else class="text-sm text-zinc-500" data-testid="study-nothing-faced">Nothing to call at this step — pot odds and MDF appear when there is a bet in front.</p>
 
@@ -177,8 +191,7 @@ async function analyzeThisNode(): Promise<void> {
         </p>
 
         <p v-if="realized?.needs_rebuild" class="text-sm text-zinc-500" data-testid="study-eqr-rebuild">
-          Empirical EQR needs <code>invested_bb</code> on <code>marts.decisions</code>; the mart gains it
-          on the next chain rebuild (POKER_PLAN.md F.10).
+          What the field won from this situation cannot be measured on this database yet; it appears after the statistics are next rebuilt.
         </p>
         <div v-else-if="realized?.enough" class="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="study-realization">
           <h2 class="font-medium">What the field won from here</h2>

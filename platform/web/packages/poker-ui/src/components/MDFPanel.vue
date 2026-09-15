@@ -11,6 +11,7 @@ import { computed } from 'vue';
 import { explainMdf } from '../explain';
 import { num, percent } from '../format';
 import MetricLabel from './MetricLabel.vue';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -39,17 +40,13 @@ const defend = computed<DefendingSet | null>(() => {
   if (props.range === null || props.equities === null || outcome.value.figures === null) return null;
   return defendingSet({ equities: props.equities, weights: props.range.weights }, outcome.value.figures.raw.mdf);
 });
-
-function number(event: Event): number {
-  return Number((event.target as HTMLInputElement).value);
-}
 </script>
 
 <template>
   <div class="pk-mdf">
     <div class="pk-inputs">
-      <label>pot <input type="number" min="0" step="any" :value="pot" @input="emit('update:pot', number($event))" /></label>
-      <label>bet <input type="number" min="0" step="any" :value="bet" @input="emit('update:bet', number($event))" /></label>
+      <label>pot <NumberInput :model-value="pot" :min="0" @update:model-value="emit('update:pot', $event)" /></label>
+      <label>bet <NumberInput :model-value="bet" :min="0" @update:model-value="emit('update:bet', $event)" /></label>
     </div>
     <p v-if="outcome.error" class="pk-error" role="alert">{{ outcome.error }}</p>
     <template v-else-if="outcome.figures">
@@ -57,12 +54,12 @@ function number(event: Event): number {
         <div class="pk-figure" data-testid="mdf-value">
           <span class="pk-name"><MetricLabel term="mdf" /></span>
           <span class="pk-big">{{ percent(outcome.figures.raw.mdf) }}</span>
-          <span class="pk-muted">{{ percent(outcome.figures.rakeAdjusted.mdf) }} after rake</span>
+          <span class="pk-muted">{{ percent(outcome.figures.rakeAdjusted.mdf) }} <MetricLabel term="rake" label="after rake" /></span>
         </div>
         <div class="pk-figure" data-testid="alpha-value">
           <span class="pk-name"><MetricLabel term="alpha" /></span>
           <span class="pk-big">{{ percent(outcome.figures.raw.alpha) }}</span>
-          <span class="pk-muted">{{ percent(outcome.figures.rakeAdjusted.alpha) }} after rake</span>
+          <span class="pk-muted">{{ percent(outcome.figures.rakeAdjusted.alpha) }} <MetricLabel term="rake" label="after rake" /></span>
         </div>
       </div>
       <p class="pk-explain" data-testid="mdf-explain">{{ explainMdf(outcome.figures.raw, defend) }}</p>

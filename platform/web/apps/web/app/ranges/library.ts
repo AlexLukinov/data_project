@@ -24,7 +24,10 @@ export interface Library {
   load(filters?: ListFilters): Promise<RangeSummary[]>;
   /** One range with its body: the server's, else the cached body when its version is current. */
   open(id: string): Promise<StoredRange>;
-  /** Every stored range at this situation; offline, the cached ones that still carry a body. */
+  /**
+   * Every stored range at this situation; offline, the cached ones that still carry a body. `status`
+   * afterwards says which of the two this answer is, so an empty offline answer is not read as "none".
+   */
   lookup(key: NodeKey): Promise<StoredRange[]>;
   versions(id: string): Promise<RangeVersion[]>;
   exportAll(): Promise<LibraryExport>;
@@ -96,6 +99,12 @@ function createState(): State {
   };
 }
 
+/** The server answered: the library is no longer offline. */
+function answered<T>(state: State, value: T): T {
+  state.ready();
+  return value;
+}
+
 function createReads(api: RangesApi, cache: RangeCache, state: State): Reads {
   async function load(filters: ListFilters = {}): Promise<RangeSummary[]> {
     state.status.value = 'loading';
@@ -129,7 +138,7 @@ function createReads(api: RangesApi, cache: RangeCache, state: State): Reads {
   }
   async function lookup(key: NodeKey): Promise<StoredRange[]> {
     try {
-      return await api.lookup(key);
+      return answered(state, await api.lookup(key));
     } catch (e) {
       state.offline(e);
       return (await cache.all()).filter(hasBody).filter((r) => nodeKeyEquals(r.node_key, key)).map(asStored);

@@ -13,8 +13,8 @@ import { useRangesStore } from '~/stores/ranges';
 
 const store = useRangesStore();
 const id = useRoute().params.id as string;
-const { data, error, refresh } = await useAsyncData(`range-${id}`, () => store.open(id), { server: false });
-const { data: history, refresh: refreshHistory } = await useAsyncData(`range-${id}-versions`, () => store.versions(id).catch(() => []), { server: false });
+const { data, error, refresh } = await useAsyncData(`range-${id}`, () => store.open(id), { server: false, lazy: true });
+const { data: history, refresh: refreshHistory } = await useAsyncData(`range-${id}-versions`, () => store.versions(id).catch(() => []), { server: false, lazy: true });
 
 const name = ref('');
 const key = ref<NodeKey | null>(null);
@@ -144,6 +144,6 @@ function setRange(next: WeightedRange): void {
         </div>
       </div>
     </template>
-    <p v-else class="text-sm text-zinc-500">Loading…</p>
+    <p v-else class="text-sm text-zinc-500" data-testid="range-loading">Opening the range…</p>
   </section>
 </template>

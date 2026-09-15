@@ -3,16 +3,22 @@
  * Two ranges against each other (spec §8): mean and median equity with the range advantage,
  * the nut advantage with its split made prominent (it drives bet sizing), the equity buckets
  * opposed and the distribution graph. The nut threshold definition is the one advanced control.
+ *
+ * `v-model:nutOptions` shares that definition with a parent that grades a number against it (the
+ * analyzer's step 4), so the Advanced fold changes the graded figure too; unbound, the panel
+ * keeps its own copy. Units are core's: `cutoff` a fraction, `topPercent` a percent.
+ * `nutLockedReason` shuts the definition once a number has been graded by it, and says why.
  */
-import type { NutMode, WeightedRange } from '@poker/core';
+import type { NutMode, NutOptions, WeightedRange } from '@poker/core';
 import { DEFAULT_NUT_CUTOFF, DEFAULT_NUT_TOP_PERCENT, equityBuckets, nutAdvantage, rangeAdvantage } from '@poker/core';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import { explainNutAdvantage, explainRangeAdvantage } from '../explain';
 import { percent } from '../format';
 import EquityBucketBars from './EquityBucketBars.vue';
 import EquityDistributionChart from './EquityDistributionChart.vue';
 import MetricLabel from './MetricLabel.vue';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -23,16 +29,22 @@ const props = withDefaults(
     villainEquities?: Float32Array | null;
     /** Whether the equities are exact or Monte Carlo, for the provenance line; `null` says nothing. */
     exact?: boolean | null;
+    /** Why the nut definition cannot be changed right now (a number was graded by it); '' leaves it open. */
+    nutLockedReason?: string;
   }>(),
-  { heroEquities: null, villainEquities: null, exact: null },
+  { heroEquities: null, villainEquities: null, exact: null, nutLockedReason: '' },
 );
+const nutOptions = defineModel<Required<NutOptions>>('nutOptions', { default: () => ({ mode: 'cutoff', cutoff: DEFAULT_NUT_CUTOFF, topPercent: DEFAULT_NUT_TOP_PERCENT }) });
 
 const PERCENT = 100;
 const MIN_TOP_PERCENT = 0.1;
+const TOP_PERCENT_STEP = 0.5;
 
-const mode = ref<NutMode>('cutoff');
-const cutoff = ref(PERCENT * DEFAULT_NUT_CUTOFF);
-const topPercent = ref(DEFAULT_NUT_TOP_PERCENT);
+/** Every change is a new object, so a bound parent's value is never mutated under it. */
+function patchNut(change: Partial<Required<NutOptions>>): void {
+  nutOptions.value = { ...nutOptions.value, ...change };
+}
+const mode = computed({ get: () => nutOptions.value.mode, set: (next: NutMode) => patchNut({ mode: next }) });
 
 const heroLabel = computed(() => props.hero.label ?? 'Hero');
 const villainLabel = computed(() => props.villain.label ?? 'Villain');
@@ -41,11 +53,7 @@ const sides = computed(() => {
   return { hero: { equities: props.heroEquities, weights: props.hero.weights }, villain: { equities: props.villainEquities, weights: props.villain.weights } };
 });
 const advantage = computed(() => (sides.value === null ? null : rangeAdvantage(sides.value.hero, sides.value.villain)));
-const nut = computed(() => {
-  if (sides.value === null) return null;
-  const top = Math.min(PERCENT, Math.max(MIN_TOP_PERCENT, topPercent.value));
-  return nutAdvantage(sides.value.hero, sides.value.villain, { mode: mode.value, cutoff: cutoff.value / PERCENT, topPercent: top });
-});
+const nut = computed(() => (sides.value === null ? null : nutAdvantage(sides.value.hero, sides.value.villain, nutOptions.value)));
 const buckets = computed(() => (sides.value === null ? null : { hero: equityBuckets(sides.value.hero), villain: equityBuckets(sides.value.villain) }));
 
 function signed(difference: number): string {
@@ -93,13 +101,14 @@ function signed(difference: number): string {
           <span class="pk-split-hero" :style="{ width: `${PERCENT * nut.split.hero}%` }">{{ heroLabel }} {{ percent(nut.split.hero, 0) }}</span>
           <span class="pk-split-villain" :style="{ width: `${PERCENT * nut.split.villain}%` }">{{ villainLabel }} {{ percent(nut.split.villain, 0) }}</span>
         </div>
-        <p class="pk-muted"><MetricLabel term="nutShare" />: {{ heroLabel }} {{ percent(nut.hero.share) }} · {{ villainLabel }} {{ percent(nut.villain.share) }} · <MetricLabel term="nutThreshold" /> {{ percent(nut.threshold) }}</p>
+        <p class="pk-muted"><MetricLabel term="nutShare" />: {{ heroLabel }} {{ percent(nut.hero.share) }} · {{ villainLabel }} {{ percent(nut.villain.share) }} · <MetricLabel term="nutThreshold" /> <span data-testid="compare-nut-threshold">{{ percent(nut.threshold) }}</span></p>
         <p class="pk-explain" data-testid="compare-nut-explain">{{ explainNutAdvantage(nut, heroLabel, villainLabel) }}</p>
         <details class="pk-advanced">
           <summary>Advanced: what counts as nutted</summary>
           <div class="pk-inputs">
-            <label><input v-model="mode" type="radio" value="cutoff" /> equity at or above <input v-model.number="cutoff" type="number" min="0" max="100" aria-label="nut cutoff, percent" /> %</label>
-            <label><input v-model="mode" type="radio" value="topPercent" /> the top <input v-model.number="topPercent" type="number" :min="MIN_TOP_PERCENT" max="100" step="0.5" aria-label="top percent of both ranges" /> % of both ranges together</label>
+            <label><input v-model="mode" type="radio" value="cutoff" :disabled="nutLockedReason !== ''" /> equity at or above <NumberInput :model-value="PERCENT * nutOptions.cutoff" :min="0" :max="PERCENT" :disabled="nutLockedReason !== ''" aria-label="nut cutoff, percent" @update:model-value="patchNut({ cutoff: $event / PERCENT })" /> %</label>
+            <label><input v-model="mode" type="radio" value="topPercent" :disabled="nutLockedReason !== ''" /> the top <NumberInput :model-value="nutOptions.topPercent" :min="MIN_TOP_PERCENT" :max="PERCENT" :step="TOP_PERCENT_STEP" :disabled="nutLockedReason !== ''" aria-label="top percent of both ranges" @update:model-value="patchNut({ topPercent: $event })" /> % of both ranges together</label>
+            <p v-if="nutLockedReason" class="pk-muted" data-testid="compare-nut-locked">{{ nutLockedReason }}</p>
           </div>
         </details>
       </section>
@@ -201,7 +210,7 @@ function signed(difference: number): string {
   margin-top: 0.4rem;
   font-size: 0.85rem;
 }
-.pk-inputs input[type='number'] {
+.pk-inputs input[inputmode='decimal'] {
   width: 4rem;
   font: inherit;
   padding: 0.1rem 0.3rem;

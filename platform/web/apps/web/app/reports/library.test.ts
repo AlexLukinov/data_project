@@ -100,6 +100,20 @@ describe('the report library', () => {
     await library.remove('id-1');
     expect(library.saved.value.map((r) => r.id)).toEqual(['id-2']);
   });
+
+  it('drops a deleted report even when reading the list back fails', async () => {
+    const rows = [saved('id-1', 'one'), saved('id-2', 'two')];
+    let reads = 0;
+    const library = createLibrary(
+      api({
+        savedReports: () => (reads++ === 0 ? Promise.resolve([...rows]) : Promise.reject(new Error('The API did not answer'))),
+        deleteSavedReport: () => Promise.resolve(),
+      }),
+    );
+    await library.load();
+    await expect(library.remove('id-1')).rejects.toThrow('did not answer');
+    expect(library.saved.value.map((r) => r.id)).not.toContain('id-1');
+  });
 });
 
 describe('byModule', () => {

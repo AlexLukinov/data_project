@@ -61,6 +61,7 @@ const describing = ref('');
 const dialogOpen = ref(false);
 const saving = ref(false);
 const saveFailure = ref('');
+const deleteFailure = ref('');
 const savingName = ref('');
 const openId = ref<string | null>(props.savedId);
 
@@ -152,8 +153,18 @@ async function openPreset(preset: ModulePreset): Promise<void> {
   await goTo(null);
 }
 
+/** A refused delete is said and changes nothing; a delete that happened but whose list did not reload says that. */
 async function remove(report: SavedReport): Promise<void> {
-  await library.remove(report.id);
+  deleteFailure.value = '';
+  try {
+    await library.remove(report.id);
+  } catch (error) {
+    const deleted = library.savedReport(report.id) === undefined;
+    deleteFailure.value = deleted
+      ? `“${report.name}” was deleted, but the list could not be read back: ${describeApiError(error)}`
+      : `Could not delete “${report.name}”: ${describeApiError(error)}`;
+    if (!deleted) return;
+  }
   if (openId.value !== report.id) return;
   openId.value = null;
   await goTo(null);
@@ -191,6 +202,7 @@ watch(
     </div>
 
     <p v-if="library.status === 'error'" role="alert" data-testid="library-error" class="text-sm text-red-600 dark:text-red-400">{{ library.error }}</p>
+    <p v-if="deleteFailure" role="alert" data-testid="report-delete-error" class="text-sm text-red-600 dark:text-red-400">{{ deleteFailure }}</p>
 
     <PresetMenu :presets="library.presets" :saved="library.saved" :open-id="openId" :busy="busy" @open-preset="openPreset" @open-saved="openStored" @remove="remove" />
 

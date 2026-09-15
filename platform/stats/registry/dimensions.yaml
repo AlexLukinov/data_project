@@ -367,7 +367,7 @@
   description: The bet in front is the preflop aggressor's first bet on this street.
 
 - code: facing_size_pct
-  label: Bet faced (% of pot)
+  label: Bet faced (fraction of pot)
   type: number
   tables: [decisions]
   buckets: {small: [0, 0.37], mid: [0.37, 0.60], large: [0.60, 0.85], pot: [0.85, 1.10], overbet: [1.10, null]}
@@ -550,7 +550,7 @@
   description: Chips put in by this action, in big blinds.
 
 - code: size_pct
-  label: Bet size (% of pot)
+  label: Bet size (fraction of pot)
   type: number
   tables: [decisions]
   buckets: {small: [0, 0.37], mid: [0.37, 0.60], large: [0.60, 0.85], pot: [0.85, 1.10], overbet: [1.10, null]}

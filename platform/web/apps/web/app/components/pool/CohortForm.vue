@@ -9,6 +9,7 @@
  * evaluated on the daily rollup, so the rest are shown greyed rather than hidden, which is how a
  * person learns *why* aggression factor is not on offer instead of wondering whether it exists.
  */
+import { NumberInput, formatDecimal, parseDecimal } from '@poker/ui';
 import { computed, ref, watch } from 'vue';
 
 import type { RuleDraft } from '~/pool/rules';
@@ -124,14 +125,12 @@ function submit(): void {
           <option v-for="choice in OPS" :key="choice.op" :value="choice.op">{{ choice.label }}</option>
         </select>
 
-        <input
-          :value="rule.value"
-          type="number"
-          step="any"
-          inputmode="decimal"
+        <NumberInput
+          :model-value="parseDecimal(rule.value)"
           data-testid="rule-value"
           class="w-28 rounded border border-zinc-300 bg-transparent px-2 py-1 tabular-nums dark:border-zinc-700"
-          @input="setRule(index, { value: typed($event) })"
+          @update:model-value="setRule(index, { value: formatDecimal($event) })"
+          @clear="setRule(index, { value: '' })"
         />
 
         <button type="button" data-testid="rule-remove" class="text-xs underline underline-offset-2" @click="removeRule(index)">Remove</button>

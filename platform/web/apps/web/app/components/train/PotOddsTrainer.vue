@@ -5,15 +5,19 @@
 //
 // Afterwards the real `PotOddsPanel` and `MDFPanel` appear with the spot's numbers in them. They
 // are editable, deliberately: once the answer is in, the best thing to do with a spot you got
-// wrong is push the size around and watch which way the number moves.
+// wrong is push the size around and watch which way the number moves. Both panels share one set
+// of numbers, a line says when they are no longer the spot's, and the next spot starts clean.
 import { MDFPanel, PotOddsPanel } from '@poker/ui';
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 
+import { useEditableOdds } from '~/composables/useEditableOdds';
 import type { PotOddsSpot } from '~/train/types';
 
 const props = defineProps<{ spot: PotOddsSpot; revealed: boolean }>();
 
-const rake = computed(() => ({ rakePct: props.spot.rakePct, rakeCapBB: props.spot.rakeCapBB }));
+const odds = reactive(
+  useEditableOdds(() => ({ pot: props.spot.potBB, bet: props.spot.betBB, rakeConfig: { rakePct: props.spot.rakePct, rakeCapBB: props.spot.rakeCapBB } })),
+);
 
 /** Alpha and the bluff break-even are one number under two names; the reveal says so. */
 const SAME_NUMBER =
@@ -34,9 +38,13 @@ const showsIdentity = computed(() => props.spot.ask === 'alpha' || props.spot.as
     <div v-if="revealed" class="space-y-4">
       <p v-if="showsIdentity" class="text-sm text-zinc-500" data-testid="odds-identity">{{ SAME_NUMBER }}</p>
       <div class="grid gap-6 lg:grid-cols-2">
-        <PotOddsPanel :pot="spot.potBB" :bet="spot.betBB" :rake-config="rake" />
-        <MDFPanel :pot="spot.potBB" :bet="spot.betBB" :rake-config="rake" />
+        <PotOddsPanel v-model:pot="odds.pot" v-model:bet="odds.bet" v-model:call="odds.call" v-model:implied-extra="odds.impliedExtra" v-model:rake-config="odds.rakeConfig" />
+        <MDFPanel v-model:pot="odds.pot" v-model:bet="odds.bet" :rake-config="odds.rakeConfig" />
       </div>
+      <p v-if="odds.edited" class="text-sm text-zinc-500" data-testid="odds-edited">
+        These are your numbers now, not the spot's.
+        <button type="button" class="underline" data-testid="odds-reset" @click="odds.reset()">Back to the spot's numbers</button>
+      </p>
     </div>
   </div>
 </template>

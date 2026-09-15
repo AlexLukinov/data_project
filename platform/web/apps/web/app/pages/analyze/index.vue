@@ -3,7 +3,7 @@
 // begins at a hand — "Analyze this node" on the replayer — so the empty state points there rather
 // than at a blank form.
 import { nodeKeyLabel } from '@poker/core';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { createAnalysesApi } from '~/analyze/api';
 import { LAST_STEP } from '~/analyze/steps';
@@ -13,13 +13,22 @@ const api = createAnalysesApi(useApi());
 const { data, error, refresh } = await useAsyncData('analyses', () => api.list(), { server: false });
 
 const rows = computed(() => data.value ?? []);
+/** Why the last delete did not happen; '' when it did. */
+const deleteFailure = ref('');
 
 function day(iso: string): string {
   return iso.slice(0, 10);
 }
 
+/** A refused delete is said on the page; the list is re-read only after one that happened. */
 async function remove(id: string): Promise<void> {
-  await api.remove(id);
+  deleteFailure.value = '';
+  try {
+    await api.remove(id);
+  } catch (e) {
+    deleteFailure.value = `Could not delete the analysis: ${describeApiError(e)}`;
+    return;
+  }
   await refresh();
 }
 </script>
@@ -30,6 +39,8 @@ async function remove(id: string): Promise<void> {
       <h1 class="text-xl font-semibold">Analyses</h1>
       <span class="text-sm text-zinc-500">nine steps over one situation, each ending in a heuristic</span>
     </div>
+
+    <p v-if="deleteFailure" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="analyses-delete-error">{{ deleteFailure }}</p>
 
     <p v-if="error" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="analyses-error">{{ describeApiError(error) }}</p>
 

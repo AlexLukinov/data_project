@@ -102,4 +102,26 @@ describe('ComboDrilldown', () => {
     await wrapper.findAll('button.pk-btn')[1]!.trigger('click'); // none
     expect((wrapper.emitted('update:range')![1]![0] as WeightedRange).weights[parseCombo('AsKs')]).toBe(0);
   });
+
+  it('shows a tiny weight as itself, so typing 0 still zeroes the combo', async () => {
+    const tiny = parseRange('AsKs:0.0004').range; // a solver import's trace frequency
+    const wrapper = mount(ComboDrilldown, { props: { handClass: 1, range: tiny, board } });
+    const input = wrapper.findAll('tbody tr').find((r) => r.text().includes('AsKs'))!.find('input');
+    expect((input.element as HTMLInputElement).value).toBe('0.0004');
+    await input.setValue('0');
+    expect((wrapper.emitted('update:range')![0]![0] as WeightedRange).weights[parseCombo('AsKs')]).toBe(0);
+  });
+
+  it('refuses a weight outside 0..1, shows a Float32 weight without its noise, and keeps blocked combos shut', async () => {
+    const weighted = parseRange('AKs:0.3').range; // 0.3 as Float32 is 0.30000001192092896
+    const wrapper = mount(ComboDrilldown, { props: { handClass: 1, range: weighted, board } });
+    const input = (combo: string) => wrapper.findAll('tbody tr').find((r) => r.text().includes(combo))!.find('input');
+    expect((input('AsKs').element as HTMLInputElement).value).toBe('0.3');
+    expect(input('AdKd').attributes('disabled')).toBeDefined();
+    await input('AsKs').setValue('1,5');
+    await input('AsKs').setValue('-0.1');
+    expect(wrapper.emitted('update:range')).toBeUndefined();
+    await input('AsKs').setValue('0,75');
+    expect((wrapper.emitted('update:range')![0]![0] as WeightedRange).weights[parseCombo('AsKs')]).toBe(0.75);
+  });
 });

@@ -95,6 +95,12 @@ describe('the library', () => {
     await expect(lib.open('b')).rejects.toThrow('fetch failed');
     expect((await lib.lookup(KEY)).map((r) => r.id)).toEqual(['a']);
     expect(await lib.lookup(nodeKey('BB'))).toEqual([]);
+    expect(lib.status.value).toBe('offline');
+
+    flags.down = false;
+    await lib.lookup(KEY);
+    expect(lib.status.value).toBe('ready');
+    expect(lib.error.value).toBeNull();
   });
 
   it('removes from the server, the cache and the list', async () => {

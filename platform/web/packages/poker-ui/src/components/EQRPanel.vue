@@ -10,6 +10,7 @@ import { computed } from 'vue';
 import { explainEqr } from '../explain';
 import { num, percent } from '../format';
 import MetricLabel from './MetricLabel.vue';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -28,11 +29,6 @@ const emit = defineEmits<{ 'update:ev': [ev: number | null] }>();
 const valid = computed(() => props.pot > 0 && props.equity > 0 && props.equity <= 1);
 const fullValue = computed(() => props.equity * props.pot);
 const eqr = computed(() => (props.ev === null || !valid.value ? null : equityRealization(props.ev, props.pot, props.equity)));
-
-function setEv(event: Event): void {
-  const value = (event.target as HTMLInputElement).value;
-  emit('update:ev', value === '' ? null : Number(value));
-}
 </script>
 
 <template>
@@ -48,7 +44,7 @@ function setEv(event: Event): void {
       </div>
       <div>
         <dt><MetricLabel term="ev" label="EV, entered" /></dt>
-        <dd><input type="number" step="any" :value="ev ?? ''" placeholder="solver EV" aria-label="EV from a solver" @input="setEv" /></dd>
+        <dd><NumberInput :model-value="ev" placeholder="solver EV" aria-label="EV from a solver" @update:model-value="emit('update:ev', $event)" @clear="emit('update:ev', null)" /></dd>
       </div>
       <div>
         <dt><MetricLabel term="eqr" /></dt>

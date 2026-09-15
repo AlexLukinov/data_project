@@ -4,7 +4,7 @@
 // component; this page only wires state, undo/redo and keyboard shortcuts.
 import type { Axis, Card, ComboIndex, DistributionGroup, EquityResult, HandClass, RakeConfig, WeightedRange } from '@poker/core';
 import { NO_RAKE, comboCards, comboIndex, createRange, filterByPredicate, parseCards, parseRange } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityCalculator, MDFPanel, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityCalculator, MDFPanel, NumberInput, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
 definePageMeta({ public: true }); // spec §17: pure calculation works without a backend
@@ -12,6 +12,11 @@ definePageMeta({ public: true }); // spec §17: pure calculation works without a
 const HERO_DEFAULT = '22+,A2s+,K5s+,Q8s+,J8s+,T8s+,97s+,86s+,75s+,65s,A8o+,KTo+,QTo+,JTo';
 const VILLAIN_DEFAULT = '22+,A2s+,K2s+,Q4s+,J6s+,T6s+,96s+,85s+,74s+,64s+,53s+,A2o+,K7o+,Q8o+,J8o+,T8o+,98o';
 const BRUSHES = [1, 0.75, 0.5, 0.25];
+/** What one arrow key moves the custom brush strength by. */
+const BRUSH_STEP = 0.05;
+const PERCENT = 100;
+/** The Blockers row's pot never goes below one unit: a bet against an empty pot has no odds to show. */
+const MIN_POT = 1;
 
 function labelled(range: WeightedRange, label: string): WeightedRange {
   return { weights: range.weights, label };
@@ -42,6 +47,12 @@ const highlightSide = ref<'hero' | 'villain'>('hero');
 const exported = ref<string | null>(null);
 const heroHand = ref<Card[]>([]);
 const selectedCombo = computed<ComboIndex | null>(() => (heroHand.value.length === 2 ? comboIndex(heroHand.value[0]!, heroHand.value[1]!) : null));
+
+/** A typed brush strength becomes the brush in use, as clicking a preset does. */
+function setCustomBrush(value: number): void {
+  customBrush.value = value;
+  brush.value = value;
+}
 
 function toggleHeroCard(card: Card): void {
   const at = heroHand.value.indexOf(card);
@@ -112,7 +123,7 @@ const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain)
       <div class="flex items-center gap-3 text-sm">
         <span class="text-zinc-500">Brush</span>
         <button v-for="b in BRUSHES" :key="b" type="button" class="rounded border px-2 py-1" :class="brush === b ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : 'border-zinc-300 dark:border-zinc-700'" @click="brush = b">{{ Math.round(100 * b) }}%</button>
-        <label class="flex items-center gap-1">custom <input v-model.number="customBrush" type="number" min="0" max="1" step="0.05" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" @change="brush = customBrush" /></label>
+        <label class="flex items-center gap-1">custom <NumberInput :model-value="customBrush" lazy :min="0" :max="1" :step="BRUSH_STEP" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" @update:model-value="setCustomBrush" /></label>
         <button type="button" class="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40 dark:border-zinc-700" :disabled="!editedSide.canUndo.value" title="⌘Z" @click="editedSide.undo()">Undo</button>
         <button type="button" class="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40 dark:border-zinc-700" :disabled="!editedSide.canRedo.value" title="⌘⇧Z" @click="editedSide.redo()">Redo</button>
         <label class="flex items-center gap-1"><input v-model="showHeat" type="checkbox" /> equity overlay</label>
@@ -183,10 +194,10 @@ const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain)
       <div class="space-y-3">
         <h2 class="font-medium">Blockers</h2>
         <div class="flex flex-wrap gap-4 text-sm">
-          <label class="flex items-center gap-1">villain continues at ≥ <input v-model.number="continueAt" type="number" min="0" max="100" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" />% equity</label>
-          <label class="flex items-center gap-1">hero value at ≥ <input v-model.number="valueAt" type="number" min="0" max="100" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" />%</label>
-          <label class="flex items-center gap-1">pot <input v-model.number="pot" type="number" min="1" class="w-20 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" /></label>
-          <label class="flex items-center gap-1">bet <input v-model.number="bet" type="number" min="0" class="w-20 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" /></label>
+          <label class="flex items-center gap-1">villain continues at ≥ <NumberInput v-model="continueAt" :min="0" :max="PERCENT" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" />% equity</label>
+          <label class="flex items-center gap-1">hero value at ≥ <NumberInput v-model="valueAt" :min="0" :max="PERCENT" class="w-16 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" />%</label>
+          <label class="flex items-center gap-1">pot <NumberInput v-model="pot" :min="MIN_POT" class="w-20 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" /></label>
+          <label class="flex items-center gap-1">bet <NumberInput v-model="bet" :min="0" class="w-20 rounded border border-zinc-300 px-1 dark:border-zinc-700 dark:bg-zinc-900" /></label>
         </div>
         <div class="space-y-1 text-sm">
           <p class="text-zinc-500">Your hand <span class="text-xs">· pick two cards, or click a row below</span></p>

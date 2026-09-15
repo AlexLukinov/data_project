@@ -44,6 +44,39 @@ describe('NodeKeyEditor', () => {
     await row.find('button[aria-label="remove step"]').trigger('click');
     expect(wrapper.props('modelValue').action_sequence).toEqual([]);
   });
+
+  it('refuses a stack below 1 and a table outside 2..10, and rounds what it takes', async () => {
+    const wrapper = mount(NodeKeyEditor, { props: { modelValue: nodeKey('BTN') } });
+    await wrapper.find('[data-testid="node-stack"]').setValue('0,5');
+    await wrapper.find('[data-testid="node-table"]').setValue('11');
+    await wrapper.find('[data-testid="node-table"]').setValue('1');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await wrapper.find('[data-testid="node-stack"]').setValue('87,6');
+    expect((wrapper.emitted('update:modelValue')![0]![0] as NodeKey).eff_stack_bb).toBe(88);
+  });
+
+  it('reads a comma in the sizes, keeps the percent unrounded, and clears a size to none', async () => {
+    const key = nodeKey('BB', { action_sequence: [step('CO', 'raise', { size_bb: 3 }), step('BB', 'call')] });
+    const wrapper = mount(NodeKeyEditor, { props: { modelValue: key, 'onUpdate:modelValue': (k: NodeKey) => wrapper.setProps({ modelValue: k }) } });
+    const row = wrapper.find('[data-testid="node-step-0"]');
+    const raiseTo = row.find('input[aria-label="raise to, bb"]');
+    await raiseTo.setValue('2,5');
+    expect(wrapper.props('modelValue').action_sequence[0]!.size_bb).toBe(2.5);
+    await raiseTo.trigger('blur');
+    expect((raiseTo.element as HTMLInputElement).value).toBe('2.5');
+
+    const pct = row.find('input[aria-label="bet, % of pot"]');
+    await pct.setValue('33,3');
+    expect(wrapper.props('modelValue').action_sequence[0]!.size_pct).toBeCloseTo(0.333, 9);
+    await pct.trigger('blur');
+    expect((pct.element as HTMLInputElement).value).toBe('33.3');
+
+    await raiseTo.setValue('');
+    expect(wrapper.props('modelValue').action_sequence[0]!.size_bb).toBeNull();
+    await pct.setValue('0');
+    expect(wrapper.props('modelValue').action_sequence[0]!.size_pct).toBeNull();
+    expect(wrapper.props('modelValue').action_sequence[1]).toEqual(step('BB', 'call'));
+  });
 });
 
 describe('RangeDisagreementTable', () => {

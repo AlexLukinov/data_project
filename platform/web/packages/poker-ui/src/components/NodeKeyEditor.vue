@@ -7,33 +7,21 @@
 import type { ActionStep, NodeAction, NodeKey, Position, Street } from '@poker/core';
 import { NODE_ACTIONS, POSITIONS, STREETS, nodeKeyLabel, step } from '@poker/core';
 
+import NumberInput from './NumberInput.vue';
+
 const model = defineModel<NodeKey>({ required: true });
 
 const PERCENT = 100;
+const MIN_STACK_BB = 1;
+const MIN_TABLE_SIZE = 2;
+const MAX_TABLE_SIZE = 10;
 
 function patch(change: Partial<NodeKey>): void {
   model.value = { ...model.value, ...change };
 }
 
-function number(event: Event): number | null {
-  const raw = (event.target as HTMLInputElement).value.trim();
-  if (raw === '') return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
 function text(event: Event): string {
   return (event.target as HTMLInputElement | HTMLSelectElement).value;
-}
-
-function setStack(event: Event): void {
-  const value = number(event);
-  if (value !== null && value >= 1) patch({ eff_stack_bb: Math.round(value) });
-}
-
-function setTable(event: Event): void {
-  const value = number(event);
-  if (value !== null && value >= 2) patch({ table_size: Math.round(value) });
 }
 
 function setTexture(event: Event): void {
@@ -45,8 +33,8 @@ function setStep(i: number, change: Partial<ActionStep>): void {
   patch({ action_sequence: steps });
 }
 
-function setStepSize(i: number, event: Event, field: 'size_bb' | 'size_pct'): void {
-  const value = number(event);
+/** A size typed in bb or in % of pot; an emptied box or a size of zero means no size. */
+function setStepSize(i: number, value: number | null, field: 'size_bb' | 'size_pct'): void {
   const size = value === null || value <= 0 ? null : field === 'size_pct' ? value / PERCENT : value;
   setStep(i, { [field]: size });
 }
@@ -82,10 +70,10 @@ function addStep(): void {
         </select>
       </label>
       <label>stack, bb
-        <input type="number" min="1" step="1" :value="model.eff_stack_bb" data-testid="node-stack" @change="setStack" />
+        <NumberInput :model-value="model.eff_stack_bb" lazy :min="MIN_STACK_BB" data-testid="node-stack" @update:model-value="patch({ eff_stack_bb: Math.round($event) })" />
       </label>
       <label>table
-        <input type="number" min="2" max="10" step="1" :value="model.table_size" data-testid="node-table" @change="setTable" />
+        <NumberInput :model-value="model.table_size" lazy :min="MIN_TABLE_SIZE" :max="MAX_TABLE_SIZE" data-testid="node-table" @update:model-value="patch({ table_size: Math.round($event) })" />
       </label>
       <label>stake
         <input type="text" maxlength="16" :value="model.stake" placeholder="NL5" data-testid="node-stake" @change="patch({ stake: text($event).trim() })" />
@@ -102,8 +90,8 @@ function addStep(): void {
         <select :value="s.action" aria-label="action" @change="setStep(i, { action: text($event) as NodeAction })">
           <option v-for="a in NODE_ACTIONS" :key="a" :value="a">{{ a }}</option>
         </select>
-        <input type="number" min="0" step="any" :value="s.size_bb ?? ''" placeholder="bb" aria-label="raise to, bb" @change="setStepSize(i, $event, 'size_bb')" />
-        <input type="number" min="0" step="any" :value="s.size_pct === null ? '' : Math.round(s.size_pct * PERCENT)" placeholder="% pot" aria-label="bet, % of pot" @change="setStepSize(i, $event, 'size_pct')" />
+        <NumberInput :model-value="s.size_bb" lazy :min="0" placeholder="bb" aria-label="raise to, bb" @update:model-value="setStepSize(i, $event, 'size_bb')" @clear="setStepSize(i, null, 'size_bb')" />
+        <NumberInput :model-value="s.size_pct === null ? null : s.size_pct * PERCENT" lazy :min="0" placeholder="% pot" aria-label="bet, % of pot" @update:model-value="setStepSize(i, $event, 'size_pct')" @clear="setStepSize(i, null, 'size_pct')" />
         <button type="button" aria-label="remove step" @click="removeStep(i)">×</button>
       </li>
     </ol>
@@ -139,6 +127,11 @@ function addStep(): void {
 }
 .pk-wide {
   grid-column: 1 / -1;
+}
+/* A text box is about 160px wide on its own; without this it holds a 7rem column open past the card at ~700px. */
+.pk-node-grid input,
+.pk-node-grid select {
+  min-width: 0;
 }
 .pk-steps {
   margin: 0;

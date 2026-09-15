@@ -71,6 +71,7 @@ const { data, error, status } = await useAsyncData(
   },
   {
     server: false,
+    lazy: true,
     watch: [() => filter.node, () => filter.dataset, () => filter.dateFrom, () => filter.dateTo, unsearchable, tag],
     default: () => [],
   },
@@ -102,13 +103,13 @@ function day(iso: string): string {
       </select>
     </label>
 
-    <p class="text-sm text-zinc-500" data-testid="hands-count">
+    <p v-if="status === 'success' && !unsearchable" class="text-sm text-zinc-500" data-testid="hands-count">
       {{ rows.length }} hand{{ rows.length === 1 ? '' : 's' }}<span v-if="tag"> tagged “{{ tag }}”</span><span v-if="truncated">, the most recent — refine the situation to see fewer</span>
     </p>
 
     <p v-if="unsearchable" role="status" data-testid="hands-unsearchable" class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">{{ unsearchable }}</p>
     <p v-else-if="error" role="alert" data-testid="hands-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(error) }}</p>
-    <p v-else-if="status === 'pending'" class="text-sm text-zinc-500">Loading…</p>
+    <p v-else-if="status === 'pending'" class="text-sm text-zinc-500" data-testid="hands-loading">Finding the hands for this situation…</p>
     <p v-else-if="rows.length === 0" class="text-sm text-zinc-500" data-testid="hands-empty">
       No hands match. <span v-if="filter.dataset === 'hero'">Upload some on <NuxtLink to="/upload" class="underline">the Upload page</NuxtLink>, or <NuxtLink to="/hands/paste" class="underline">paste one</NuxtLink>.</span>
     </p>

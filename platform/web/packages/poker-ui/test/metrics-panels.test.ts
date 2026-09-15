@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import type { RakeConfig } from '@poker/core';
 import { COMBO_COUNT, combosIn, parseRange } from '@poker/core';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
 import EQRPanel from '../src/components/EQRPanel.vue';
@@ -50,6 +50,46 @@ describe('PotOddsPanel', () => {
     const wrapper = mount(PotOddsPanel, { props: { pot: 0, bet: 50 } });
     expect(wrapper.find('[role="alert"]').text()).toContain('pot must be positive');
   });
+
+  it('emits nothing for a negative amount or a rake above 100%', async () => {
+    const wrapper = mount(PotOddsPanel, { props: { pot: 100, bet: 50 } });
+    const inputs = wrapper.findAll('input');
+    await inputs[0]!.setValue('-5');
+    await inputs[3]!.setValue('150');
+    expect(wrapper.emitted('update:pot')).toBeUndefined();
+    expect(wrapper.emitted('update:rakeConfig')).toBeUndefined();
+    expect(inputs[0]!.attributes('aria-invalid')).toBe('true');
+  });
+
+  it('reads a comma as a decimal point, and an emptied cap or to-call as none', async () => {
+    const wrapper = mount(PotOddsPanel, { props: { pot: 100, bet: 50, call: 30, rakeConfig: GG_RAKE } });
+    const inputs = wrapper.findAll('input');
+    expect(inputs.every((input) => input.attributes('inputmode') === 'decimal')).toBe(true);
+    await inputs[0]!.setValue('2,5');
+    expect(wrapper.emitted('update:pot')![0]).toEqual([2.5]);
+    await inputs[2]!.setValue('');
+    expect(wrapper.emitted('update:call')![0]).toEqual([null]); // null: the call equals the bet
+    await inputs[3]!.setValue('4,5'); // rake %
+    expect(wrapper.emitted('update:rakeConfig')![0]).toEqual([{ rakePct: 0.045, rakeCapBB: 3 }]);
+    await inputs[4]!.setValue(''); // cap
+    expect(wrapper.emitted('update:rakeConfig')![1]).toEqual([{ rakePct: 0.05, rakeCapBB: null }]);
+  });
+
+  it('keeps an emptied to-call box empty while a bound parent sets the call back to the bet', async () => {
+    const wrapper = mount(PotOddsPanel, {
+      props: { pot: 10, bet: 5, call: 3, 'onUpdate:call': (call: number | null) => wrapper.setProps({ call }) },
+    });
+    const toCall = wrapper.findAll('input')[2]!;
+    expect(toCall.attributes('placeholder')).toBe('5');
+    await toCall.setValue('');
+    await flushPromises();
+    expect(wrapper.props('call')).toBeNull();
+    expect(toCall.element.value).toBe('');
+    await toCall.setValue('4');
+    await flushPromises();
+    expect(wrapper.props('call')).toBe(4);
+    expect(wrapper.find('[data-testid="odds-explain"]').text()).toContain('Calling 4 to win 15');
+  });
 });
 
 describe('MDFPanel', () => {
@@ -64,6 +104,21 @@ describe('MDFPanel', () => {
     const combos = wrapper.emitted('defendClick')![0]![0] as number[];
     expect(combos).toHaveLength(12);
     expect(combos.every((c) => range.weights[c]! > 0)).toBe(true);
+  });
+
+  it('labels the rake-adjusted figures through the glossary', () => {
+    const wrapper = mount(MDFPanel, { props: { pot: 100, bet: 50, rakeConfig: GG_RAKE } });
+    for (const id of ['mdf-value', 'alpha-value']) {
+      const label = wrapper.find(`[data-testid="${id}"] [data-term="rake"]`);
+      expect(label.exists()).toBe(true);
+      expect(label.text()).toBe('after rake');
+    }
+  });
+
+  it('reads a comma in the pot and bet', async () => {
+    const wrapper = mount(MDFPanel, { props: { pot: 100, bet: 50 } });
+    await wrapper.findAll('input')[1]!.setValue('37,5');
+    expect(wrapper.emitted('update:bet')![0]).toEqual([37.5]);
   });
 
   it('waits for the equities before naming the defending set', () => {
@@ -85,6 +140,16 @@ describe('EQRPanel', () => {
     expect(explain).toContain('under-realizes');
     await wrapper.find('input').setValue('50');
     expect(wrapper.emitted('update:ev')![0]).toEqual([50]);
+  });
+
+  it('emits null when the entered EV is cleared, and reads a comma', async () => {
+    const wrapper = mount(EQRPanel, { props: { equity: 0.45, pot: 100, ev: 38 } });
+    const input = wrapper.find('input[aria-label="EV from a solver"]');
+    await input.setValue('');
+    expect(wrapper.emitted('update:ev')![0]).toEqual([null]);
+    await wrapper.setProps({ ev: null });
+    await input.setValue('-2,5');
+    expect(wrapper.emitted('update:ev')![1]).toEqual([-2.5]);
   });
 
   it('refuses an equity of zero', () => {

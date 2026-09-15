@@ -91,7 +91,8 @@ async function fetchAll(api: ReportsApi, cells: Cells): Promise<void> {
 /**
  * The three writes, each refetching the saved list afterwards. The list is the one part a user
  * changes, so it is read back from the server rather than patched locally: two tabs editing the
- * same library should not be able to disagree about what is in it.
+ * same library should not be able to disagree about what is in it. A delete that happened drops its
+ * row before the re-read, so a re-read that fails cannot leave a deleted report listed.
  */
 function writes(api: ReportsApi, saved: Ref<SavedReport[]>): Pick<Library, 'save' | 'update' | 'remove'> {
   const refresh = async (): Promise<void> => {
@@ -110,6 +111,7 @@ function writes(api: ReportsApi, saved: Ref<SavedReport[]>): Pick<Library, 'save
     },
     remove: async (id) => {
       await api.deleteSavedReport(id);
+      saved.value = saved.value.filter((report) => report.id !== id);
       await refresh();
     },
   };

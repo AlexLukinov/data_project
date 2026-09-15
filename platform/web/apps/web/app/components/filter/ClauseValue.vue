@@ -9,8 +9,8 @@
  * handled on the day it ships: a seat enum is any enum that lists the seats, and it gets the
  * `PositionPicker`; everything else falls back to a select or a text box.
  */
-import { computed } from 'vue';
-import { ActionLine, PositionPicker } from '@poker/ui';
+import { computed, ref } from 'vue';
+import { ActionLine, NumberInput, PositionPicker, formatDecimal, parseDecimal } from '@poker/ui';
 
 import type { Dimension } from '~/stats/api';
 import type { Clause } from '~/filter/clause';
@@ -37,11 +37,36 @@ function put(index: number, value: string): void {
   emit('update:values', values.slice(0, arity(props.clause.op) ?? values.length));
 }
 
+/** A number box's reading of value `index`: `null` while that value is empty or not a number. */
+function numberAt(index: number): number | null {
+  return parseDecimal(at(index));
+}
+
+/** A typed number is kept as this app writes it, so `45,5` is sent as `45.5`. */
+function putNumber(index: number, value: number): void {
+  put(index, formatDecimal(value));
+}
+
 function toggleEnum(value: string): void {
   const chosen = new Set(props.clause.values);
   if (chosen.has(value)) chosen.delete(value);
   else chosen.add(value);
   emit('update:values', props.dim.values.filter((v) => chosen.has(v)));
+}
+
+/**
+ * A list of numbers (`big_blind in 0.05; 0.1`) is separated by `;` or spaces, never by commas: a
+ * comma may be the reader's decimal point, and `0,05, 0,1` split on commas is four wrong numbers.
+ */
+const NUMBER_LIST_SEPARATOR = /[;\s]+/;
+const numberListInvalid = ref(false);
+
+/** Sends the list only when every item reads as a number; otherwise marks the box and sends nothing. */
+function putNumbers(text: string): void {
+  const numbers = text.split(NUMBER_LIST_SEPARATOR).filter((part) => part !== '').map(parseDecimal);
+  numberListInvalid.value = numbers.some((value) => value === null);
+  if (numberListInvalid.value) return;
+  emit('update:values', numbers.filter((value): value is number => value !== null).map(formatDecimal));
 }
 
 /** A free-text list (`stake_level in NL10, NL25`) — the one place a comma is the separator. */
@@ -86,12 +111,28 @@ function putList(text: string): void {
   />
 
   <div v-else-if="clause.op === 'between'" class="flex items-center gap-1 text-sm">
-    <input :value="at(0)" type="number" step="any" :aria-label="`${dim.label} low`" data-testid="clause-low" class="w-24 rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @input="put(0, ($event.target as HTMLInputElement).value)" />
+    <NumberInput :model-value="numberAt(0)" :aria-label="`${dim.label} low`" data-testid="clause-low" class="w-24 rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @update:model-value="putNumber(0, $event)" @clear="put(0, '')" />
     <span class="text-zinc-500">and</span>
-    <input :value="at(1)" type="number" step="any" :aria-label="`${dim.label} high`" data-testid="clause-high" class="w-24 rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @input="put(1, ($event.target as HTMLInputElement).value)" />
+    <NumberInput :model-value="numberAt(1)" :aria-label="`${dim.label} high`" data-testid="clause-high" class="w-24 rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @update:model-value="putNumber(1, $event)" @clear="put(1, '')" />
   </div>
+
+  <input
+    v-else-if="listOp && dim.type === 'number'"
+    :value="clause.values.join('; ')"
+    type="text"
+    inputmode="decimal"
+    :aria-label="dim.label"
+    :aria-invalid="numberListInvalid ? 'true' : undefined"
+    :title="numberListInvalid ? 'Numbers separated by ; or spaces — 0.05 and 0,05 both work.' : undefined"
+    data-testid="clause-number-list"
+    placeholder="0.05; 0.1"
+    class="w-56 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm aria-invalid:border-red-600 dark:border-zinc-700 dark:aria-invalid:border-red-400"
+    @change="putNumbers(($event.target as HTMLInputElement).value)"
+  />
 
   <input v-else-if="listOp" :value="clause.values.join(', ')" type="text" :aria-label="dim.label" data-testid="clause-list" placeholder="comma separated" class="w-56 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700" @change="putList(($event.target as HTMLInputElement).value)" />
 
-  <input v-else :value="at(0)" :type="dim.type === 'number' ? 'number' : 'text'" step="any" :aria-label="dim.label" data-testid="clause-scalar" class="w-40 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700" @input="put(0, ($event.target as HTMLInputElement).value)" />
+  <NumberInput v-else-if="dim.type === 'number'" :model-value="numberAt(0)" :aria-label="dim.label" data-testid="clause-scalar" class="w-40 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700" @update:model-value="putNumber(0, $event)" @clear="put(0, '')" />
+
+  <input v-else :value="at(0)" type="text" :aria-label="dim.label" data-testid="clause-scalar" class="w-40 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700" @input="put(0, ($event.target as HTMLInputElement).value)" />
 </template>

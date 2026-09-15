@@ -7,12 +7,19 @@ import type { Card, HandClass, WeightedRange } from '@poker/core';
 import { HAND_CLASS_COMBOS, classifyHand, comboCards, comboToString, createRange, handClassName } from '@poker/core';
 import { computed } from 'vue';
 
-import { num } from '../format';
+import NumberInput from './NumberInput.vue';
 
 const props = withDefaults(defineProps<{ handClass: HandClass | null; range: WeightedRange; board?: readonly Card[] }>(), { board: () => [] });
 const emit = defineEmits<{ 'update:range': [range: WeightedRange] }>();
 
 const FLOP = 3;
+/**
+ * Weights are stored as Float32, which holds about seven significant digits: seven show 0.3
+ * rather than 0.30000001192092896 and keep 0.0004 as 0.0004 — rounding to places would show it as
+ * 0, and typing 0 would then change nothing.
+ */
+const WEIGHT_SIGNIFICANT_DIGITS = 7;
+const WEIGHT_STEP = 0.05;
 
 const rows = computed(() => {
   if (props.handClass === null) return [];
@@ -21,13 +28,11 @@ const rows = computed(() => {
     const [a, b] = comboCards(combo);
     const blocked = onBoard.has(a) || onBoard.has(b);
     const made = !blocked && props.board.length >= FLOP ? classifyHand([a, b], props.board) : null;
-    return { combo, text: comboToString(combo), weight: props.range.weights[combo]!, blocked, made };
+    return { combo, text: comboToString(combo), weight: Number(props.range.weights[combo]!.toPrecision(WEIGHT_SIGNIFICANT_DIGITS)), blocked, made };
   });
 });
 
-function setWeight(combo: number, value: string): void {
-  const weight = Math.max(0, Number(value));
-  if (!Number.isFinite(weight)) return;
+function setWeight(combo: number, weight: number): void {
   const next = createRange(props.range.weights, props.range.label);
   next.weights[combo] = weight;
   emit('update:range', next);
@@ -56,7 +61,7 @@ function setAll(value: number): void {
           <tr v-for="row in rows" :key="row.combo" :class="{ 'pk-blocked': row.blocked }">
             <td class="pk-combo">{{ row.text }}</td>
             <td>
-              <input type="number" min="0" max="1" step="0.05" :value="num(row.weight, 3)" :aria-label="`weight of ${row.text}`" :disabled="row.blocked" @change="setWeight(row.combo, ($event.target as HTMLInputElement).value)" />
+              <NumberInput :model-value="row.weight" lazy :min="0" :max="1" :step="WEIGHT_STEP" :aria-label="`weight of ${row.text}`" :disabled="row.blocked" @update:model-value="setWeight(row.combo, $event)" />
             </td>
             <td class="pk-muted">
               <template v-if="row.blocked">blocked by the board</template>
@@ -101,7 +106,7 @@ function setAll(value: number): void {
 .pk-combo {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-input[type='number'] {
+input[inputmode='decimal'] {
   width: 5rem;
   font: inherit;
   padding: 0.1rem 0.3rem;

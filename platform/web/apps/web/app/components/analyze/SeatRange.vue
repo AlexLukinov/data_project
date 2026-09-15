@@ -14,8 +14,10 @@ const props = withDefaults(
     weights: string;
     blockedCards?: readonly Card[];
     readOnly?: boolean;
+    /** The name of the chart this range was loaded from; '' when it was painted here. */
+    source?: string;
   }>(),
-  { blockedCards: () => [], readOnly: false },
+  { blockedCards: () => [], readOnly: false, source: '' },
 );
 
 const emit = defineEmits<{ 'update:weights': [weights: string] }>();
@@ -44,6 +46,7 @@ function onEdit(next: WeightedRange): void {
   <div class="space-y-2">
     <p class="flex flex-wrap items-baseline gap-2 text-sm">
       <span class="font-medium">{{ label }}</span>
+      <span v-if="source" class="text-zinc-500" :data-testid="`seat-source-${label}`">started from your chart “{{ source }}”</span>
       <span class="text-zinc-500 tabular-nums" :data-testid="`seat-combos-${label}`">{{ combos.toFixed(0) }} combos · {{ share }}% of hands</span>
     </p>
     <RangeMatrix :range="range" :mode="readOnly ? 'view' : 'edit'" :blocked-cards="blockedCards" @update:range="onEdit" />

@@ -3,7 +3,7 @@
 // already written down for this situation; anything missing is painted here. The reveal is what
 // the field actually does at this node, so an opening range is checked against real opens.
 import { nodeKeyLabel } from '@poker/core';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import type { AnalysisStep, RangeAssignment } from '~/analyze/api';
 import type { StepContext } from '~/analyze/context';
@@ -31,6 +31,11 @@ function weightsFor(position: string): string {
   return props.ctx.step.work.ranges.find((r) => r.position === position)?.weights ?? '';
 }
 
+/** The name of the chart a seat's range was loaded from; '' when it was painted here. */
+function sourceFor(position: string): string {
+  return props.ctx.step.work.ranges.find((r) => r.position === position)?.label ?? '';
+}
+
 function setRange(position: string, weights: string, label = ''): void {
   const others = props.ctx.step.work.ranges.filter((r) => r.position !== position);
   const kept = props.ctx.step.work.ranges.find((r) => r.position === position);
@@ -50,11 +55,21 @@ const actual = computed(() => {
 
 const unavailable = computed(() => poolGap(props.ctx.pool));
 
+/** Where the last press of "Load my chart" got to, so the button never does nothing silently. */
+const lookup = ref<'idle' | 'looking' | 'none' | 'offline' | 'failed'>('idle');
+
 async function loadMyChart(): Promise<void> {
   const key = props.ctx.node;
   if (key === null) return;
-  const found = await library.lookup(key).catch(() => []);
-  const mine = found[0];
+  lookup.value = 'looking';
+  // `null` is a library that could not be read at all — the API and the offline copy both
+  // failed — which is not the same answer as an empty list.
+  const found = await library.lookup(key).catch(() => null);
+  // "My chart" is an own chart: a solver or pool range stored here is not the reader's to be told is theirs.
+  const mine = found?.find((range) => range.source === 'own');
+  // An API that did not answer leaves only the offline copy, whose "nothing here" is not the library's.
+  const empty = library.status === 'offline' ? 'offline' : 'none';
+  lookup.value = found === null ? 'failed' : mine === undefined ? empty : 'idle';
   if (mine !== undefined) setRange(key.hero_position, mine.weights, mine.name);
 }
 </script>
@@ -64,9 +79,28 @@ async function loadMyChart(): Promise<void> {
     <p v-if="ctx.node" class="text-sm text-zinc-500" data-testid="step1-node">Situation: {{ nodeKeyLabel(ctx.node) }}</p>
     <p v-else class="text-sm text-zinc-500">This analysis has no situation yet — set one on the hand it came from.</p>
 
-    <button type="button" class="rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700" data-testid="step1-load" @click="loadMyChart">
-      Load my chart for this spot
-    </button>
+    <div class="flex flex-wrap items-baseline gap-3">
+      <button
+        type="button"
+        :disabled="lookup === 'looking' || !ctx.node"
+        class="rounded border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-zinc-700"
+        data-testid="step1-load"
+        @click="loadMyChart"
+      >
+        Load my chart for this spot
+      </button>
+      <span v-if="lookup === 'looking'" role="status" class="text-sm text-zinc-500" data-testid="step1-loading">Looking in your range library…</span>
+      <span v-else-if="lookup === 'none' && ctx.node" role="status" class="text-sm text-zinc-500" data-testid="step1-none">
+        No chart of yours is stored for {{ nodeKeyLabel(ctx.node) }}.
+        <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink>, then press the button again.
+      </span>
+      <span v-else-if="lookup === 'offline' && ctx.node" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-offline">
+        {{ library.error }} This browser's offline copy has no chart of yours for {{ nodeKeyLabel(ctx.node) }}.
+      </span>
+      <span v-else-if="lookup === 'failed'" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-load-error">
+        Your range library could not be read — neither the API nor this browser's offline copy answered.
+      </span>
+    </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
       <SeatRange
@@ -74,6 +108,7 @@ async function loadMyChart(): Promise<void> {
         :key="seat"
         :label="seat"
         :weights="weightsFor(seat)"
+        :source="sourceFor(seat)"
         @update:weights="setRange(seat, $event)"
       />
     </div>

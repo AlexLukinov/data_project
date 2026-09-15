@@ -26,7 +26,7 @@ const seat = computed(() => {
   return Number.isInteger(asked) ? asked : null;
 });
 
-const { data, error } = await useAsyncData(`hand-${handUid}`, () => api.get(handUid), { server: false });
+const { data, error } = await useAsyncData(`hand-${handUid}`, () => api.get(handUid), { server: false, lazy: true });
 const hand = computed(() => (data.value === undefined ? null : toReplayHand(data.value)));
 
 function day(iso: string): string {
@@ -47,6 +47,6 @@ function day(iso: string): string {
       <HandStudy :hand="hand" :watch-seat="seat" />
       <HandNotes :hand-uid="handUid" :api="notesApi" />
     </template>
-    <p v-else class="text-sm text-zinc-500">Loading…</p>
+    <p v-else class="text-sm text-zinc-500" data-testid="hand-loading">Opening the hand…</p>
   </section>
 </template>
