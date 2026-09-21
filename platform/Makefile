@@ -193,3 +193,29 @@ size-baseline: ## Rewrite the size baseline after fixing or deliberately baselin
 
 .PHONY: check
 check: lint typecheck lint-arch gen-check size-check test ## What the CI `quality` job runs
+
+# ── e2e (plan D.9b, ADR-055) ─────────────────────────────────────────────────
+# One browser flow on the TEST environment: sign in, name a seat, upload a seed-corpus file
+# through /upload, and My game counts its hands. Playwright starts the API (:8055), a worker and
+# the app (:3055) itself and stops all three however the run ends (web/e2e/playwright.config.ts).
+# Needs `make up && make seed` first; never beside `make test-all`, whose session drops the test
+# databases and whose drain shares the worker's consumer group.
+.PHONY: e2e-install
+e2e-install: ## Install the browser the E2E drives (Chromium, plus its system libraries on Linux)
+	cd $(WEB_DIR) && npm run e2e:install
+
+# The one collision the test cannot detect for itself: another worker already consuming the test
+# topics (a `make test-all` in flight, or an orphan from a killed run) would take the upload this
+# test is waiting for, and the test would blame a missing worker. Kafka gives each partition to one
+# member, so an active member of the group is a refusal, not a warning. If Kafka is not up, this says
+# nothing and the API's own startup fails instead.
+.PHONY: e2e
+e2e: ## Browser test on the TEST env: sign in, add a screen name, upload a seed file, My game counts it (needs `make seed`)
+	@group=$$(printf '%s\n' $(TEST_ENV) | sed -n 's/^KAFKA_CONSUMER_GROUP=//p'); \
+	  members=$$($(COMPOSE) exec -T kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+	    --describe --group "$$group" --members 2>/dev/null | grep -c "^$$group" || true); \
+	  if [ "$$members" != "0" ]; then \
+	    echo "refusing: a worker is already consuming $$group — is 'make test-all' running, or a worker left over from a killed run?"; \
+	    exit 1; \
+	  fi
+	cd $(WEB_DIR) && $(TEST_ENV) npm run e2e

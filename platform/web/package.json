@@ -11,7 +11,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p e2e",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,10 +19,13 @@
     "bench:evaluators": "tsx packages/poker-core/bench/evaluators.ts",
     "license-check": "license-checker-rseidelsohn --start . --excludePrivatePackages --excludePackagesStartingWith \"spdx-exceptions;caniuse-lite\" --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;Unlicense;CC0-1.0;0BSD;Zlib;BlueOak-1.0.0;Python-2.0;MPL-2.0\" --summary",
     "check": "npm run typecheck && npm run lint && npm run test && npm run license-check",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:install": "playwright install --with-deps chromium",
     "dev": "npm run dev --workspace=apps/web"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "^2.5.0",

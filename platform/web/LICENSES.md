@@ -59,6 +59,11 @@ is shipped to the browser, and the audit would still fail on a *forbidden* licen
 | `vue-tsc` | MIT | typecheck of `.vue` files (`nuxt typecheck` uses it too) | permissive |
 | `license-checker-rseidelsohn` | BSD-3-Clause | the licence audit itself | permissive (declares `node >= 24`; runs on 23 with a warning) |
 | `fake-indexeddb` | Apache-2.0 | an in-memory IndexedDB so the Dexie cache is tested in Node | permissive |
+| `@playwright/test` (with `playwright`, `playwright-core`) | Apache-2.0 | the browser test, `make e2e` (plan D.9b, ADR-055) | permissive; upstream microsoft/playwright. Pinned to an exact version, not a range: each release drives one browser build, and `make e2e-install` downloads the build that matches it |
+
+The browser Playwright drives is downloaded by `make e2e-install` into the user's cache, outside
+`node_modules`, so the licence audit never sees it. It runs the test and is never shipped or
+bundled.
 
 ## Explicitly not used
 

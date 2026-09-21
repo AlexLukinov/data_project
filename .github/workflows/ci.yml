@@ -2,8 +2,8 @@
 #
 # Every job calls make targets and restates none of them, so this file cannot drift from
 # platform/Makefile: `make check` is the quality gate, `make web-check` the web gate, `make seed`
-# and `make test-all` the integration gate -- the commands a developer runs. If a target cannot
-# run here as written, change the target, never a copy of it in this file.
+# and `make test-all` the integration gate, `make e2e` the browser gate -- the commands a developer
+# runs. If a target cannot run here as written, change the target, never a copy of it in this file.
 #
 # Unit tests run with no services — the parser, the canonical model, the validator and the
 # query compiler are all pure functions, which is deliberate: the parts most likely to hold a
@@ -94,4 +94,42 @@ jobs:
       - name: Stack logs on failure
         if: failure()
         # Diagnostics, not a gate. `make logs` follows the logs (-f) and would never return.
+        run: docker compose logs --no-color --tail=200
+
+  e2e:
+    # One browser flow over the whole product (plan D.9b, ADR-055): sign in, name a seat, upload a
+    # seed-corpus file through /upload, and My game counts its hands with no dbt run. `make e2e`
+    # starts the API, a worker and the app itself and stops them however the run ends. Its own
+    # runner, not a step after `make test-all`: that session drops the test databases it needs.
+    runs-on: ubuntu-24.04
+    # A guard against a hang, not a budget; tighten it once a real run has a duration.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: platform/web/.nvmrc
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+      - run: make install
+      - run: make web-install
+      - run: make e2e-install
+      - run: make up
+      - run: make seed
+      - run: make e2e
+      - name: Playwright traces on failure
+        if: failure()
+        # Diagnostics, not a gate: the trace and screenshot of a failed run, which the job log
+        # cannot show. `uses` paths start at the repository root, not at `platform`.
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: platform/web/e2e/test-results/
+          retention-days: 7
+      - name: Stack logs on failure
+        if: failure()
         run: docker compose logs --no-color --tail=200
