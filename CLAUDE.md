@@ -197,7 +197,9 @@ Redis 6380 · MinIO 9010/9011**.
 | `make lint-arch` | the module-boundary contracts in `platform/.importlinter` (ADR-023) |
 | `make gen` / `make gen-check` | regenerate the dbt staging models from `core/schema/` and the rollup, definitions seed and law test from `stats/registry/` / fail if any is stale |
 | `make size-check` / `make size-baseline` | functions ≤40 lines, files ≤300, against the burn-down list `scripts/size_baseline.txt` (an entry that stops violating fails too) / rewrite that list |
-| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures, `/login` · `/register` · `/account`, `/ranges` the range library with `/ranges/import` (folder import + review) and `/ranges/compare` (my chart · solver · pool), `/hands` the hand list (mine · pool, filtered by situation) with `/hands/[id]` the replayer and `/hands/paste` for a pasted hand, `/analyze` the saved 9-step analyses with `/analyze/[id]` the analyzer itself — every other route is behind sign-in unless its page sets `definePageMeta({ public: true })`); `make api` alongside for the API pages |
+| `make privacy-check` / `make install-hooks` | fail if a real player's screen name is in a tracked or staged file — reads the **real** ClickHouse read-only, so it needs `make up`; **local only, never CI** (ADR-058) / install the local `pre-push` hook that runs it over exactly what a push would send. Run `install-hooks` once per clone; run the check before every push |
+| `make e2e-install` / `make e2e` | install the browser Playwright drives (once per machine) / the browser test on the **test** environment: sign in → add a screen name → upload a seed file → My game counts it. Needs `make up && make seed`; **never beside `make test-all`** (same consumer group, and that session drops the test databases) |
+| `make web` | the Nuxt app on http://localhost:3000 (`/` health, `/lab` the Range Lab calculator, `/dev/components` every component with fixtures, `/login` · `/register` · `/account`, `/ranges` the range library with `/ranges/import` (folder import + review) and `/ranges/compare` (my chart · solver · pool), `/hands` the hand list (mine · pool, filtered by situation) with `/hands/[id]` the replayer and `/hands/paste` for a pasted hand, `/analyze` the saved 9-step analyses with `/analyze/[id]` the analyzer itself, `/examples` three worked spots that open with no account and no API and `/help` what every tool is and how to use it (both public) — every other route is behind sign-in unless its page sets `definePageMeta({ public: true })`); `make api` alongside for the API pages. Every screen carries its own explainer and every chooser its own sentence, from the catalogue in `app/help/tools/` (ADR-059): **adding a page or a chooser without one fails the test suite** |
 | `make web-install` / `make web-check` / `make web-test` / `make web-license` | the JavaScript workspace in `platform/web/` (ADR-027): `npm ci` / typecheck (incl. `nuxt typecheck`) + ESLint + Vitest + the licence audit (what the CI `web` job runs) / tests only / the licence allowlist alone. Every dependency must be MIT/Apache/BSD-class — no GPL/AGPL/LGPL, ever; `platform/web/LICENSES.md` lists why each one is acceptable |
 | `make nuke` | **DESTRUCTIVE** — deletes the data volumes. Golden rule 2 applies |
 
@@ -235,7 +237,10 @@ Redis 6380 · MinIO 9010/9011**.
   Range Lab spec is `docs/POKER_RANGE_LAB_SPEC.md`, its exploration report
   `docs/POKER_RANGE_LAB.md`).
 - **Real hand histories are third-party personal data.** `hand_histories/`, `*.zip`, `*_HH_*`,
-  `*-HH-*` are gitignored and must stay that way. Only aggregates get committed.
+  `*-HH-*` are gitignored and must stay that way. Only aggregates get committed — **and a real
+  player's screen name is personal data on its own**, in a test fixture, a verification note or a
+  commit message as much as in a hand history. `make privacy-check` enforces it against the real
+  pool's keys; run `make install-hooks` once per clone, and never push without it (ADR-058).
 - **Only real hands go into ClickHouse `core.*`/`marts.*`** — the founder analyses them. Tests and
   the seed corpus use a separate environment: `make test-all` and `make seed` set `TEST_ENV`
   (`CLICKHOUSE_DB_PREFIX=test_`, `POSTGRES_DB=poker_test`, a `-test` bucket, `test.` Kafka

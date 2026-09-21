@@ -59,10 +59,16 @@ not a change I've made.
 | [047](#adr-047--the-hot-path-renders-the-dbt-models-own-sql-for-one-batch-provenance-not-a-lock-guards-dbts-swap-the-fresh-rollup-serves-only-what-dbt-has-not-built) | The hot path renders the dbt models' own SQL for one batch; provenance, not a lock, guards dbt's swap; the fresh rollup serves only what dbt has not built | ✅ |
 | [048](#adr-048--a-tag-filter-is-an-id-list-not-a-registry-dimension-a-note-lives-in-postgres-on-a-hand-that-lives-in-clickhouse-and-ownership-is-decided-at-the-edge) | A tag filter is an id list, not a registry dimension; a note lives in Postgres on a hand that lives in ClickHouse, and ownership is decided at the edge | ✅ |
 | [049](#adr-049--the-cohort-form-is-a-small-vocabulary-of-its-own-offers-what-the-registry-marks-cached-and-shows-a-refusal-in-the-servers-words) | The cohort form is a small vocabulary of its own, offers what the registry marks cached, and shows a refusal in the server's words | ✅ |
+| [050](#adr-050--an-example-is-a-spot-in-the-bundle-opened-in-the-analyzers-own-steps-with-no-account-no-upload-and-no-pool) | An example is a spot in the bundle, opened in the analyzer's own steps with no account, no upload and no pool | ✅ |
 | [051](#adr-051--an-upload-is-followed-by-its-own-row-to-the-end-a-failure-is-retried-by-dropping-the-file-again-a-file-that-stored-nothing-is-a-failure-and-the-uploader-reads-sentences-never-exceptions) | An upload is followed by its own row to the end: a failure is retried by dropping the file again, a file that stored nothing is a failure, and the uploader reads sentences, never exceptions | ✅ |
 | [052](#adr-052--the-winnings-curve-is-a-hero-route-over-the-timeline-query-not-a-day-dimension-the-v1-api-is-deleted-and-every-probe-of-it-re-pointed) | The winnings curve is a hero route over the timeline query, not a day dimension; the v1 API is deleted and every probe of it re-pointed | ✅ |
 | [053](#adr-053--a-number-is-typed-as-text-and-read-with-either-separator-a-fraction-is-labelled-a-fraction-a-situation-travels-in-a-link-as-its-canonical-key) | A number is typed as text and read with either separator; a fraction is labelled a fraction; a situation travels in a link as its canonical key | ✅ |
 | [054](#adr-054--ci-lives-at-the-repository-root-calls-the-make-targets-instead-of-restating-them-and-runs-on-every-push) | CI lives at the repository root, calls the make targets instead of restating them, and runs on every push | ✅ |
+| [055](#adr-055--the-browser-test-owns-the-three-processes-it-needs-refuses-to-run-outside-the-test-environment-and-reaches-ci-as-a-job-of-its-own) | The browser test owns the three processes it needs, refuses to run outside the test environment, and reaches CI as a job of its own | ✅ |
+| [056](#adr-056--a-word-that-says-how-a-number-was-obtained-is-a-glossary-entry-a-word-that-names-a-set-is-a-row-in-a-typed-table-both-are-explained-by-the-same-affordance) | The two vocabularies: a word that says how a number was obtained is a glossary entry, a word that names a set is a row in a typed table, and both reach the screen through one affordance | ✅ |
+| [057](#adr-057--registry-words-reach-the-screen-through-one-app-side-component-from-the-registrys-own-descriptions-at-runtime-a-blank-area-says-what-it-is-for-and-offers-one-way-in-a-failure-is-a-sentence-that-cannot-be-mistaken-for-no-data) | Registry words reach the screen through one app-side component; a blank area teaches; a failure is a sentence that cannot be mistaken for "no data" | ✅ |
+| [058](#adr-058--the-privacy-guard-matches-a-name-where-its-context-proves-it-is-one-and-runs-before-every-push-never-in-ci) | The privacy guard matches a name where its context proves it is one, and runs before every push, never in CI | ✅ |
+| [059](#adr-059--one-sentence-one-home-the-tool-catalogue-the-page-explainer-and-control-help) | One sentence, one home: the tool catalogue, the page explainer and control help | ✅ |
 
 ---
 
@@ -2722,6 +2728,136 @@ against the 40-line rule — which that lane fixed before the final run.
 
 ---
 
+## ADR-050 — An example is a spot in the bundle, opened in the analyzer's own steps with no account, no upload and no pool
+
+**Status:** accepted · 2026-09-16 · plan F.12d (round 6, lane E)
+
+**Context.** Spec §13 asks for a "permanent *Examples* section with 3–5 pre-loaded analyses to explore"
+and a "first-run guided tour — short, skippable, resumable from the help menu". The UX audit
+([POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) §2.10) found nothing tour-, help- or example-shaped in the app at
+all, and §6 inventoried the materials without choosing between them. ADR-050 was reserved for this
+choice. Four facts bound it:
+
+1. **A first visit is anonymous.** `middleware/auth.global.ts` sends every non-public page to `/login`,
+   and every API route needs a bearer token (ADR-024). An example that needs an account or a running API
+   cannot be what a first visit is offered.
+2. **Only real hands go into the real `core.*`/`marts.*`** (CLAUDE.md). An example hand cannot be a hand
+   stored in the founder's tenant unless it is one of the founder's own.
+3. **Four of the analyzer's nine steps are scored against the pool.** Steps 1, 2 and 6 read
+   `ctx.pool`, step 9 `ctx.poolFacing`; with no pool, `poolGap(null)` returns `''`
+   (`analyze/context.ts`) and `PredictionGate` shows "Working out what actually happens here…"
+   **for ever** (`PredictionGate.vue`) — a frozen state the spec forbids outright.
+4. **Only one pair of reference charts is honest for a flop.** `train/charts.ts` has eight charts;
+   `btn_rfi` against `bb_call_vs_btn` is the only pair where the caller's chart *is* the range that
+   reaches the flop. Every other pair would need a range nobody has written down (what the CO calls a
+   3-bet with), and inventing one is exactly the "bare number of unclear provenance" §13 forbids.
+
+**Decisions.**
+
+1. **An example is data in the bundle, not a row anywhere.** `app/help/examples.ts` holds three
+   `Example`s: a `NodeKey`, the two reference-chart ids for its seats, a flop, hero's two cards, hero's
+   bet as a share of the pot, and the prose (title, what it teaches, the story, where it comes from).
+   `exampleSteps()` turns that into the analyzer's own `AnalysisStep[]` — step 1's ranges, step 3's
+   board, step 5's hand, step 6's size. Nothing is written to ClickHouse, Postgres, IndexedDB or
+   `localStorage`, so the real-hands rule cannot be broken by an example and a reader's answers are
+   gone on reload, which the page says.
+   *Rejected:* a row in `/v1/analyses` (needs sign-in and the API; rows are per user, so a first visit
+   could not open one, and a `pasted` analysis reopens with no hand anyway); a stored or pool hand
+   (decision 2 above).
+2. **It lives at `/examples` and `/examples/<id>`, both `public: true`**, with an *Examples* entry in
+   the nav and in the help menu. Both pages render correctly with the API stopped, because neither
+   fetches anything.
+3. **It opens in the analyzer's own step components** (lane C's `components/analyze/Step{3,4,5,7,8}`)
+   over a local `StepContext` (`help/exampleSession.ts`) — not a second analyzer written beside the
+   first. The reader gets the real mechanic: commit an answer, then see what is true.
+4. **An example never asks the pool, and offers only the five steps poker-core can answer** (3, 4, 5,
+   7, 8). Steps 1, 2, 6 and 9 are not mounted; the rail is `STEP_LABELS` filtered to the five, and
+   `StepperNav` ignores a step it was not given. The inputs those steps would have produced are set up
+   instead — step 1's two ranges and step 6's size — and the page says so in one sentence, with the way
+   to all nine: open one of your own hands and press *Analyze this node*. **No gate on an example can
+   wait for an answer that is never coming.**
+   *Rejected:* handing the steps a `NodeFrequencies` with `enough: false` — it prints "The pool has
+   played this 0 times", which is false; and fetching the pool when signed in — it would make the page
+   behave differently for two readers, and the seed spot's stake is not the founder's pool's.
+5. **The three examples are the same two ranges on three flops** — the button opens, the big blind
+   calls, on K♥9♦4♠ (the committed PokerStars seed hand #245678901235, whose node this reproduces
+   byte-for-byte through `nodeKeyAt`), on J♥8♥5♣ and on A♦A♠3♥. One pair of charts is the honest one
+   (fact 4), and three flops over the same ranges is the lesson: the range edge, the nut split, the
+   blocker question and what one hand is *for* all move with the board. `examples.test.ts` pins each
+   example's stated lesson to what the reveals actually compute, so a chart edit that makes a lesson
+   lie fails there rather than in front of a reader.
+6. **The first-visit offer is a strip under the header, not a modal**, listing the tour and all three
+   examples. It is answered by taking the tour, opening an example, or *No thanks*; the answer lives in
+   `localStorage['poker-help/v1']` (`{welcomed, tour, stop}`) — per browser, never per account, never
+   sent anywhere. Storage that throws reads as a first visit and a refused write is dropped, so the
+   worst case is being offered the tour twice.
+7. **The tour is five stops on public pages, anchored on `data-testid`s the pages already carry**
+   (`step-purpose`, `prediction-gate`, `stepper-7`, `mode-advantage`, `mode-equity`) — it adds no
+   attribute to another lane's markup and renames nothing. Every word of every stop is a string the
+   analyzer or the trainers already show (`STEPS`, `MODES`); the tour's own new words are the chrome
+   ("Tour · 2 of 5 · Your call, before the answer", Back/Next/Finish, "End tour Esc").
+   `tour.test.ts` enforces all three rules: the words exist verbatim, every route is a `public: true`
+   page, and every anchor is a `data-testid` declared in the source.
+8. **A stop whose anchor never appears says so on the card** after 5 s rather than waiting in
+   silence, and a stop on another page offers "Take me there" instead of hijacking navigation.
+9. **A tour found running by a new page load is stopped where it was** (`onArrival`), so a reload or a
+   return visit never has the card reappear unasked; the help menu then reads "Resume the tour (stop 3
+   of 5)".
+10. **The `?` overlay is generated from one registry**, `app/help/shortcuts.ts`, which lists every
+    shortcut that exists today: `?`/Esc, undo and redo, an explained word's Esc, the matrix, the range
+    text box, the analyzer rail, the replayer, the prediction gate and the number boxes. Each group
+    names the files that bind it, and `shortcuts.test.ts` scans `poker-ui/src` and `apps/web/app` for
+    key handlers and **fails when a file that binds keys is not named in the registry** — so a shortcut
+    added without a row here cannot land undiscoverable. Keys are tokens (`Mod`, `Shift`, `ArrowLeft`)
+    rendered per platform: ⌘⇧Z on a Mac, Ctrl+Shift+Z elsewhere. The overlay is a native `<dialog>`
+    (Esc and focus trapping from the platform, nothing inside it to lose), like `SaveReportDialog`
+    before it. It stays **keys only**: a vocabulary reference belongs beside the words it explains, so
+    lane C's `VocabularyTable` is not mounted here (follow-up 6).
+
+    *The guard earned itself inside the round.* It went red twice on bindings this lane does not own —
+    lane C's `useUndoShortcuts` (the undo keys moved to the window, and now cover `/ranges/[id]` and
+    step 1 as well as the Lab and the drawing trainer, one brush stroke per undo step) and lane D's new
+    `components/reports/RegistryTerm.vue` (Esc dismisses a term's explanation). Both are rows in the
+    registry now, checked against those lanes' code rather than their description of it.
+
+**Reviewed adversarially** (six lenses over the lane's files, each finding then given to a skeptic
+told to refute it): 13 findings, 10 refuted, 3 fixed here — the tour card followed an anchor scrolled
+out of the window instead of parking in the corner (`placement.ts`); it went on ringing an anchor the
+page had destroyed, drawing an 8-pixel ring in the window's corner, until the reader changed stop
+(`TourCard.vue` now re-finds the anchor when it is detached); and Esc ended the tour while the reader
+was typing in a box, which the shortcut list itself says it does not do.
+
+**Consequences.**
+
+- A first visit, signed out, with the API stopped, can read a worked spot, commit five predictions and
+  see five reveals — all computed in the browser (the equity Worker enumerates the flop exactly).
+- The Examples section is not the whole analyzer: four steps of nine are missing from it by design.
+  Whether that reads as "pre-loaded analyses" is the founder's call; the way to all nine is one click
+  from the page, and follow-up 1 below closes the gap if he wants it closed.
+- Lane C owns the step components an example mounts. A change to `StepContext` or to a step's props
+  breaks `/examples/<id>` at `nuxt typecheck`, not silently — and `example.test.ts` mounts all five.
+- Nothing about help reaches the server: no new endpoint, no migration, no new dependency.
+
+**Follow-ups (not built here).**
+
+1. **All nine steps in an example**, which needs four lines in lane C's files: add
+   `readonly poolMissing?: string` to `StepContext` (`analyze/context.ts`); let
+   `poolGap(pool, missing = '')` return `missing` when `pool` is null; pass `props.ctx.poolMissing` at
+   the four call sites (`Step1Ranges.vue`, `Step2Subtract.vue`, `Step6Decision.vue`,
+   `Step9Deviation.vue`). Then an example can mount all nine with an honest sentence where the pool
+   would have been. Left undone because it edits four files lane C is changing this round.
+2. **`Step4Nuts` renders `RangeComparisonPanel` before the prediction is committed**
+   (`Step4Nuts.vue`), so step 4's answer — the nut split — can be read off the page before answering.
+   Found on the example page; it is the analyzer's own behaviour everywhere, and it is lane C's file.
+3. "Try an example" links in the empty states that the audit §2.4 lists (`/hands`, `/analyze`,
+   `/ranges/compare`, the report workbench) — those pages belong to lanes C and D.
+4. `apps/web/README.md`'s route table has no `/examples` row (the file belongs to no lane this round).
+5. A fourth and fifth example need a reference chart the set does not have (decision, fact 4).
+6. A vocabulary reference has no home: lane C's new `VocabularyTable` (`@poker/ui`) is a one-line mount
+   if `/examples` or a `/help` page should carry one. Deliberately not in the `?` overlay.
+
+---
+
 ## ADR-051 — An upload is followed by its own row to the end: a failure is retried by dropping the file again, a file that stored nothing is a failure, and the uploader reads sentences, never exceptions
 
 **Date:** 2026-09-15 · **Status:** accepted · **Plan step:** D.8 (amended before it was built) · **Features:** F-110, F-703 · **Supersedes:** nothing
@@ -3271,3 +3407,723 @@ other lanes' work stayed in the working tree.
     A later npm may stop running them.
   - The empty `platform/.github/workflows/` directories are still on disk. Git does not track empty
     directories; `rmdir` was denied in this session.
+
+---
+
+## ADR-055 — The browser test owns the three processes it needs, refuses to run outside the test environment, and reaches CI as a job of its own
+
+**Date:** 2026-09-16 · **Status:** accepted · **Plan step:** D.9b · **Features:** F-110 (the upload
+path it drives) · **Supersedes:** nothing
+Constrained by [ADR-051](#adr-051) (the upload flow it walks), [ADR-054](#adr-054) (CI jobs call make
+targets and restate none of them), [ADR-024](#adr-024)/[ADR-027](#adr-027) (one Nuxt SPA behind auth).
+
+### Context
+
+D.9b is one sentence — "Playwright login → upload → report, and the CI job that runs it" — over a
+flow that needs **three processes the compose stack does not contain**: the API, a **parser worker**
+(still a foreground process, not a compose service — ADR-051's own consequence), and the Nuxt dev
+server. `make test-all` needs none of them: it drives ingestion in-process. So the question this step
+had to answer was not "what does the test assert" but **who starts and stops those three, and what
+stops the test from running against the founder's real hands** — the two ways an end-to-end test
+turns from a gate into a liability:
+
+1. **A left-behind process.** A worker that survives a failed run consumes from
+   `test-parser-workers`, the group `make seed` and `make test-all` drain, and the next suite's
+   `drain()` returns 0 while its hands are eaten by the orphan (the trap
+   [[parallel-lane-verification-gotchas]] records from D.8).
+2. **The wrong databases.** The founder's API answers on :8000 against the real ClickHouse; the app
+   on :3000 talks to it. A browser test that finds those ports and signs in would upload synthetic
+   hands into `core.*` — exactly the leak B12 cost 384 rows and a wrong VPIP for.
+
+### Decisions
+
+1. **Playwright owns the three processes; there is no shell orchestration.** `webServer` in
+   `web/e2e/playwright.config.ts` lists the API, `make worker` and `nuxt dev`. Playwright starts
+   them, waits for the two that answer HTTP, and tears all three down when the run ends — pass,
+   failure, its own timeout or a Ctrl-C — by signalling **each one's whole process group**
+   (`process.kill(-pid, …)` in `WebServerPlugin`, `playwright/lib/runner/index.js`), which is what
+   reaches `python` under `uv run` under `make`. Measured: after every run there was no process, no
+   listener on :8055 or :3055, and **no member left in the consumer group** (`kafka-consumer-groups
+   --describe`: `CONSUMER-ID -`, lag 0).
+2. **Ports of its own, and it may not reuse a server it did not start.** :8055 and :3055, with
+   `reuseExistingServer: false`, so a port already answering **fails the run in words** instead of
+   quietly testing whatever is there. This is the structural half of the safety argument: the test
+   cannot reach the founder's :8000/:3000 even by accident, and two E2E runs cannot overlap.
+   **The app's readiness is checked as a port, not a URL, and that was measured rather than
+   assumed**: `nuxt dev` moves to the next free port when the one it is given is taken, so with a
+   URL check a foreign server on :3055 let Nuxt drift to :3056 and the run died on "Timed out
+   waiting 180000ms" three minutes later (a decoy HTTP server proved it). Checking the port refuses
+   before Nuxt is started at all — "http://localhost:3055 is already used…", immediately. The API
+   keeps a URL check, because `/health` is a real readiness answer (it round-trips ClickHouse).
+3. **The test environment is a precondition, checked in the config.** `refuseUnlessTestEnvironment`
+   (`web/e2e/stack.ts`) mirrors `tests/integration/conftest.py`'s refusal rule for rule: the
+   ClickHouse prefix, the Postgres database, the raw bucket, both Kafka topics, the consumer group
+   and the Redis logical database must each be the test one, **and be set in the environment** — an
+   unset variable fails too, because settings would otherwise fall back to `.env` or to the real
+   defaults. `make e2e` supplies them from the Makefile's one `TEST_ENV`; a bare `npx playwright
+   test` refuses before it starts a single process (measured, exit 1, and it names the single wrong
+   variable when only `POSTGRES_DB` is real).
+4. **SIGTERM first, SIGKILL after 15 s** (`gracefulShutdown`). Not politeness: a worker killed
+   outright stays a member of the consumer group until the broker's session timeout (45 s) and holds
+   the partition away from the next run's worker for that long, which is why the upload's completion
+   budget is 90 s and not 10. A worker that gets SIGTERM logs "finishing current batch", closes the
+   consumer and leaves the group; the next run starts clean (measured over three runs).
+5. **The worker is started but not waited for.** It serves nothing to poll and logs nothing until a
+   message arrives, and it does not need to be ready: the consumer reads from the group's committed
+   offset (`auto.offset.reset: earliest` for a new group), so a pointer published before it joins is
+   still read. A worker that dies at start therefore costs a clear failure rather than a hang — the
+   page says the parser is not answering and the worker's traceback is in the output above the
+   failure. **Proved by killing it**: the run goes red on the assertion with "the file never landed:
+   a line still 'queued' means no worker took it", expected `completed`, received `queued`.
+6. **Elements are selected by `data-testid`, and a page this lane does not own is not edited to add
+   one.** Three selectors fall back to the accessible name, each with the reason beside it:
+   `pages/login.vue`'s email, password and submit (no testids on that page), and the `Upload` nav
+   link in `app.vue` (lane E owns it this round). The testids the app is missing are listed for
+   whoever owns those files (§4).
+7. **Reading My game *before* the upload is part of the proof, not a warm-up.** A fresh account's
+   report answers no hands and that answer is cached for `stats_cache_ttl_seconds` (300 s). Because
+   the test reads it first, the count it sees afterwards can only come from the worker's writes
+   **and** from the worker dropping the tenant's cached reports (ADR-051 decision 6) — a stale cache
+   would leave the tile at "—" and turn the test red. The account is registered over the API with an
+   email no earlier run used: signing up is not the flow under test, and a fresh tenant makes the
+   count attributable to this upload (the seed corpus belongs to tenant 1, the demo user).
+8. **The screen-name step is coverage of the account write path, not the reason the count works,
+   and the spec says so.** A PokerStars export resolves the uploader from its own `Dealt to` line
+   when no name is registered (`resolve_hero`, ADR-051 decision 8), so this file would be counted
+   either way. The step asserts the write and its read-back; it must not be read as proof that a
+   registered name is what named the seat. (That is ADR-051's own claim, and
+   `test_upload_to_report.py` is where the no-seat case is asserted.)
+9. **One flow, one browser, no retries** (`retries: 0`): a flaky end-to-end test is a finding, not
+   something to paper over. The trace and a screenshot are kept on failure, and the CI job uploads
+   them, because a red E2E in CI is otherwise undiagnosable — GitHub job logs need an
+   admin-authenticated read (ADR-054).
+10. **CI gets a fourth job, not a step after `make test-all`.** The integration session drops the
+   test databases at its end, so an E2E step after it would find nothing seeded; a job of its own
+   also runs in parallel and keeps the failure attributable. It calls make targets only —
+   `make install`, `make web-install`, `make e2e-install`, `make up`, `make seed`, `make e2e` —
+   which is why **`make e2e-install` exists at all**: the browser download is a command the workflow
+   would otherwise have had to restate (ADR-054's rule).
+11. **`make e2e` refuses when another worker already holds the test consumer group.** The port rule
+    (decision 2) cannot cover the worker, which has no port, and Kafka gives each partition to one
+    member — so a `make test-all` in flight, or a worker orphaned by a killed run, would take the
+    upload this test waits for and the test would blame a missing worker. The target asks the broker
+    for the group's members first and refuses in words, naming both likely causes. The group name is
+    read out of the Makefile's own `TEST_ENV`, never typed a second time.
+12. **`nuxt dev`, not a production build.** A build would be the more production-like artifact, but
+    `nuxt build` rewrites `apps/web/.nuxt` — the directory the founder's own dev server on :3000 is
+    using — and the E2E must never disturb it. `nuxt dev` on a port of its own writes the same
+    generated files the running server already has. (Nuxt's dev lock is only enabled for AI-agent
+    sessions, `NUXT_IGNORE_LOCK` off by default, so neither CI nor the founder ever meets it.)
+
+### Alternatives
+
+*A shell wrapper with `trap … EXIT` starting the three processes.* Rejected: it reimplements port
+waiting, process-group killing and signal handling — three known footguns — for behaviour Playwright
+already has and documents, and a `trap` does not fire when the runner is `SIGKILL`ed either.
+*Make the worker a compose service so `make up` starts it.* Rejected **for this step**, not on the
+merits: it is a product decision about how the platform is deployed (ADR-051 left it open), it needs
+an image build in the loop, and it would change what `make up` means for every other target. Worth
+revisiting when the platform grows a deployment story.
+*Run the E2E as one more step in the `integration` job.* Rejected (decision 10).
+*A `channel: 'chrome'` browser, or the system Chrome.* Rejected: the pinned build is the point — one
+Playwright version drives one browser build, so a green run says which browser it was green on.
+*Assert "no dbt run" inside the browser test* by querying `test_marts.stats_daily` over ClickHouse's
+HTTP port. Rejected as the wrong layer: nothing the test starts can run dbt (the stack is the API,
+the worker and the app), and `tests/integration/test_upload_to_report.py` already asserts the
+tenant's `stats_daily` is empty on this same path over HTTP.
+*Let the spec register through the `/register` page.* Rejected: D.2 already covers registration, and
+it would add a screen whose failure would read as an upload failure.
+
+### Reviewed adversarially before it was called done
+
+A read-only workflow of four lenses — process lifecycle, CI portability, does-the-test-prove-it, and
+safety/rules — each finding then handed to a skeptic told to refute it. **13 findings, 7 refuted, 6
+upheld, all 6 fixed**, and one lens (CI portability) died on the session limit, so the workflow's CI
+job was checked by hand instead (the YAML parses to four jobs with the intended steps, triggers and
+`defaults`, and `uses` paths are repository-root relative). What the upheld six changed:
+
+1. **A SIGTERM or SIGHUP to `make e2e` orphaned all three servers**, the worker included — and the
+   worker is the one nothing detects, since it has no port. Playwright registers no signal handlers
+   for its `webServer` children (only an `exit` handler; Ctrl-C it handles itself), and each server
+   leads its own process group, so a killed runner left a worker consuming the test topics for ever.
+   The config now installs `SIGTERM`/`SIGHUP` handlers that call `process.exit`, which runs that
+   `exit` handler. **Proved by mutation:** with the handler disabled, a SIGTERM to the runner left
+   `ingestion.worker` and the API on :8055 alive; with it, both are gone 8 s later and `make` exits
+   143. The skeptic's two corrections are in the code: install it **only in the runner** (this file
+   is re-loaded in every forked test worker, which ignores SIGTERM deliberately — `process.send`
+   distinguishes them) and exit with the signal's own code, not SIGINT's 130.
+2. **Nothing enforced "never beside `make test-all`".** Both run under the same `TEST_ENV`, so both
+   workers join `test-parser-workers`, and Kafka gives a partition to exactly one member: the other
+   run's worker would take this test's upload and the test would blame a missing worker. `make e2e`
+   now **refuses** when the group already has a member, naming the likely cause; the group name is
+   read out of `TEST_ENV` itself rather than typed a second time. Measured against a worker started
+   by hand: refused, exit 1. It catches an orphan from a killed run too.
+3. **`data-status` is the queue's state, not only the server's**, so a file refused in the browser or
+   a POST that never landed would have waited the full 90 s and then been reported as "no worker took
+   it" — a wrong diagnosis, printed with confidence. The assertion now polls for any **settled**
+   status (`completed|failed|error|refused`) and then insists on `completed`, with the row's own text
+   as the failure message: two failures, two messages.
+4. **The guard accepted a Redis URL with no database segment** (`redis://localhost:6380`), which
+   resolves to db 0 — the founder's real cache. It now requires an explicit non-zero index.
+   **`tests/integration/conftest.py` has the same hole** and is worth the same one-line fix, so the
+   two guards keep saying the same thing; it is not this lane's file.
+5. **The guard ran on `process.env`, not on what each server is actually handed.** Playwright merges
+   `{...process.env, ...env}`, so an override added to a `webServer` entry later could outrank the
+   guard. Each entry's additions now go through `serverEnv`, which guards the merged result. (The
+   skeptic refuted the finding as a *present* defect — today's three additions are harmless — and it
+   is kept as the structural fix it is.)
+6. **The budgets did not add up by construction.** They now live in `e2e/budgets.ts`, and the test
+   timeout is derived from them (`NAV + LANDED + 2 × REPORT + slack`), so a slow honest run fails on
+   the assertion that was waiting rather than as "test timeout exceeded".
+
+Refuted and left alone, worth recording: that the five `ADR-055` citations are broken (they are
+forward references this ADR resolves); that the bare timeout literals broke the no-magic-numbers rule
+(the workspace writes declarative config budgets as literals — `budgets.ts` happened anyway, for
+reason 6); that a swallowed graceful-shutdown timeout is a defect (it costs the next run a session
+timeout, which `LANDED_MS` budgets for); and that the spec oversells the screen-name step (decision 8
+above already says it is not load-bearing). One suggestion was rejected on its own merits: giving the
+E2E **its own consumer group** would end the collision in 2, but a new group with
+`auto.offset.reset: earliest` re-reads the whole topic from offset 0 — every seed pointer and every
+earlier upload — so the pre-flight refusal is the cheaper answer.
+
+### Verification
+
+**`make e2e` green six times** — twice back-to-back from one `make up && make seed` (15.1 s, 8.9 s),
+once more after the deliberate red below (8.7 s), twice after `make test-all` and a re-seed (9.1 s,
+9.0 s), and once after the port check changed (9.2 s); the flow itself is 5.4 s, the rest is starting
+the three servers. Each run: a fresh account signed in at `/login?next=/`, My game answering "—" hands,
+the screen name `Hero` added for `pokerstars`, `seeds/hands/pokerstars/cash_6max_nl50.txt` handed to
+`/upload`'s file input, the line reaching `data-status="completed"` with "2 hands in" and **no
+"no seat recognised as yours" warning**, its "See them in My game" link followed, and the `kpi-hands`
+tile reading **2**. The worker's own log in each run: `inserted {'hands': 2, …}` → `hot path derived
+{'decisions': 35, 'player_hands': 24}` → `upload …: {'found': 2, 'parsed': 2, 'failed': 0,
+'without_hero': 0}` — the hot path, not dbt.
+
+**Red when the worker is not running.** The same command with the worker killed as soon as it
+appeared and kept dead: the run fails on the upload step with the message written for it, `Expected:
+"completed" / Received: "queued"`, after the 90 s budget; the screenshot shows the page's own "Is the
+parser worker running?" sentence. The third green run above was the next run after this one, and its
+worker also swallowed the orphaned pointer the red run left (`worker stopped after 2 message(s)`) —
+the requeue/late-pointer rules from ADR-051 doing their job.
+
+**Teardown, after each green run and after the red one:** no `ingestion.worker`, no uvicorn, no
+`nuxt dev` on the E2E's ports, nothing listening on :8055/:3055, and the consumer group with no
+member and lag 0.
+
+**The guard, twice:** `npm run e2e` with no test environment refuses with all seven rules listed and
+exits 1; with only `POSTGRES_DB=poker` wrong it refuses naming that one.
+
+**It also fails legibly when the databases are not there.** Running `make e2e` straight after
+`make seed && make test-all` — whose session drops the test databases when it ends — failed on the
+account it registers with `Expected 201 / Received 500`, the API's sanitised `{"detail":"Internal
+server error"}`, and the API's own `InvalidCatalogNameError: database "poker_test" does not exist`
+piped into the output two lines above it. The expectation now names that case ("run `make seed`"),
+since it is the one operator error the ordering invites. Re-seeded, the next two runs were green
+(9.1 s, 9.0 s).
+
+**Gates, over the combined tree** (which three other lanes were editing throughout):
+
+- `make check` green (**1,714** passed, 113 deselected), twice — before and after the review's fixes.
+- `make web-check` green at **1,210 tests / 119 files** with the licence audit clean, on the run taken
+  after lane C fixed its `RangeMatrix` test. A later run over a tree that had grown to 122 files
+  (1,256 tests) was red on **two other lanes' files**, neither this lane's:
+  `apps/web/app/help/shortcuts.test.ts` (lane E's own registry test doing its job — a key bound with
+  no row) and `apps/web/app/components/analyze/Step1Ranges.test.ts`, which lane C then showed was a
+  **torn tree, not a defect**: the run caught its `.vue` edited and the test's assertion not yet
+  (16/16 alone, and under a shuffled order, minutes later). **This lane's slice was re-run green on
+  its own** after that red: typecheck (including `tsc -p e2e`), ESLint over `e2e/`, licence audit.
+  Both lanes were told; the standing red at the time of writing is lane E's one file.
+- `make seed && make test-all` green (**1,821 passed, 6 skipped**, 5 min 20 s). Nothing changed after
+  it that it covers: the later edits were `platform/web/e2e/**` and the Makefile's own `e2e` target.
+- `make e2e` green, and its two deliberate reds, as above.
+
+The one cross-lane lesson worth keeping: lane C's `RangeMatrix` now emits one edit per drag, on
+pointerup. Playwright's `click()` is a pointer **down and up**, so the E2E was unaffected — a
+synthetic `mousedown` alone would not have been.
+
+**What only a real CI run can prove** (the reason D.9b stays `[ ]`):
+
+1. **`make e2e-install` on the runner.** `playwright install --with-deps chromium` is a no-op for
+   `--with-deps` on macOS (measured) but on Linux installs system libraries with `sudo apt-get`;
+   hosted runners allow passwordless sudo, and this has not been observed here.
+2. **A cold Vite/Nuxt dev server on a runner.** First compile there has never been timed; the
+   budgets (`webServer` 180 s, test 240 s) are guesses padded for it.
+3. **Chromium headless on linux-x64** — every local run used the mac-arm64 build.
+4. **The failure-only artifact upload** (`actions/upload-artifact@v7`, path
+   `platform/web/e2e/test-results/`): the path is right only if `uses` steps ignore
+   `defaults.run.working-directory`, which is documented but unobserved here.
+5. **Wall-clock and memory beside the other three jobs** — the e2e job runs its own stack, so the
+   runner holds ClickHouse (4 G cap), Kafka, Postgres, Redis, MinIO, a browser and a Nuxt dev server
+   at once. The integration job's 6.3 GiB of caps fits; this job adds the browser and Node.
+6. **That CI is red when it should be** — a green first run proves the job runs, not that it bites.
+
+### Consequences
+
+- `make e2e` and `make e2e-install` join the make contract; **`docs/CLAUDE.md`'s `platform/` target
+  table needs the two rows** (§4). `make e2e` must never run beside `make test-all`: same consumer
+  group, and that session drops the databases the E2E needs. The Makefile comment says so.
+- **The E2E runs as a first-time reader, on purpose.** Every run is a new account in a fresh browser
+  profile, so F.12d's welcome affordance appears in it. Lane E confirmed the offer is an `<aside>` in
+  normal flow — nothing fixed, no overlay, no focus trap — so the nav and every `/upload` testid stay
+  clickable, and the tour card appears only after someone presses "Take the tour". **That state is
+  kept rather than suppressed:** an affordance that starts covering a real click should turn this
+  test red, and it is the cheapest warning available. If it ever becomes a nuisance rather than a
+  signal, lane E's own escape hatch is one line — `page.addInitScript(() =>
+  localStorage.setItem('poker-help/v1', JSON.stringify({ welcomed: true, tour: 'unseen', stop: 0 })))`
+  (`HELP_STORAGE_KEY` in `app/help/state.ts`; per profile, never per account) — and `welcome-offer`
+  with `welcome-dismiss` inside it is the stable alternative to assert on. Nav links are selected by
+  **name**, not position, so lane E's new `Examples` and `Help` entries change nothing here.
+- **Playwright is pinned exactly** (`1.63.0`), not by range: one release drives one browser build,
+  and `make e2e-install` fetches the build that matches the installed version. Bumping it is a
+  deliberate change with a browser download attached. `platform/web/LICENSES.md` carries the row
+  (Apache-2.0) and records that the browser binary lives outside `node_modules`, so the licence
+  audit never sees it.
+- **The lockfile flipped 83 entries from `"dev": true` to `"devOptional": true`.** That is npm
+  11.19.0 (Node 24, ADR-054) recomputing flags a lockfile written by npm 11.4.2, not this change:
+  `npm install --package-lock-only` on the untouched tree produces the same 83 flips. Versions,
+  `resolved` and `integrity` are untouched; the only real additions are `@playwright/test`,
+  `playwright` and `playwright-core`.
+- The test's own weather report, for whoever reads a slow run: this machine **idle-sleeps**, and one
+  deliberate failure that used 240 s of awake time took 15.5 minutes of wall clock. Playwright's
+  timeouts are monotonic, so a sleeping laptop stretches durations without changing the verdict.
+- Not done, recorded: no second flow (a pool upload, a failed upload retried in the browser — the
+  unhappy paths are integration tests, ADR-051); no cross-browser run (one Chromium project); no
+  video (ffmpeg is installed but unused); the browser cache is not keyed into the CI cache, so
+  `make e2e-install` downloads on every run (~1 min; cache it if that ever matters).
+
+---
+
+## ADR-056 — A word that says how a number was obtained is a glossary entry; a word that names a set is a row in a typed table; both are explained by the same affordance
+
+**Status:** accepted · 2026-09-16 · plan F.12b (round 6, lane C)
+
+**Context.** [POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) §3.3 found two vocabularies on screen and one
+glossary. `poker-ui`'s 28 entries cover the metrics the spec names, each a sentence plus a formula behind
+`MetricLabel`. Everything else — the pool's tiers and sampling words, the classifier's made-hand and draw
+classes, the strategic categories, the ten seats, the node shorthand `BB call vs CO 2.5bb · 40bb · NL10` —
+reached the reader as a `title=` hover at best and usually as bare text. The audit asked for the rule before
+the entries, and split the decision in two: this ADR is `poker-ui`'s half (tiers, classes, positions, node
+shorthand); ADR-057 is the registry's half (stats and dimensions, which are runtime data from
+`/v1/definitions`).
+
+**Decisions.**
+
+1. **The rule: a word that names HOW A NUMBER WAS OBTAINED is a glossary entry; a word that names A SET is
+   a row in a reference table.** An entry carries a formula, because the number has one. A set's row carries
+   the rule that places something in it instead. The line is not stylistic: it decides what has to be true of
+   the words. An entry's formula is checked against the query or the maths that produced the number; a row's
+   rule is checked against the code that assigns membership.
+
+2. **The tiers are entries** (`glossary.ts`): `observedFrequencies` (tier 1), `showdownRange` (tier 2),
+   `reconstructedRange` (tier 3, already there), plus `sampleSize` and `showdownCoverage`, which are how the
+   pool says how much it knows. Their formulas are the server's own counting, read out of
+   `analysis/pool/node_query.py`, `node_service.py` and `realization.py`. `PoolDataBadge` now explains every
+   word it prints — the tier chip, `n`, "insufficient data", "shown down" — with no change to its text or its
+   `data-testid`s.
+
+3. **Classes, categories, axes, seats and the node shorthand are tables** (`vocabulary.ts`), each keyed by
+   `@poker/core`'s own type: `Record<MadeHandClass, TermEntry>`, `Record<DrawClass, …>`,
+   `Record<StrategicCategory, …>`, `Record<Axis, …>`, `Record<Position, …>`. A class core adds without a row
+   here does not compile, a test pins every hand term to the label `labelFor` prints, and the category rules
+   interpolate `DEFAULT_THRESHOLDS` rather than repeating 60% and 35%. The rules are written from
+   `classify.ts` — which classifies *relative to the board* — and from `core/enums.py` for the seats, so
+   "set" and "trips" are told apart the way the classifier tells them apart, not the way folklore does.
+
+4. **One affordance for both, and for lane D's registry descriptions: `TermLabel`.** It takes a
+   `TermEntry = { term, definition, formula? }`, so a `GlossaryEntry` is one. `MetricLabel` keeps its
+   `GlossaryKey` prop and becomes a thin wrapper over it, with identical markup, so a label without a
+   glossary entry still fails to typecheck. `TermLabel` has two slots: the **trigger** (scoped with the
+   tooltip's `describedby`), so a word that is already a control — a distribution group's button, a
+   checkbox's label — stays that control instead of nesting a focusable span inside it; and the **tip**, for
+   a body that is not one sentence and a formula. ADR-057 records lane D's use of the same component for the
+   registry's descriptions, which are runtime data and never enter `GLOSSARY`.
+
+5. **The node shorthand explains itself in place, and cannot drift.** `nodeLabelParts(key)` cuts
+   `nodeKeyLabel(key)`'s own output into its words — seat, verb, `vs`, the seat faced, the size faced, the
+   street, the stack, the stake — and a test asserts the pieces joined are that label exactly, over the
+   shared `tests/fixtures/nodes.json` and hand-built keys (RFI, iso, 3-bet, 6-bet, a postflop % size, "to
+   act", no villain, no stake). The rules that choose the words stay in `@poker/core` alone. `NodeLabel`
+   renders it with a tooltip that names every piece; a shorthand the file cannot take apart still prints,
+   plainly, because a tooltip is never worth a page that fails to render.
+
+6. **The reference tables are renderable whole.** `VocabularyTable` prints one table as term · meaning ·
+   rule (`positions`, `madeHands`, `draws`, `categories`, `axes`, `nodes`, and `tiers` from the glossary),
+   for a help overlay or a reference page to mount. The seat legend under a situation editor is its first
+   use. The words themselves live in one place, so a tooltip and a table can never disagree.
+
+7. **The glossary test now guards the app too.** It scans `apps/web/app/**/*.vue` for `<MetricLabel …
+   term="…">` specifically — another component's `term` prop is not misread — and checks every key exists;
+   and it checks each table covers its core type exactly, in core's order, with a one-sentence definition
+   and a rule.
+
+**Consequences.** The vocabulary is auditable: a class or a seat that core adds breaks the build until it is
+explained, and a tier's formula is checked against the query that counts it. `poker-ui` gained three
+components and two modules and no dependency — it still imports `@poker/core` only. The registry's
+descriptions stay out of the glossary, so a stat's wording keeps coming from the server (ADR-057).
+
+**Also decided here, because the same lane took them.**
+
+- **Undo is per stroke, not per cell.** `RangeMatrix` used to emit `update:range` for every cell a drag
+  crossed, so ⌘Z walked back one cell at a time — useless in the drawing trainer, where a chart is painted
+  in strokes. It now paints into a local draft (the cells repaint live) and emits **one** `update:range` when
+  the pointer lifts or the gesture is cancelled; a stroke that changed no weight emits nothing. Every
+  consumer therefore sees one edit per stroke, and values driven by `update:range` — a combo count, the
+  Lab's equity run — settle when the pointer lifts rather than mid-drag.
+- **The shortcuts are bound on the window, in one place.** `useUndoShortcuts(target)` (in `useUndoRedo.ts`)
+  binds ⌘Z / ⌘⇧Z / Ctrl+Y while the component is mounted, ignores events already handled and leaves text
+  boxes their own native undo. The drawing trainer's binding used to be on a wrapper `<div>`, which the
+  matrix's own `preventDefault` kept focus out of, so the shortcut never worked; `/lab`'s hand-rolled
+  listener now goes through the same helper.
+- **An undo has to be saved, or it is not undone.** In analyzer step 1 the history holds the step's list of
+  range assignments, and every undo or redo emits the same `workPatch` an edit does, so the autosave (ADR-034)
+  carries it to the server. Pressing undo with nothing to undo emits nothing.
+- **`useUndoRedo.sync(next, same)`** follows a value that changed outside the history: the same value keeps
+  the history, a different one starts a new one. That is what lets a stored range keep its undo across a save
+  (the server returns the body that was just saved) and start again after a revert.
+- **The equity service comes from a package.** `createLocalEquityService()` in `poker-ui` satisfies
+  `EquityServiceLike` in-process over `@poker/core`, so `EquityCalculator` mounts anywhere with a single
+  import and no app-specific wiring (acceptance 12); the Worker stays the right choice for a page and is
+  three documented lines in the README.
+
+---
+
+## ADR-057 — Registry words reach the screen through one app-side component, from the registry's own descriptions at runtime; a blank area says what it is for and offers one way in; a failure is a sentence that cannot be mistaken for "no data"
+
+**Status:** accepted · 2026-09-21 · plan F.12c (round 6, lane D) · **Constrained by** ADR-021 (the registry is the
+one vocabulary), ADR-053 (a number typed and a number sent agree), ADR-051 (the hot path, and the uploader reads
+sentences); **shares §3.3 of the UX audit with ADR-056** (F.12b, the Range Lab side).
+
+**Context.** The UX audit (§3.3) found two vocabularies on screen. `poker-ui`'s `GLOSSARY` — 28 hand-written
+entries behind `MetricLabel` — covers the six terms the spec names. The other is the stat registry: 65 stats and
+80 dimensions, each with a one-line `description` written beside the SQL it compiles to and served by
+`GET /v1/definitions`. That second vocabulary reached the screen as a `title=` hover at best (`KpiTile`, `StatGrid`,
+`StatPicker`, `ClauseRow`, `SituationBuilder`) and not at all in `LeakTable`, the sessions table, the dashboard's
+prose or the filter's chips. A `title=` opens for a mouse and for nothing else. The same audit's §2.4 found
+`/reports` and `/pool` blank until *Run*, `/ranges/compare`'s columns saying "No chart…" with no way in, and
+`/hands` pointing at an upload control that did not exist; its §2.13 found the generic error fallback printing
+"The API answered with status 500." for an API that was simply not running, nine `.catch(() => null)` sites
+turning a refusal into "no data", and two ADR-051/053 follow-ups (`FetchOptions.body`, `validationMessages`).
+
+**Decisions.**
+
+1. **The registry is runtime data and is never copied into the glossary.** The descriptions arrive with
+   `/v1/definitions` and reach the screen through one module, `app/stats/vocabulary.ts`, and one component,
+   `app/components/reports/RegistryTerm.vue` — nowhere else. Copying them into `GLOSSARY` would put words a
+   server serves into a file that ships a week later; the registry is validated against the SQL on every load,
+   and the screen should say what the server says.
+2. **One affordance, the glossary's.** `RegistryTerm` is a dotted-underlined term whose one sentence opens on
+   hover, on focus and on tap, with `aria-describedby` wired whether or not it is open — exactly `MetricLabel`'s
+   shape, and deliberately the same three props and the same `#default="{ describedby }"` trigger slot as lane C's
+   `TermLabel` (ADR-056), so a header or a chip that is already a `<button>` becomes the trigger instead of
+   nesting a focusable span inside a control. A `title=` is not a way of explaining a term and is removed wherever
+   the description now goes through the component; `app/stats/vocabulary-coverage.test.ts` fails if a
+   description goes back behind a `:title` in a converted file. **The one thing not shared with `TermLabel` is
+   the positioning:** every table that shows a registry word (`LeakTable`, `SessionTable`, `StatGrid`, `/hands`) is
+   inside an `overflow-x-auto` wrapper, which clips an absolutely positioned tip or grows it a scrollbar, so the tip
+   is `position: fixed`, placed from the trigger's own rect and kept inside the viewport on the right. The
+   click-through `DefinitionPanel` stays: the tip says what a number *is*, the panel says what it *counts*, and
+   they are not alternatives (`/pool/players` and `/pool/cohorts` had grid headers whose click went nowhere; they
+   now open the panel too).
+3. **What a tip says: the registry's sentence, the band with its unit, where it is counted — and not `notes`.**
+   42 of the 65 stats carry `notes`, and 40 of those are v1-parity arithmetic written for whoever ported the stat
+   ("v1 counted a seat's first decision only (+0.6% opportunities…)"). They stay in `DefinitionPanel`'s "Caveat"
+   line, where someone asking what a number counts is already reading. The typical band carries the stat's unit
+   ("Usually 0–10 bb/100." — the tile used to print "0–10bb/100"), the grain is said in words ("counted once per
+   hand"), and the fact tables are said as what they hold ("hands", "decisions", "the daily statistics") — never
+   `player_hands`, `stats_daily`, "decision-grain" or "counted by sketch".
+4. **A registry value reads as a word only where it is one.** `5bet_plus` → `5bet+` and `''` → "not applicable"
+   apply to an **enum**; a bucket name is printed with its bounds from `dim.buckets` ("small (under 0.37 of the
+   pot)", the unit read off the dimension's label, which F.12a made "(fraction of pot)"); anything else comes back
+   untouched. The old `filter/label.ts#valueLabel` ran the `_plus` rewrite on every type, so a pool player called
+   `a_plus_b` read `a+b` — closed, with a test. What is **sent** does not change: the option's `value` stays the
+   registry's code (ADR-053).
+5. **"EV" means two things, and every hero surface says which.** The glossary's `ev` is a solver EV
+   (`equity × EQR × pot`); the registry's `ev_bb_per_100` is the all-in adjusted result. My game's luck sentence,
+   the winnings caption and the chart's series now use one name — **all-in adjusted** — where the page had three
+   ("all-in adjusted winrates", "all-in EV", "EV bb/100"). `hero/words.test.ts` reads
+   `stats/registry/stats/money.yaml` and fails if `ev_bb_per_100`'s description stops saying so. Splitting the
+   glossary's `ev` is F.12b's (ADR-056); renaming the registry label is a `platform/stats/registry` change and is
+   not this step's.
+6. **The app's own words are a small, separate list under the same affordance.** "the field", "n", "thin",
+   "gap", "spots", "grain", "cached" are `APP_TERMS` in `stats/vocabulary.ts` — they are ours, not the registry's,
+   and they carry as much weight as any stat ("thin" is the difference between a number worth reading and one
+   worth ignoring). Tiers, hand classes, positions and the node shorthand are poker's own vocabulary and are
+   ADR-056's (`TermLabel`, `VocabularyTable`, `NodeLabel` in `@poker/ui`); this lane does not repeat them.
+7. **A blank area teaches: what it is for, why it is empty, and one way in that exists.** The wording is pure
+   text in `reports/emptyState.ts`, `hands/emptyState.ts`, `ranges/compareEmpty.ts`, `pool/words.ts` and
+   `hero/words.ts`, rendered by one `EmptyState` (lead, body, actions as a `NuxtLink` or a button that emits
+   `act(key)`), so every sentence is asserted as text and every way out is a testid. The rules that shape them:
+   *before the first run*, `/reports` and `/pool` say what a grid is (one row per group, one column per stat, every
+   cell with its sample) and that *Run report* fills it, and offer that button; *no rows* says whether nothing is
+   stored yet (→ the Upload page, and that a file counts here seconds after it lands — true because of the hot path,
+   ADR-047/051) or the situation is narrow (→ the buttons that widen it: clear the situation, clear the dates, look
+   in the other dataset), and a situation that came with a saved report or preset cannot be cleared here, so it
+   says "open another report above" instead; a chosen cohort says that who is in it is recounted when the
+   statistics are next rebuilt (ADR-051); the compare page's columns say what would be drawn there, that a stored
+   chart counts only on an exact match (seats, stack, table size, stake, texture, every step), and offer the Import
+   page — except when this browser's offline copy is what answered, when importing needs the API too; the pool
+   column's "insufficient data" keeps its badge and names the two knobs that actually widen it (clear the stake,
+   drop a texture word — the two conditions `node_filter.py` adds one by one). Never a route that does not exist:
+   the Examples and the tour are lane E's and are not linked from here.
+8. **A failure is a sentence that cannot be mistaken for "no data", and it says what to do.** Nuxt wraps a
+   failed `$fetch` from `useAsyncData` in an H3Error whose `statusCode` is 500 and whose `cause` is the original,
+   so `/hands`, `/hands/[id]`, My game and `/analyze` printed "The API answered with status 500." for an API that
+   was stopped. `describeApiError` now unwraps once, guarded on Nuxt's own `__nuxt_error` flag (an error that
+   carries a `cause` for its own reasons is still its own message); `errorStatus` and `isUnauthorized` deliberately
+   do not, because `auth/session.ts` reads them on the raw rejection of a call it made itself. A 5xx with no
+   detail names the terminal running `make api`; any other bare status says the page did not expect it and to
+   reload; the three local `error.cause ?? error` unwraps are gone. Of the audit's nine `.catch(() => null)` sites,
+   six are this lane's and are fixed (the list is in **D**): the replayer's two pool calls settle independently
+   and each refusal is a sentence — worded for a **refusal under load**, because ClickHouse refuses the fifth
+   simultaneous query of a fast-stepping reader (E.3's quota) and the API relays it as a sanitized 500, which used
+   to read as "the field has never played this spot"; the range-library lookup no longer caches an answer that a
+   failure or the offline copy produced, so a node is asked again on the next step; the tier-3 estimate rejects
+   and the compare page says the Pool column has fallen back to the showdown range; saved cohorts that could not be
+   loaded say so instead of vanishing from the picker, and a `?cohort=` that cannot be resolved **blocks the run**
+   instead of silently measuring the whole field under its name. `HandNotes`' tag-vocabulary catch stays and says
+   why (it only feeds suggestions). Every page that awaits the registry renders `definitions-error` with a Try
+   again; the saved-report library's error carries its reason and a retry, and `PresetMenu` cannot say "None yet"
+   over a failed load; `analyzeThisNode`, the import page's file readers and the backup gained a catch in words;
+   `DropZone` no longer prints the browser's `error.message`. `FetchOptions.body` carries a `FormData` and
+   `upload/api.ts` drops its cast (ADR-051's follow-up); `pool/rules.ts` imports `validationMessages` from
+   `auth/api.ts` and its private copy is deleted (the plan's wording; `describeApiError` alone would now do, and
+   `describeCohortError` keeps its name and tests).
+
+**Alternatives.**
+- *A `term`/`entry` prop on `MetricLabel` itself* — the audit's first option. Rejected for this round: `MetricLabel`
+  is lane C's file while F.12b changes `poker-ui`; the app-side twin is shaped to delegate at the merge.
+- *Registry descriptions as `GLOSSARY` entries.* Rejected (decision 1): a copy of a served document that drifts
+  the first time a description changes, and there are 145 of them.
+- *A CSS-only absolute tip, like `MetricLabel`'s.* Rejected (decision 2): clipped inside every table that matters.
+- *`DefinitionPanel` everywhere instead of a tip.* Rejected: heavier, needs a panel on My game and the leaks, and
+  does nothing for hover or inline reading; the panel stays for what it does well.
+- *A percent-style per-value label list in the registry* (enum values explained). Not this lane's file; recorded
+  as a follow-up.
+- *Surfacing `notes` in the tip.* Rejected (decision 3) until they are rewritten for a reader.
+
+**Verification.** Below, **D**.
+
+**Consequences and follow-ups.**
+- **Merge:** lane C's `TermLabel` + `TermEntry` share `RegistryTerm`'s props and slot; the merge may delegate
+  `RegistryTerm`'s body to it **only if the fixed positioning is kept** (or lane C adopts it). `NodeLabel`
+  adoption on `HandStudy`, `compare.vue` and `ranges/index.vue` is left to the merge (ADR-056).
+- **Registry, not this lane:** rewrite the 40 v1-parity `notes` for a reader or leave them off tips for good;
+  per-value labels for enums (`pot_type`, `facing`, textures); the `EV bb/100` label; `facing`'s description
+  points at "the header of this file".
+- `stats/definitions.ts`'s error sentence still ends "…so the situation builder has no vocabulary", which My game
+  and the leaks now render although neither has a builder — page-neutral wording is a one-line follow-up.
+- `DefinitionPanel` takes no focus and renders above the grid, so a header clicked low on the page opens it
+  off-screen (audit §2.11 territory, unchanged). `pages/ranges/compare.vue` still awaits `store.load()` non-lazily.
+- `ReportWorkbench.vue` is at 296 raw lines after two extractions (`ReadingOptions.vue`, `reports/widen.ts`); the
+  next addition has to extract the save/delete plumbing. `hero/winnings.ts` is 323 raw lines, pre-existing.
+- `ClauseRow`'s `OP_TEXT` ("is below"), `filter/label.ts`'s `OP_WORDS` (`<`) and `pool/stats.ts` (now "is
+  below") are three wordings of one operator — one module later. `list()` ("a, b and c") is privately duplicated
+  in `pool/words.ts`, `reports/emptyState.ts` and `hands/searchable.ts`.
+- Not this lane's `.catch(() => null)` sites (listed in **D**): five in lane C's files, one in `heuristics/log.ts`.
+
+---
+
+## ADR-058 — The privacy guard matches a name where its context proves it is one, and runs before every push, never in CI
+
+**Status:** accepted · 2026-09-15 · plan D.9c · round 6, lane B
+
+**Context.** "Only aggregates get committed" has been a rule since the first import, and it was
+broken by three lanes and two merges without anyone noticing, because a screen name in a test
+fixture or a verification note does not look like data. The round-5 merge found fourteen real
+handles reachable from a public branch; the history rewrite that followed removed those fourteen
+and missed a fifteenth, in a code comment, because its scan tokenised on word characters and the
+handle contains brackets. A rule that depends on remembering it is not a rule. It has to be a
+check, and the check has to run at the last moment before publication — the push.
+
+The matching problem is that a screen name is often an ordinary word. Measured over the real
+pool's **94,276** keys (every non-hero `player_key` in `core.hand_players`; names are 4–17
+characters over the alphabet `a-z 0-9 _ - ! @ [ ]` and the space): **44,824** are letters only,
+**40,456** hold a digit or a symbol, **8,748** hold a space, **248** are digits only. Matching all
+of them as plain text against this repository's prose finds "board", "facing", "sequence",
+"straight flush" — noise that would train us to pass `--no-verify`.
+
+**Decisions.**
+
+1. **What it matches against: the real database, read-only.** Every real opponent's key, from
+   `core.hand_players` — the table named explicitly, so `CLICKHOUSE_DB_PREFIX` cannot point the
+   check at the `test_` databases — with `settings={"readonly": 1}`, which the server enforces
+   (verified: a `CREATE TABLE` through the same client answers code 164). Keys where the seat is
+   the hero are excluded: the founder's own screen name is not third-party data. An empty answer
+   is an error, never an all-clear.
+2. **Three contexts, and each is matched as far as it is proved.**
+   - **A hand-history line** — `Seat 3: name ($25 in chips)`, `name: folds|checks|calls|bets|
+     raises|posts|shows|mucks|doesn't show hand|…`, `Dealt to name`, `Uncalled bet (…) returned to
+     name`, `name collected $X from pot`, and the SUMMARY `Seat N: name (button) folded|showed|
+     mucked|won|collected` — is matched by the site grammar, which says exactly where the name is.
+     So: **any length, spaces included, no allowlist**. Two of the fourteen were 4 and 7
+     characters; nothing but this catches them. A line is tried as a whole and as each of its
+     quoted and unquoted pieces, so a fixture inside a Python or TypeScript literal, a JSON value,
+     a Markdown bullet or a diff line is matched like a bare one.
+   - **A player key** — `ggpoker:name`, the form the API, the marts, the docs and the tests use —
+     is matched the same way: the prefix proves it. The longest name that ends where a name can
+     end wins, so `ggpoker:ab_cd` never reads as the key `ab`.
+   - **Any other text** is where dictionary words collide, so a name is reported only by its shape
+     and length: **letters only from 8 characters, a name with a digit or a symbol from 5, a name
+     with a space from 13, digits alone never**. A name **in quotes or backticks** is being
+     mentioned rather than used, so there a digit, a symbol or a space makes it reportable at any
+     length — which is what catches a handle quoted in prose (and what the round-5 rewrite's own
+     four-character mention trips). Letters alone still need their 8, because `'fold'` and
+     `"button"` are everywhere in this code.
+3. **Why those numbers, measured rather than guessed.** Over HEAD's 819 tracked files, the rule's
+   cost is the allowlist it needs, and its benefit is the share of real names it would catch in
+   prose:
+
+   | letters / mixed / spaced | ordinary words to allowlist | share of the 94,276 keys reportable in other text |
+   |---|---|---|
+   | 6 / 4 / 10 | 60 | 91.5% |
+   | 7 / 5 / 13 | 38 | 80.6% |
+   | **8 / 5 / 13** | **26** | **73.2%** |
+   | 10 / 8 / 13 | 5 | 46.9% |
+
+   8 / 5 / 13 is the knee: the allowlist stays a page, and everything the rule gives up in prose
+   is still caught in a fixture line or a key, which is where names actually arrive.
+4. **The allowlist is committed and narrow.** `scripts/privacy_allowlist.txt`, 26 ordinary words
+   and phrases that are also real handles. It excuses a word **in other text only** — never in a
+   hand-history line, never in a key, where a collision is a name to change (an invented fixture
+   name that is also a real handle has to change anyway). A word goes on it only when the
+   repository uses it in its ordinary sense; a handle mentioned as a handle is fixed, not listed.
+5. **What it scans.** By default every tracked file as it is on disk, plus each file's **index**
+   version wherever the two differ — what the next commit would take. `--history REV…` takes any
+   `git rev-list` arguments and reads every blob those commits hold. `--pre-push REMOTE` reads
+   git's own stdin and scans what the push would send: the local tips, minus the remote tip when
+   this clone has it, minus everything already on a remote-tracking ref of that remote. **A remote
+   tip this clone does not hold — a force-push over a rewritten history — excludes nothing**, so
+   the whole branch is scanned. After a fresh clone or a `filter-repo` there are no
+   remote-tracking refs at all; `git fetch` first, or a new branch's push scans every commit.
+6. **What it prints: the file, the line number and the key.** Never the line, never a player's
+   stats — the guard must not become the leak. (A mutation that appends the line to the output
+   turns the test suite red.)
+7. **Exit 0 / 1 / 2, and it fails closed.** 0 clean, 1 findings, 2 *nothing could be checked* —
+   ClickHouse unreachable, no keys, a git failure, a malformed key. Under the hook, 2 refuses the
+   push exactly as 1 does. A check that cannot run must never read as a pass.
+8. **It cannot run in CI**, and this is by design, not an omission: CI has no real data (ADR-054's
+   jobs run entirely in the `test_` environment) and it must not be given any — a key list on a
+   runner is the leak this guard exists to prevent. So it is a **local** gate, run by a **pre-push
+   hook** that git does not version: `make install-hooks` writes it per clone, refuses to replace
+   a hook it did not write, and honours `core.hooksPath`. The hook calls the make target rather
+   than restating it, as ADR-054 requires of CI.
+9. **Three modules, because matching is not plumbing.** `scripts/privacy_match.py` is pure — keys
+   and text in, findings out, no git and no database, which is what the 38 unit tests exercise
+   with invented names. `scripts/privacy_sources.py` yields texts from the working tree, the index
+   and git's object store. `scripts/privacy_check.py` owns the keys, the report, the hook and the
+   CLI.
+
+**Alternatives considered.**
+
+- **A dependency for the matching** (`pyahocorasick`, or a compiled trie regex over 94,276 names).
+  Rejected: a set lookup over the candidates a line can actually hold is already 3 s for the whole
+  repository and its history, and the licence allowlist and `uv.lock` churn buy nothing here.
+- **A single length threshold for every shape.** Rejected by measurement: it either lets
+  `nl50`-shaped handles through or demands an allowlist of every six-letter English word in the
+  docs.
+- **A system dictionary** (`/usr/share/dict/words`) instead of a committed allowlist. Rejected:
+  not reproducible across machines, absent on many, and it would excuse a handle that happens to
+  be a word *everywhere*, including in a fixture line.
+- **Running it in CI with a committed list of hashed keys.** Rejected: a published hash list of
+  94,276 short screen names is a dictionary attack, not a protection, and it would put the pool's
+  identities in the public repository in another form.
+- **A `pre-commit` hook instead of `pre-push`.** Rejected as the primary gate: a commit is local
+  and reversible, a push is publication, and the round-5 leak was published by a push. `make
+  privacy-check` before a commit is the same check, one command away.
+
+**Consequences, and the gaps this leaves — each deliberate.**
+
+- **Commit and tag messages are not scanned**, only blobs. The rewrite verified that no message
+  mentioned one of the fourteen; if a message ever should be covered, it is ~8 lines in
+  `privacy_sources.history`.
+- **In prose, a letters-only handle under 8 characters, a spaced one under 13 that is not quoted,
+  and a digits-only one are not reported** — the price of an allowlist that stays a page. They are
+  still caught in a fixture line and in a key.
+- **A name holding a character outside the text alphabet** (`.` or a non-ASCII letter, none today)
+  is matched in fixture lines and keys only; the check prints how many such names exist.
+- **The allowlist is a list of words that are also real handles.** Ordinary words identify nobody,
+  but the list grows as the docs grow, and every addition must be looked at.
+- **The guard needs the stack up.** `make up` before a push, or the push is refused with "nothing
+  was checked".
+- **An old branch breaks the hook loudly**: checked out before this step, the working tree has no
+  `privacy-check` target, make fails, the push is refused. That is the correct direction to fail.
+
+---
+
+## ADR-059 — One sentence, one home: the tool catalogue, the page explainer and control help
+
+**Status:** accepted (F.13, 2026-09-21).
+
+**Context.** By round 6 the app wrote three kinds of explanatory sentence and had no rule about
+which owned what. The registry describes a stat or a dimension and reaches the screen through
+`stats/vocabulary.ts` and `RegistryTerm` (ADR-057). `@poker/ui`'s `vocabulary.ts` and `glossary.ts`
+describe the words that name a set — hand classes, draws, positions, node shorthand (ADR-056).
+Nothing described a **tool**. Writing that third kind of sentence without a rule would have meant
+copying: a screen explaining `min_n` in its own words beside a registry tip already explaining it.
+
+**Decision 1 — one sentence has exactly one home, and the rule that decides it.**
+A sentence about a *stat or dimension* belongs to the registry. A sentence about a *word that names
+a set* belongs to poker-ui's vocabulary. A sentence about *a tool* belongs to the catalogue in
+`app/help/tools/`. **The test: if the sentence would still be true with this screen deleted, it is
+not the catalogue's.** A catalogue entry or a control's sentence may name a term; it never defines
+one. `tools.test.ts` enforces the one direction that can be checked mechanically — no catalogue
+sentence is byte-identical to a glossary or vocabulary definition — and the rule is written at the
+top of `help/tools/types.ts` and `help/controls/types.ts` for the cases a test cannot catch.
+
+**Decision 2 — the explainer opens on a first visit to a tool and is collapsed on every later one.**
+The alternatives were "always collapsed" (the founder never sees it, and a new screen explains
+itself to nobody) and "always open" (clutter on the hundredth visit). The state is per-tool, kept
+as a list of ids in `help/state.ts`'s `seen`, so a screen added next month opens its card even for
+a reader who has been here a year — a counter or a single "dismissed" flag could not do that.
+**Collapsing is what marks the tool read**: a reader who closes the card has been told. Because the
+app is `ssr: false`, the decision is read from `localStorage` synchronously in setup, so the card
+is in its final state on the first paint and nothing moves — verified by sampling the DOM six times
+across the first 720 ms of a cold load. Help ▸ **Explain this page** reopens it, always, and
+`Escape` closes it. `parseHelpState` treats a record written before F.13 as "nothing read yet"
+rather than discarding it, so nobody loses a tour in progress to a field that did not exist.
+
+**Decision 3 — chapters extend the tour, they do not replace it.**
+`TOUR_STOPS` stays one flat list; a chapter is a run of consecutive stops that name the same area.
+So the one saved index still resumes the whole tutorial, `TourCard`, `WelcomeOffer` and `HelpMenu`
+keep working off the same prop, and a reader mid-tour after the upgrade simply finds themselves at
+the stop they were on, in a tutorial that is now longer — `resumeAt` already starts from the top
+when a saved stop no longer exists. `HelpMenu` gains a **Chapters** list so any area can be entered
+directly, and `/help` repeats it per area as "Walk me through it".
+
+The tour's two old rules bind harder now: every anchor is a `data-testid` the pages already carry,
+and every stop is on a **public** page. That is why the first three chapters — My game, Pool, Hands
+— stop on `/help` rather than on the screens themselves: those screens cannot be shown to a
+signed-out reader, and mocking them would have created a fourth home for a sentence the catalogue
+already owns. The catalogue's own page is the honest anchor, and each chapter ends with a worked
+example that *can* be opened signed out. Analyze runs on a real example, Ranges & Lab on the real
+Range Lab, Train on the real trainers. A third rule was added: **every word a stop says comes from
+a named source** — the analyzer's steps, the trainers' modes, or the catalogue — and `tour.test.ts`
+checks it, which is decision 1 applied to the tutorial.
+
+**Decision 4 — control help attaches by selector, and adds no markup to anyone's component.**
+Most of the 32 controls live in files other lanes own, and several are `<select>`s, checkboxes and
+range inputs that cannot host a child element at all. `ControlHelp.vue` is mounted once in the
+shell and, for each entry, finds the matching elements and sets exactly two things on them:
+`aria-describedby`, pointing at a tip rendered in its own subtree, and `data-help`, its own
+attribute, which the styles and the listeners key off. No bound class or attribute is touched, no
+node is inserted into another component's DOM, and **no `title=`** is used — a `title` is invisible
+to a keyboard and to a finger, which is the same objection ADR-057 raised for registry
+descriptions. Listeners are delegated to the document (`pointerover`, `focusin`, `pointerup`,
+`keydown`), so a re-render costs nothing and there is nothing to unbind per element; a
+`MutationObserver` re-runs the scan when the page changes.
+
+Two consequences worth writing down. **The visible cue is `cursor: help` plus a hairline dotted
+outline on hover and focus** — an outline is painted outside the border box and takes part in no
+layout, so a cue on an arbitrary control cannot reflow somebody else's page; a `::after` badge
+could not have been used on a `<select>` at all. And **a control that nothing can focus gets a
+`tabindex="0"`**, the same affordance `TermLabel` gives an explained word, but only where the
+element is not focusable and holds nothing focusable, so a picker full of buttons gains no second
+tab stop. A tab stop the layer added never counts as "already focusable" when the question is asked
+again — without that the attribute was added and removed on alternate scans, and the browser pass
+caught exactly that (§4).
+
+**Consequences.** Adding a screen means adding a catalogue entry, or the suite fails. Adding a
+chooser means explaining it or writing down why it needs none, or the suite fails. The cost is that
+the catalogue's "how it works" sentences are written by hand from the modules that compute the
+answers and can age; the guard against that is the rule in decision 1 plus the code comment above
+each entry naming the module it was read from.

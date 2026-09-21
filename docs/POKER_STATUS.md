@@ -6,7 +6,7 @@
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
 **Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; **CI real and green since 2026-09-15, F.1 ticked (ADR-054)****
-**Last updated:** 2026-09-15 (session 20, continued — **the history rewrite**: the fourteen real screen names removed from every commit on every local branch with `git filter-repo`, trial-verified in a mirror first (final tree byte-identical, only the five name-bearing files changed in any commit, full-history scan clean), then force-pushed to `origin/feat/range-lab` at `88625fd`. Every commit hash in these docs is remapped. **GitHub still serves the old commits by SHA** — deleting two Actions runs and a Support purge are the founder's, below.)
+**Last updated:** 2026-09-21 (session 21, **the round-6 merge** — six lanes committed, **D.9c, F.12b, F.12c, F.12d and F.13 ticked**, D.9b left `[ ]` because its Done means is a green CI job and nothing is pushed. `make check` **1,714** · `make web-check` **1,549 / 146** · `make seed && make test-all` **1,821 passed, 6 skipped**. The app now explains itself: every screen says what it is, how it works and what to do first, and a test fails when a new one does not. A privacy guard runs before every push — and found a **fifteenth** real handle still in the public history.)
 
 **Previously:** 2026-09-15 (session 20, **the round-5 merge** — D.9a `dd770bd`, D.8 `b1a535a`, F.12a `a60611e` committed, plus a heuristics clock fix `c36faa4` and a fixture scrub (later folded into the history rewrite); F.1 had committed and pushed itself. **D.9a ticked.** Gates green on the third run: `make check` 1,675 · `make web-check` 1,015 / 99 · `make seed && make test-all` **1,783 passed, 6 skipped**. **Found: fourteen real opponents' screen names in the public history** — the founder's decision, below.)
 
@@ -44,6 +44,61 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
+### ▶ Next: **D.10 — close phase D** (plan §4)
+
+Round 6 is merged (below). The next unit of work is the plan's **D.10**, and it is a desk job, not a build:
+
+1. Walk phase D in [POKER_PLAN.md](POKER_PLAN.md) §4 and confirm every step is `[x]` or carries a note
+   saying why it is not. Only **D.9b** is open, and deliberately: its *Done means* is "CI runs the E2E job
+   green", which needs a push.
+2. Set the plan's `## Status` block to what is left after phase D — **F.12** (three §13 lines, listed in the
+   step) and **B.5b** (the `core.*` rebuild) — with phase E recorded as closed (E.1–E.5 are all done).
+3. Add the §6 row, rewrite this block to point at whichever of F.12 or B.5b comes first, and offer a commit.
+
+**Before any push, from `platform/`:** `make up` then `make privacy-check` (it is also a `pre-push` hook now,
+installed on this clone). It needs the real ClickHouse and cannot run in CI, by design.
+
+---
+
+### ✅ Round 6 is merged (2026-09-21) — six lanes, five steps ticked
+
+**Committed:** D.9b `22ddf18` · D.9c `e24e45e` · F.12b `76b0b42` · F.12c `3f42270` · F.12d `4dbfa08` ·
+F.13 `e9a0ee2` · the allowlist entry `2e543fc`. Before them, the unpushed docs commit was amended
+(`b2213ed` → `61e925f`) to fold out a name it quoted. **Nothing is pushed.**
+
+**Gates over the combined tree:** `make check` **1,714** · `make web-check` **1,549 tests / 146 files**,
+licences unchanged · `make seed && make test-all` **1,821 passed, 6 skipped**. Verified rather than trusted:
+D.9c's 38 tests and F.13's three coverage tests by name, and F.13's guarantee by **mutation** — a page added
+with no catalogue entry turns `tools.test.ts` red, as designed.
+
+**What landed, one line each:**
+
+- **D.9c — the privacy guard** (ADR-058), the only one that changes how work leaves this machine.
+  `make privacy-check` reads every real opponent's key from the real ClickHouse, read-only, and refuses a
+  tree, an index or a push that carries one; `make install-hooks` wires it into `pre-push` and **has been run
+  here**. It found 14 of 14 on the pre-rewrite history in 3.0 s, and **a fifteenth handle the rewrite had
+  missed** — brackets in it, so no word-character scanner saw it — quoted in a parser comment. `HEAD` now
+  answers *no real player key found*. Its first false positive was the design working: a real player is
+  called "the street", which F.13 uses as a control's label, so the phrase joined the allowlist.
+- **D.9b — the browser test** (ADR-055), **left `[ ]`**: green five times locally, red when the worker is
+  stopped, but its Done means is a green CI job and nothing has been pushed. `make e2e` / `make e2e-install`
+  join the contract; the test owns the API, a worker and Nuxt on ports of its own and refuses to run outside
+  the test environment.
+- **F.12b** (ADR-056) — the two vocabularies, one affordance, and undo per stroke. 90/90 in a browser.
+- **F.12c** (ADR-057) — the registry's own descriptions on every data screen, teaching empty states, and
+  failures that stop reading as "no data". 103/103, once with the API refused at the fetch boundary.
+- **F.12d** (ADR-050) — Examples, the first-run tour and the `?` overlay, all working signed out with the
+  API stopped. 79/79.
+- **F.13** (ADR-059, new step) — **every screen now says what it is, how it works and what to do first**: a
+  24-entry tool catalogue, a per-page explainer, 32 explained controls attached by selector, a public
+  `/help`, and the tour grown to 20 stops across six chapters. 153/153 with the API up, 53/53 with it
+  stopped. The rule it adds — *one sentence has exactly one home* — is what keeps it from being a fourth
+  copy of the vocabulary.
+
+**Still open after this merge:** **D.10** (above), **F.12**'s three remaining §13 lines, **B.5b**, and
+D.9b's tick. Two things are the founder's, both about history that is already public — see below.
+
+---
 ### ✅ D.8 — upload & accounts: done 2026-09-15 (round 5, lane A, ADR-051) — committed `b1a535a`
 
 **A file dropped on `/upload` is counted in My game with no command typed after the click** — verified in
@@ -143,7 +198,18 @@ obligation) ran as round 5's lane B (below); **D.9b** (the Playwright E2E and it
 D.8's upload page, and its CI half is now reachable since F.1. **F.1** is ticked: CI runs on every
 push (ADR-054).
 
-### ✅ The public history no longer holds real opponents' screen names (rewritten 2026-09-15) — two GitHub steps left
+### ⚠️ The public history: fourteen names removed (2026-09-15), **a fifteenth still in it**, and a guard so it cannot happen again
+
+**Update, 2026-09-21 (round 6).** D.9c built the check that should have existed all along — `make
+privacy-check`, now a `pre-push` hook on this clone (ADR-058) — and the first thing it found was a
+**fifteenth** real handle that the rewrite missed: it has brackets in it, so no word-character scanner ever
+saw it, and it sat quoted in a comment in `parser/sites/pokerstars/grammar.py` explaining why the `Dealt to`
+regex is greedy. **The working tree now carries an invented name of the same shape, but `88625fd` and its
+ancestors still carry the real one.** Removing it means a second `git filter-repo --replace-text` and a
+second force-push — **the founder's decision**, and it can be taken together with the two GitHub steps
+below. A name the merge itself had written — one of the fourteen, quoted inside this file's own account of
+the rewrite — was folded out of the unpushed docs commit (`b2213ed` → `61e925f`) before anything else was
+committed.
 
 **What happened.** `feat/range-lab` was pushed to the **public** `origin` for F.1's CI run. The round-5 merge
 scanned every blob reachable from it against the real pool's 94,278 player keys and found **fourteen real
@@ -1490,6 +1556,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-21 (session 21 — **the round-6 merge**) | Six lanes committed (`22ddf18` D.9b, `e24e45e` D.9c, `76b0b42` F.12b, `3f42270` F.12c, `4dbfa08` F.12d, `e9a0ee2` F.13, `2e543fc` allowlist); **five steps ticked**, D.9b left `[ ]` by design. Manifests cross-checked: 229 paths, none unclaimed, 12 shared and each assigned deliberately. Two privacy fixes only the merge could make (a name quoted in STATUS, folded out of the unpushed docs commit; D.9c's fifteenth handle), after which `make privacy-check` answers *no real player key found* and its hook is installed. Gates: `make check` 1,714 · `make web-check` 1,549 / 146 · `make test-all` 1,821 passed, 6 skipped. | **D.10** (close phase D), then F.12's three remaining §13 lines and B.5b; nothing pushed |
 | 2026-09-15 (session 20, continued — **history rewrite**) | Bundle backup of all refs; `git filter-repo --replace-text` trialled in a mirror (tree identical, only five files touched in any commit, full-history scan clean), then run in place with identical hashes; force-pushed with a lease to `88625fd`; docs' commit hashes remapped; round-6 lanes had written nothing, so nothing was lost to the reset. GitHub still serves old SHAs. | Founder: delete the two old Actions runs, Support purge (or go private meanwhile) |
 | 2026-09-15 (session 20, **the round-5 merge** — no lane work of its own) | D.9a `dd770bd`, D.8 `b1a535a`, F.12a `a60611e` committed; **D.9a ticked** (the merge did its `git rm`s; its isolation and rate-limit probes green by name in the full run). Three gate runs: a heuristic-log clock bug (`confirmed_at` from the API's clock, `created_at` from the database's; fixed `c36faa4`), then the unit test that fix broke — and two background notifications that said exit 0 over logs that said `EXIT 2`. Final: `make check` 1,675 · `make web-check` 1,015 · `make test-all` **1,783 passed, 6 skipped**. **Fourteen real opponents' screen names found in the public history**; tree scrubbed, then the history rewritten (below). D.9a's doc rows had been lost to a concurrent rewrite; rebuilt. | **The founder's history decision**; `make pg-migrate`; round 6 (D.9b · D.9c · F.12b · F.12c · F.12d) |
 | 2026-09-15 (round 5, **lane B — D.9a**, ADR-052; row rebuilt at the merge) | `GET /v1/hero/winnings` replaces the v1 timeline (identical on all 18 days of real hero data); v1 routes and the static dashboard deleted; every `/v1/stats*` probe re-pointed, none deleted; found the worker's cache drop missing `report:` keys. Integration files left unrun, deletions left to the merge. | the merge |
