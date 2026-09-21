@@ -44,22 +44,24 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Next: **D.10 — close phase D** (plan §4)
+### ▶ Next: **round 7** — three lanes together, then **B.5b** alone
 
-Round 6 is merged (below). The next unit of work is the plan's **D.10**, and it is a desk job, not a build:
+Phase D is closed (D.10 at the round-6 merge). D.9b is the one D step still `[ ]`, and only because its
+*Done means* is a green CI job: it is built, green locally and committed. Nothing has been pushed.
 
-1. Walk phase D in [POKER_PLAN.md](POKER_PLAN.md) §4 and confirm every step is `[x]` or carries a note
-   saying why it is not. Only **D.9b** is open, and deliberately: its *Done means* is "CI runs the E2E job
-   green", which needs a push.
-2. Set the plan's `## Status` block to what is left after phase D — **F.12** (three §13 lines, listed in the
-   step) and **B.5b** (the `core.*` rebuild) — with phase E recorded as closed (E.1–E.5 are all done).
-3. Add the §6 row, rewrite this block to point at whichever of F.12 or B.5b comes first, and offer a commit.
+| Lane | Owns | Work |
+|---|---|---|
+| **A · F.12's close-out** | `platform/web/**` (hero and reports surfaces) | The three §13 lines left: explain-the-number on the hero tables, fast feedback (`compare.vue`'s non-lazy `store.load()`, `DefinitionPanel` opening above the fold), progressive disclosure. Then bring [POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) §1 up to the state after round 6, and tick **F.12**. |
+| **B · the analyzer's follow-ups** | `platform/web/**` (`components/analyze/**`, `pages/dev/**`, the trainers) | All nine steps in an example (ADR-050 follow-up 1 — four lines in `analyze/context.ts` and four call sites); `Step4Nuts` renders the nut split before the prediction is committed, so step 4's answer can be read off the page (follow-up 2); the five `.catch(() => null)` sites F.12c listed as not its own; `AdvantageTrainer`'s permanent "Working out…" when an equity call fails; `/dev/components` mounting the 28 components it does not (spec §12). |
+| **C · the pool's lookup and the registry's words** | `platform/analysis/pool/**`, `platform/stats/registry/**`, `platform/api/routers/pool.py` | `GET /v1/pool/players` matches only the **start** of a `player_key` and every key is namespaced `<site>:<name>`, so it answers "no such player" to every real opponent typed by name (found by F.13, which had to document the workaround instead of fixing it). Then the registry's own text: 40 v1-parity `notes` written for whoever ported the stat, per-value labels for enum dimensions, and the `EV bb/100` label that F.12c had to work around. Needs `make gen` and `make check`; ClickHouse **read-only**. |
 
-**Before any push, from `platform/`:** `make up` then `make privacy-check` (it is also a `pre-push` hook now,
-installed on this clone). It needs the real ClickHouse and cannot run in CI, by design.
+**Then B.5b, with the machine to itself.** It rebuilds every `core.*` table to `FixedString(16)` partition
+by partition, exchanges them, recreates the mart chain empty and backfills — so no other lane can read the
+real data while it runs, and `make seed`/`make test-all` would fight it for the 4 GB node.
+
+**Before any push, from `platform/`:** `make up && make privacy-check` (also a `pre-push` hook here).
 
 ---
-
 ### ✅ Round 6 is merged (2026-09-21) — six lanes, five steps ticked
 
 **Committed:** D.9b `22ddf18` · D.9c `e24e45e` · F.12b `76b0b42` · F.12c `3f42270` · F.12d `4dbfa08` ·
