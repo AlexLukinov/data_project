@@ -116,7 +116,7 @@ describe('the registry these words come from', () => {
     expect(Object.keys(SIZE.buckets)).toEqual(['small', 'mid', 'large', 'pot', 'overbet']);
     expect(POT_TYPE.values).toContain('5bet_plus');
     expect(PLAYER.type).toBe('string');
-    expect(PLAYER.description).toContain("The seat's screen name as the site shows it");
+    expect(PLAYER.description).toContain("the site's own code, a colon, and the screen name lower-cased");
   });
 });
 
@@ -153,7 +153,7 @@ describe('statEntry — what a known stat says', () => {
 
   it('calls the registry’s EV what it is — the all-in adjusted result, not a solver’s', () => {
     const entry = statEntry(EV100, 'ev_bb_per_100');
-    expect(entry.term).toBe('EV bb/100');
+    expect(entry.term).toBe('All-in adjusted bb/100');
     expect(entry.definition).toBe('All-in adjusted big blinds won per 100 hands. Usually 0–10 bb/100.');
   });
 

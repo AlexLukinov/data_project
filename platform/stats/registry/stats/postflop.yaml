@@ -2,7 +2,8 @@
 #
 # Every opportunity is a decision where the named action was POSSIBLE: a c-bet opportunity is
 # the aggressor facing nothing (`facing: none`), not merely "the aggressor saw the flop". Where
-# that tightens the v1 definition the entry says so under `notes`, for the parity check (C.6).
+# that tightens the v1 definition the entry says so under `v1_parity`, for the parity check
+# (C.6); `notes` beside it is the caveat a READER sees and never mentions v1 (ADR-057, ADR-062).
 #
 # Aggression factor and frequency are the general form (numerator / denominator) because their
 # denominators are not a situation but a set of actions.
@@ -22,10 +23,14 @@
   cached: true
   description: Bet the flop as the preflop aggressor when checked to or first to act.
   notes: >-
-    An opportunity is a flop decision facing nothing. v1 counted every flop the aggressor saw:
-    flops where a donk bet came first, and flops the aggressor reached all-in preflop with no
-    decision to make (17,102 of the pool's 20,121 heads-up 5-bet flops), which showed up as
-    missed c-bets (4.8% there vs 78.9% here). -5.5% opportunities on the pool overall.
+    An opportunity is a flop decision with nothing in front, so a flop someone has already led
+    into, and a flop reached all-in preflop where there is no decision to make, are left out
+    rather than counted as a missed c-bet.
+  v1_parity: >-
+    v1 counted every flop the aggressor saw: flops where a donk bet came first, and flops the
+    aggressor reached all-in preflop with no decision to make (17,102 of the pool's 20,121
+    heads-up 5-bet flops), which showed up as missed c-bets (4.8% there vs 78.9% here). -5.5%
+    opportunities on the pool overall.
 
 - code: cbet_turn
   label: C-bet turn
@@ -42,9 +47,12 @@
   cached: true
   description: Bet the turn after c-betting the flop (double barrel).
   notes: >-
-    The opportunity is the chance to bet (nothing in front) as the flop's last aggressor; v1
-    counted every turn seen after betting the flop, including turns where a lead came first
-    and flops where the c-bet was raised and called (-11% opportunities, +5 points).
+    An opportunity is a turn with nothing in front where this seat was the flop's last aggressor,
+    so a turn led into first, and a turn reached after the flop c-bet was raised and called, do
+    not count.
+  v1_parity: >-
+    v1 counted every turn seen after betting the flop, including turns where a lead came first and
+    flops where the c-bet was raised and called (-11% opportunities, +5 points).
 
 - code: cbet_river
   label: C-bet river
@@ -61,8 +69,10 @@
   cached: true
   description: Bet the river after barrelling the turn (triple barrel).
   notes: >-
-    The opportunity is the chance to bet (nothing in front) as the turn's last aggressor; v1
-    counted every river seen after betting the turn (-12% opportunities, +7 points).
+    An opportunity is a river with nothing in front where this seat was the turn's last aggressor,
+    so a river someone leads into first, and a river reached after the turn bet was raised and
+    called, do not count.
+  v1_parity: v1 counted every river seen after betting the turn (-12% opportunities, +7 points).
 
 - code: delayed_cbet
   label: Delayed c-bet
@@ -78,7 +88,10 @@
   typical: [30, 55]
   cached: true
   description: Bet the turn as the aggressor after checking the flop.
-  notes: v1 required only "did not bet the flop", which included calling a flop donk bet.
+  notes: >-
+    The seat's whole flop line must be a check, so calling a flop lead does not count as having
+    passed up the flop.
+  v1_parity: v1 required only 'did not bet the flop', which included calling a flop donk bet.
 
 - code: fold_to_cbet_flop
   label: Fold to c-bet flop
@@ -93,7 +106,12 @@
   typical: [40, 55]
   cached: true
   description: Folded facing the preflop aggressor's flop bet.
-  notes: The c-bet must be the only bet in front; v1 still counted it as faced when another player had raised it before this seat acted (-0.5% opportunities).
+  notes: >-
+    The c-bet must be the only bet in front; once another player has raised it, the seat is facing
+    a raise rather than a c-bet and the decision does not count.
+  v1_parity: >-
+    v1 still counted it as faced when another player had raised it before this seat acted (-0.5%
+    opportunities).
 
 - code: call_cbet_flop
   label: Call c-bet flop
@@ -108,7 +126,12 @@
   typical: [35, 50]
   cached: true
   description: Called facing the preflop aggressor's flop bet.
-  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+  notes: >-
+    The c-bet must be the only bet in front; a c-bet that has already been raised is a different
+    decision and does not count.
+  v1_parity: >-
+    The same denominator rule as fold_to_cbet_flop: v1 still counted the c-bet as faced after
+    another player had raised it.
 
 - code: raise_cbet_flop
   label: Raise c-bet flop
@@ -123,7 +146,12 @@
   typical: [6, 14]
   cached: true
   description: Raised the preflop aggressor's flop bet.
-  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+  notes: >-
+    The c-bet must be the only bet in front; raising a c-bet another player has already raised is
+    a re-raise and does not count.
+  v1_parity: >-
+    The same denominator rule as fold_to_cbet_flop: v1 still counted the c-bet as faced after
+    another player had raised it.
 
 - code: fold_to_cbet_turn
   label: Fold to c-bet turn
@@ -138,7 +166,12 @@
   typical: [40, 60]
   cached: true
   description: Folded facing the preflop aggressor's turn bet.
-  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+  notes: >-
+    The c-bet must be the only bet in front; once it has been raised, the seat is facing a raise
+    rather than a c-bet and the decision does not count.
+  v1_parity: >-
+    The same denominator rule as fold_to_cbet_flop: v1 still counted the c-bet as faced after
+    another player had raised it.
 
 - code: fold_to_cbet_river
   label: Fold to c-bet river
@@ -153,7 +186,12 @@
   typical: [40, 65]
   cached: true
   description: Folded facing the preflop aggressor's river bet.
-  notes: The c-bet must be the only bet in front (see fold_to_cbet_flop).
+  notes: >-
+    The c-bet must be the only bet in front; once it has been raised, the seat is facing a raise
+    rather than a c-bet and the decision does not count.
+  v1_parity: >-
+    The same denominator rule as fold_to_cbet_flop: v1 still counted the c-bet as faced after
+    another player had raised it.
 
 - code: fold_to_delayed_cbet
   label: Fold to delayed c-bet
@@ -171,7 +209,12 @@
   typical: [40, 65]
   cached: true
   description: Folded to the aggressor's turn bet after the flop checked through.
-  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever the aggressor bet the turn (-0.4% opportunities).
+  notes: >-
+    The seat must have checked a flop it faced nothing on, and the aggressor's turn bet must be
+    the only one in front; a bet that has already been raised does not count.
+  v1_parity: >-
+    v1 counted the opportunity from hand-level flags whenever the aggressor bet the turn (-0.4%
+    opportunities).
 
 # ---- floats, donks and probes ------------------------------------------------------------
 - code: float_flop
@@ -191,9 +234,11 @@
   cached: true
   description: Bet the turn when checked to, after calling a flop bet in position.
   notes: >-
-    The opportunity needs the turn checked to this seat; v1 counted every turn reached after
-    calling in position, turns where the opponent led included (about 40% of v1's
-    opportunities, the rate roughly doubles).
+    The turn must be checked to this seat; a turn the opponent leads into is not a chance to bet
+    and is left out of the opportunities.
+  v1_parity: >-
+    v1 counted every turn reached after calling in position, turns where the opponent led included
+    (about 40% of v1's opportunities, the rate roughly doubles).
 
 - code: float_fold
   label: Float, fold turn
@@ -212,7 +257,10 @@
   cached: true
   description: Folded to a turn bet after calling a flop bet in position.
   notes: >-
-    v1's denominator was "called the flop c-bet and reached the turn" from any position, turns
+    Counts in-position turns where a bet is actually faced after calling the flop; a turn that
+    checks through is not a fold-or-continue decision and does not count.
+  v1_parity: >-
+    v1's denominator was 'called the flop c-bet and reached the turn' from any position, turns
     checked through included; this counts in-position turns where a bet was actually faced, the
     decision the name describes (about a third of v1's action count).
 
@@ -230,7 +278,12 @@
   typical: [0, 6]
   cached: true
   description: Led into the preflop aggressor on the flop, out of position.
-  notes: The opportunity is the chance to bet (nothing in front); v1 counted every out-of-position non-aggressor on the flop, those facing an earlier lead included (-3% opportunities).
+  notes: >-
+    An opportunity is a flop decision out of position with nothing in front; once another player
+    has led, putting money in is a raise and the decision does not count.
+  v1_parity: >-
+    v1 counted every out-of-position non-aggressor on the flop, those facing an earlier lead
+    included (-3% opportunities).
 
 - code: fold_to_donk
   label: Fold to donk bet
@@ -245,7 +298,11 @@
   typical: [30, 55]
   cached: true
   description: Folded as the preflop aggressor when led into on the flop.
-  notes: The lead must be the only bet in front; v1 also counted a lead that was raised before the aggressor acted (-1% opportunities).
+  notes: >-
+    The lead must be the only bet in front; once it has been raised the aggressor is facing a
+    raise, not a donk bet, and the decision does not count.
+  v1_parity: >-
+    v1 also counted a lead that was raised before the aggressor acted (-1% opportunities).
 
 - code: probe_turn
   label: Probe turn
@@ -263,7 +320,10 @@
   typical: [25, 50]
   cached: true
   description: Bet the turn out of position after the aggressor checked back the flop.
-  notes: v1 did not require out of position.
+  notes: >-
+    Only out-of-position turns count; betting into a checked-back flop from in position is a
+    different spot.
+  v1_parity: v1 did not require out of position.
 
 - code: fold_to_probe_turn
   label: Fold to probe turn
@@ -280,7 +340,12 @@
   typical: [35, 60]
   cached: true
   description: Checked back the flop as the aggressor, then folded to a turn bet.
-  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever a turn bet happened (-0.5% opportunities).
+  notes: >-
+    The seat must have checked a flop it faced nothing on, and the turn bet must be the only one
+    in front; a bet that has already been raised does not count.
+  v1_parity: >-
+    v1 counted the opportunity from hand-level flags whenever a turn bet happened (-0.5%
+    opportunities).
 
 - code: probe_river
   label: Probe river
@@ -298,7 +363,10 @@
   typical: [25, 50]
   cached: true
   description: Bet the river out of position after the turn checked through.
-  notes: v1 did not require out of position.
+  notes: >-
+    Only out-of-position rivers count; betting a checked-through turn from in position is a
+    different spot.
+  v1_parity: v1 did not require out of position.
 
 - code: fold_to_probe_river
   label: Fold to probe river
@@ -315,7 +383,12 @@
   typical: [35, 65]
   cached: true
   description: Folded as the aggressor to a river bet after the turn checked through.
-  notes: The bet faced must be the only one in front; v1 counted the opportunity from hand-level flags whenever a river bet happened (-0.2% opportunities).
+  notes: >-
+    The seat must have checked a turn it faced nothing on, and the river bet must be the only one
+    in front; a bet that has already been raised does not count.
+  v1_parity: >-
+    v1 counted the opportunity from hand-level flags whenever a river bet happened (-0.2%
+    opportunities).
 
 # ---- check-raises ------------------------------------------------------------------------
 - code: check_raise_flop
@@ -331,7 +404,12 @@
   typical: [6, 14]
   cached: true
   description: Raised the flop after checking and facing a bet.
-  notes: The bet must be the only one in front; v1 counted the chance when a raise had followed the bet before this seat acted (-0.9% opportunities).
+  notes: >-
+    The bet must be the only one in front; once someone has raised it, raising is a re-raise and
+    the decision does not count.
+  v1_parity: >-
+    v1 counted the chance when a raise had followed the bet before this seat acted (-0.9%
+    opportunities).
 
 - code: check_raise_turn
   label: Check-raise turn
@@ -346,7 +424,12 @@
   typical: [5, 14]
   cached: true
   description: Raised the turn after checking and facing a bet.
-  notes: The bet must be the only one in front (see check_raise_flop).
+  notes: >-
+    The bet must be the only one in front; once someone has raised it, raising is a re-raise and
+    the decision does not count.
+  v1_parity: >-
+    The same rule as check_raise_flop: v1 counted the chance when a raise had followed the bet
+    before this seat acted.
 
 - code: check_raise_river
   label: Check-raise river
@@ -361,7 +444,12 @@
   typical: [3, 10]
   cached: true
   description: Raised the river after checking and facing a bet.
-  notes: The bet must be the only one in front (see check_raise_flop).
+  notes: >-
+    The bet must be the only one in front; once someone has raised it, raising is a re-raise and
+    the decision does not count.
+  v1_parity: >-
+    The same rule as check_raise_flop: v1 counted the chance when a raise had followed the bet
+    before this seat acted.
 
 # ---- bet, then raised --------------------------------------------------------------------
 - code: fold_to_flop_raise
@@ -377,7 +465,12 @@
   typical: [40, 65]
   cached: true
   description: Bet the flop and folded when raised.
-  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street, a re-raise or the seat's own raise included (-0.3% opportunities).
+  notes: >-
+    Exactly one raise stands in front of this seat's bet; a raise that has itself been re-raised
+    is a different decision and does not count.
+  v1_parity: >-
+    v1 counted any second aggressive action on the street, a re-raise or the seat's own raise
+    included (-0.3% opportunities).
 
 - code: fold_to_turn_raise
   label: Fold to turn raise
@@ -392,7 +485,10 @@
   typical: [40, 65]
   cached: true
   description: Bet the turn and folded when raised.
-  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
+  notes: >-
+    Exactly one raise stands in front of this seat's bet; a raise that has itself been re-raised
+    is a different decision and does not count.
+  v1_parity: v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 - code: fold_to_river_raise
   label: Fold to river raise
@@ -407,7 +503,10 @@
   typical: [40, 70]
   cached: true
   description: Bet the river and folded when raised.
-  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
+  notes: >-
+    Exactly one raise stands in front of this seat's bet; a raise that has itself been re-raised
+    is a different decision and does not count.
+  v1_parity: v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 - code: bet_call_river
   label: Bet-call river
@@ -422,7 +521,10 @@
   typical: [25, 50]
   cached: true
   description: Bet the river and called a raise.
-  notes: Exactly one raise in front of the bet; v1 counted any second aggressive action on the street (-0.2% opportunities).
+  notes: >-
+    Exactly one raise stands in front of this seat's bet; a raise that has itself been re-raised
+    is a different decision and does not count.
+  v1_parity: v1 counted any second aggressive action on the street (-0.2% opportunities).
 
 # ---- river responses ---------------------------------------------------------------------
 - code: river_raise
@@ -437,7 +539,10 @@
   typical: [4, 12]
   cached: true
   description: Raised when facing a river bet.
-  notes: The bet faced must be the only one in front; v1 also counted facing a bet that had already been raised (-0.3% opportunities).
+  notes: >-
+    The bet faced must be the only one in front; facing a bet that has already been raised does
+    not count.
+  v1_parity: v1 also counted facing a bet that had already been raised (-0.3% opportunities).
 
 - code: river_check_fold
   label: River check-fold
@@ -452,7 +557,11 @@
   typical: [45, 70]
   cached: true
   description: Checked the river, then folded to a bet.
-  notes: The bet faced must be the only one in front; v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
+  notes: >-
+    The bet faced must be the only one in front; a bet that was raised before this seat acted does
+    not count.
+  v1_parity: >-
+    v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
 
 - code: river_check_call
   label: River check-call
@@ -467,7 +576,11 @@
   typical: [25, 50]
   cached: true
   description: Checked the river, then called a bet.
-  notes: The bet faced must be the only one in front; v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
+  notes: >-
+    The bet faced must be the only one in front; a bet that was raised before this seat acted does
+    not count.
+  v1_parity: >-
+    v1 also counted a bet that had been raised before this seat acted (-0.3% opportunities).
 
 # ---- aggression: bets + raises against calls (AF) and against all actions (AFq) ---------
 - code: af_flop

@@ -1,8 +1,11 @@
 # Preflop stats. Decision grain unless noted: a row per decision on `marts.decisions`, the
 # value is countIf(situation AND action) / countIf(situation).
 #
-# `notes` records where a definition differs from the v1 flag table it replaces, for the
-# parity check in plan step C.6.
+# `notes` is the caveat a READER needs: what the number counts that they would not expect, or
+# what it leaves out. It is shown beside the definition on screen (ADR-057), so it never
+# mentions v1, a port, or this repository. `v1_parity` is the other half and is shown to
+# nobody: where a definition departs from the v1 flag table it replaces, and by how much, as
+# measured in plan step C.6 and read by `scripts/fingerprint.py` (ADR-062).
 
 - code: vpip
   label: VPIP
@@ -105,7 +108,10 @@
   typical: [10, 25]
   cached: true
   description: Called when facing exactly one raise, from any seat (blinds included).
-  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities).
+  notes: >-
+    Every decision facing a single raise counts, a limper's included when the raise comes back
+    around, not only a seat's first decision in the hand.
+  v1_parity: v1 counted a seat's first decision only (+0.6% opportunities).
 
 - code: fold_vs_open
   label: Fold vs open
@@ -119,7 +125,10 @@
   typical: [60, 85]
   cached: true
   description: Folded when facing exactly one raise, from any seat.
-  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities).
+  notes: >-
+    Every decision facing a single raise counts, a limper's included when the raise comes back
+    around, not only a seat's first decision in the hand.
+  v1_parity: v1 counted a seat's first decision only (+0.6% opportunities).
 
 - code: threebet
   label: 3-bet %
@@ -133,7 +142,11 @@
   typical: [5, 11]
   cached: true
   description: Re-raised when facing exactly one raise (a limp-reraise counts).
-  notes: Every decision facing one raise counts, a limper's second decision included; v1 counted a seat's first decision only (+0.6% opportunities, +0.4% 3-bets on the pool).
+  notes: >-
+    Every decision facing a single raise counts, a limper's included when the raise comes back
+    around, so a limp-reraise is a 3-bet here.
+  v1_parity: >-
+    v1 counted a seat's first decision only (+0.6% opportunities, +0.4% 3-bets on the pool).
 
 - code: squeeze
   label: Squeeze %
@@ -148,7 +161,10 @@
   typical: [4, 12]
   cached: true
   description: Re-raised facing a raise and at least one cold caller.
-  notes: Every decision facing one raise with callers counts, a limper's second decision included; v1 counted a seat's first decision only (+1% opportunities).
+  notes: >-
+    Every decision facing a single raise with at least one caller behind it counts, a limper's
+    included when the raise and the calls come back around.
+  v1_parity: v1 counted a seat's first decision only (+1% opportunities).
 
 - code: fold_to_3bet
   label: Fold to 3-bet
@@ -163,7 +179,11 @@
   typical: [40, 60]
   cached: true
   description: Folded after open-raising and facing a 3-bet.
-  notes: v1 counted any fold by the opener once two raises existed, including a fold to a later 5-bet.
+  notes: >-
+    Only the opener's decision with exactly a 3-bet in front counts; folding later in the same
+    hand, having 4-bet into a 5-bet, is a different spot.
+  v1_parity: >-
+    v1 counted any fold by the opener once two raises existed, including a fold to a later 5-bet.
 
 - code: call_3bet
   label: Call 3-bet
@@ -178,7 +198,10 @@
   typical: [30, 50]
   cached: true
   description: Called after open-raising and facing a 3-bet.
-  notes: Exactly a 3-bet in front; v1 counted the opener facing any further raise, a 4-bet included (-3% opportunities).
+  notes: >-
+    Only the opener's decision with exactly a 3-bet in front counts; a later decision in the same
+    hand, facing a 4-bet, is not one of these.
+  v1_parity: v1 counted the opener facing any further raise, a 4-bet included (-3% opportunities).
 
 - code: fourbet
   label: 4-bet %
@@ -193,9 +216,11 @@
   cached: true
   description: Re-raised when facing two raises (the opener's raise over a 3-bet counts).
   notes: >-
-    The opener facing a 3-bet is the common 4-bet spot and counts here; v1 measured a seat's
-    first decision only, so it saw cold 4-bets alone (hero 2.4% of 5,019 vs 5.9% of 8,745
-    opportunities). v2 is the standard definition.
+    Every seat facing two raises counts, so the opener re-raising a 3-bet (the ordinary 4-bet) is
+    in the number alongside a cold 4-bet from a seat yet to act.
+  v1_parity: >-
+    v1 measured a seat's first decision only, so it saw cold 4-bets alone (hero 2.4% of 5,019 vs
+    5.9% of 8,745 opportunities). v2 is the standard definition.
 
 - code: fold_to_4bet
   label: Fold to 4-bet
@@ -211,7 +236,11 @@
   typical: [40, 65]
   cached: true
   description: Folded after 3-betting and facing a 4-bet.
-  notes: Exactly a 4-bet in front; v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
+  notes: >-
+    Only the 3-bettor's decision with exactly a 4-bet in front counts; a fold to a later 5-bet in
+    the same hand is a different spot.
+  v1_parity: >-
+    v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
 
 - code: call_4bet
   label: Call 4-bet
@@ -227,7 +256,11 @@
   typical: [20, 45]
   cached: true
   description: Called after 3-betting and facing a 4-bet.
-  notes: Exactly a 4-bet in front; v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
+  notes: >-
+    Only the 3-bettor's decision with exactly a 4-bet in front counts; a later decision in the
+    same hand, facing a 5-bet, is not one of these.
+  v1_parity: >-
+    v1 counted the 3-bettor facing any further raise, a 5-bet included (-1..2% opportunities).
 
 - code: fivebet
   label: 5-bet %
@@ -242,9 +275,11 @@
   cached: true
   description: Re-raised when facing three raises (the 3-bettor's raise over a 4-bet counts).
   notes: >-
-    The 3-bettor facing a 4-bet is the common 5-bet spot and counts here; v1 measured a seat's
-    first decision only, so it saw cold 5-bets alone (hero 0% of 95 vs 10.3% of 783
-    opportunities). v2 is the standard definition.
+    Every seat facing three raises counts, so the 3-bettor re-raising a 4-bet (the ordinary 5-bet)
+    is in the number alongside a cold 5-bet.
+  v1_parity: >-
+    v1 measured a seat's first decision only, so it saw cold 5-bets alone (hero 0% of 95 vs 10.3%
+    of 783 opportunities). v2 is the standard definition.
 
 - code: fold_bb_to_steal
   label: Fold BB to steal
@@ -261,7 +296,11 @@
   typical: [45, 70]
   cached: true
   description: Folded the big blind facing a first-in raise from the cutoff, button or small blind.
-  notes: v1 did not require the raise to be first in (a late raise over limpers counted as a steal).
+  notes: >-
+    The raise must be first in to be a steal, so a late-position raise over limpers is in neither
+    the folds nor the opportunities.
+  v1_parity: >-
+    v1 did not require the raise to be first in (a late raise over limpers counted as a steal).
 
 - code: limp_fold
   label: Limp, fold to raise
@@ -276,7 +315,9 @@
   typical: [40, 70]
   cached: true
   description: Limped, then folded when someone raised behind.
-  notes: v1 counted open limps only; this counts every limp (over-limps included).
+  notes: >-
+    Every limp counts, an over-limp behind another limper as much as the first limp into the pot.
+  v1_parity: v1 counted open limps only; this counts every limp, over-limps included.
 
 - code: limp_call
   label: Limp, call raise
@@ -291,7 +332,9 @@
   typical: [25, 55]
   cached: true
   description: Limped, then called a raise behind.
-  notes: v1 counted open limps only; this counts every limp (over-limps included).
+  notes: >-
+    Every limp counts, an over-limp behind another limper as much as the first limp into the pot.
+  v1_parity: v1 counted open limps only; this counts every limp, over-limps included.
 
 - code: limp_raise
   label: Limp-raise
@@ -306,4 +349,6 @@
   typical: [0, 10]
   cached: true
   description: Limped, then re-raised a raise behind.
-  notes: v1 counted open limps only; this counts every limp (over-limps included).
+  notes: >-
+    Every limp counts, an over-limp behind another limper as much as the first limp into the pot.
+  v1_parity: v1 counted open limps only; this counts every limp, over-limps included.

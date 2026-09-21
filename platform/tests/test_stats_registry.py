@@ -129,11 +129,15 @@ def test_sum_needs_a_number_dimension() -> None:
 
 # ---- broken registries -----------------------------------------------------------------
 
-DIMENSIONS = """
-- {code: street, label: Street, type: enum, values: [preflop, flop], tables: [decisions]}
-- {code: action, label: Action, type: enum, values: [fold, call, raise], tables: [decisions]}
-- {code: spr, label: SPR, type: number, tables: [decisions]}
-- {code: did_vpip, label: VPIP, type: bool, tables: [player_hands]}
+STREET = """- {code: street, label: Street, type: enum, values: [preflop, flop],
+   tables: [decisions], value_labels: {preflop: Preflop, flop: Flop}}
+"""
+
+DIMENSIONS = f"""
+{STREET}- {{code: action, label: Action, type: enum, values: [fold, call, raise],
+   tables: [decisions], value_labels: {{fold: Fold, call: Call, raise: Raise}}}}
+- {{code: spr, label: SPR, type: number, tables: [decisions]}}
+- {{code: did_vpip, label: VPIP, type: bool, tables: [player_hands]}}
 """
 
 GOOD_STAT = """
@@ -248,7 +252,15 @@ def test_cached_stat_with_arithmetic_is_rejected(tmp_path: Path) -> None:
             DIMENSIONS.replace("type: number, tables: [decisions]", "type: number, tables: []"),
             "tables",
         ),
-        (DIMENSIONS + DIMENSIONS.splitlines()[1] + "\n", "duplicate dimension 'street'"),
+        (DIMENSIONS + STREET, "duplicate dimension 'street'"),
+        (
+            DIMENSIONS.replace("value_labels: {preflop: Preflop, flop: Flop}", "value_labels: {}"),
+            r"value_labels is missing \['preflop', 'flop'\]",
+        ),
+        (
+            DIMENSIONS.replace("flop: Flop}", "flop: Flop, turn: Turn}"),
+            "value_labels names \\['turn'\\], which this dimension does not declare",
+        ),
         (DIMENSIONS.replace("tables: [decisions]}", "tables: [decisions], colour: red}"), "colour"),
     ],
 )

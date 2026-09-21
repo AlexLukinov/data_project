@@ -50,6 +50,15 @@ class Dimension(_Strict):
     tables: list[Table] = Field(min_length=1)
     description: str = ""
     values: list[str] = Field(default_factory=list)
+    value_labels: dict[str, str] = Field(default_factory=dict)
+    """What each enum value is called on screen, one for every value the entry declares.
+
+    The value is the contract with the column and never changes for a reader's sake (ADR-053);
+    this is the reader's half. Complete on purpose: a client that had to fall back would have
+    to guess, and guessing is what put `5bet_plus` -> `5bet+` and `''` -> "not applicable" in
+    the client in the first place -- where the ten dimensions declaring `''` mean it seven
+    different ways, and a pool player named `a_plus_b` read `a+b` (ADR-062).
+    """
     ops: list[Op] | None = None
     group_by: bool = True
     buckets: dict[str, Range] = Field(default_factory=dict)
@@ -73,6 +82,12 @@ class Dimension(_Strict):
             raise ValueError(f"only enum dimensions list values, not a {self.type}")
         if len(set(self.values)) != len(self.values):
             raise ValueError("duplicate enum value")
+        unlabelled = [value for value in self.values if not self.value_labels.get(value)]
+        if unlabelled:
+            raise ValueError(f"value_labels is missing {unlabelled}")
+        stray = sorted(set(self.value_labels) - set(self.values))
+        if stray:
+            raise ValueError(f"value_labels names {stray}, which this dimension does not declare")
         if self.buckets and self.type != "number":
             raise ValueError("buckets belong to number dimensions only")
         unexpected = set(self.allowed_ops) - OPS_BY_TYPE[self.type]
@@ -108,6 +123,20 @@ class Stat(_Strict):
     cached: bool = False
     description: str = Field(min_length=1)
     notes: str = ""
+    """The caveat a reader needs: what this number counts that a reader would not expect, or
+    what it leaves out. Addressed to whoever is reading the number, never to whoever ported the
+    stat -- `DefinitionPanel` prints it as "Caveat" beside the definition (ADR-057)."""
+
+    v1_parity: str = Field(default="", exclude=True)
+    """How this stat's definition differs from the v1 mart it replaced, and by how much.
+
+    An audit record, not prose for a screen. `exclude=True` keeps it off every serialization,
+    so `GET /v1/definitions` does not ship the founder's own hero volumes ("2.4% of 5,019") to
+    every browser that asks the registry for its labels. It stays beside the stat because that
+    is where each delta was measured (plan C.6), and `scripts/fingerprint.py` reads it off the
+    attribute -- a stat that says here how it departs from v1 is allowed to disagree with v1's
+    fingerprint; one that says nothing is a regression (ADR-062).
+    """
 
     @property
     def table(self) -> Table:

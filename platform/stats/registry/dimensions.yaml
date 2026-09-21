@@ -12,7 +12,15 @@
 #              number raw value; `buckets` are PRESENTATION ranges [low, high), never stored
 #              line   an action line (see below)
 #              string free text with a small vocabulary (stake label, hand class)
-#   ''         means "not applicable / unknown" (no flop dealt, hole cards not shown, no opener).
+#   value_labels
+#              what each enum value is CALLED on screen, one for every value declared. The
+#              value is the contract with the column and never changes for a reader's sake;
+#              the label is the reader's half, and it is complete so that no client has to
+#              guess at one (ADR-062).
+#   ''         means "not applicable / unknown", and not the same thing in every dimension
+#              that declares it: the ten of them say it seven different ways (before the flop,
+#              cards not shown, before the turn, nobody has raised yet, ...) -- which is why
+#              each spells its own out under `value_labels` instead of sharing one word.
 #   group_by   whether a report may use the dimension as its row axis. Numbers group by bucket.
 #
 # Action lines (type `line`) are the seat's OWN actions, one letter each, joined by '-':
@@ -31,6 +39,14 @@
   label: Site
   type: enum
   values: [pokerstars, ggpoker, wpn, ipoker, partypoker, winamax, '888']
+  value_labels:
+    pokerstars: PokerStars
+    ggpoker: GGPoker
+    wpn: WPN
+    ipoker: iPoker
+    partypoker: partypoker
+    winamax: Winamax
+    '888': '888poker'
   tables: [decisions, player_hands, stats_daily]
   description: The poker network the hand was played on.
 
@@ -48,6 +64,27 @@
   values: [holdem, shortdeck, omaha, omaha_hi_lo, omaha5, omaha6, courchevel, stud, stud_hi_lo,
            razz, draw5, badugi, triple_draw_27, single_draw_27, allin_or_fold, flipout, horse,
            eight_game, mixed, unknown]
+  value_labels:
+    holdem: Hold'em
+    shortdeck: Short deck
+    omaha: Omaha
+    omaha_hi_lo: Omaha hi-lo
+    omaha5: '5-card Omaha'
+    omaha6: '6-card Omaha'
+    courchevel: Courchevel
+    stud: Stud
+    stud_hi_lo: Stud hi-lo
+    razz: Razz
+    draw5: '5-card draw'
+    badugi: Badugi
+    triple_draw_27: '2-7 triple draw'
+    single_draw_27: '2-7 single draw'
+    allin_or_fold: All-in or fold
+    flipout: Flip-out
+    horse: HORSE
+    eight_game: '8-game'
+    mixed: Mixed game
+    unknown: Unknown
   tables: [decisions, player_hands, stats_daily]
   description: The poker variant.
 
@@ -55,6 +92,12 @@
   label: Format
   type: enum
   values: [cash, mtt, sng, spin, rush]
+  value_labels:
+    cash: Cash
+    mtt: MTT
+    sng: Sit and go
+    spin: Spin
+    rush: Fast-fold
   tables: [decisions, player_hands, stats_daily]
   description: Cash game, multi-table tournament, sit & go, spin (jackpot SNG) or fast-fold.
 
@@ -62,6 +105,18 @@
   label: Position
   type: enum
   values: [UTG, UTG1, UTG2, MP, MP1, HJ, CO, BTN, SB, BB, UNKNOWN]
+  value_labels:
+    UTG: UTG
+    UTG1: UTG+1
+    UTG2: UTG+2
+    MP: MP
+    MP1: MP+1
+    HJ: HJ
+    CO: CO
+    BTN: BTN
+    SB: SB
+    BB: BB
+    UNKNOWN: Unknown
   tables: [decisions, player_hands, stats_daily]
   description: The seat relative to the button.
 
@@ -71,9 +126,11 @@
   tables: [stats_daily]
   ops: [eq, in, prefix, like]
   description: >-
-    The seat's screen name as the site shows it; '' for an anonymized seat. On the rollup
-    only, so the pool can be grouped by player or a player looked up with cached stats; to
-    scope any report to one player, use `player_key` on the request instead.
+    The player's identity across hands: the site's own code, a colon, and the screen name
+    lower-cased ('pokerstars:someone'). Held on the daily rollup only, so the pool can be
+    grouped by player or one player looked up from cached statistics; '' for a seat the site
+    anonymizes. A filter here matches the whole key, site included, which is why finding a
+    player by the name a person types is its own route and not a prefix on this column.
 
 # ---- hand dimensions: on both fact tables ---------------------------------------------
 - code: players_dealt_in
@@ -87,14 +144,22 @@
   type: number
   tables: [decisions, player_hands]
   group_by: false
-  description: The big blind in the hand's currency.
+  description: The big blind in the hand's own money, or in chips for a tournament.
 
 - code: pot_type
   label: Pot type
   type: enum
   values: [limped, srp, 3bet, 4bet, 5bet_plus]
+  value_labels:
+    limped: Limped
+    srp: Single-raised
+    '3bet': '3-bet'
+    '4bet': '4-bet'
+    '5bet_plus': '5-bet or more'
   tables: [decisions, player_hands]
-  description: The preflop shape of the pot once preflop action is complete.
+  description: >-
+    How the pot was built preflop once the preflop action is over: limped, single-raised,
+    3-bet, 4-bet, or 5-bet and beyond. The same on every street of the hand.
 
 - code: hand_class
   label: Hole cards (class)
@@ -106,6 +171,11 @@
   label: Hole cards (shape)
   type: enum
   values: ['', pair, suited, offsuit]
+  value_labels:
+    '': Not shown
+    pair: Pocket pair
+    suited: Suited
+    offsuit: Offsuit
   tables: [decisions, player_hands]
   description: Pair, suited or offsuit; '' when the hole cards are unknown.
 
@@ -119,9 +189,29 @@
   values: ['', straight_flush, quads, full_house, flush, straight, set, trips, two_pair,
            overpair, top_pair, under_pair, second_pair, third_pair, weak_pair,
            ace_high, king_high, no_pair]
+  value_labels:
+    '': Preflop or not shown
+    straight_flush: Straight flush
+    quads: Four of a kind
+    full_house: Full house
+    flush: Flush
+    straight: Straight
+    set: Set
+    trips: Trips
+    two_pair: Two pair
+    overpair: Overpair
+    top_pair: Top pair
+    under_pair: Underpair
+    second_pair: Second pair
+    third_pair: Third pair
+    weak_pair: Weak pair
+    ace_high: Ace high
+    king_high: King high
+    no_pair: No pair
   tables: [decisions]
   description: >-
-    The made-hand class this seat held on this street, relative to the board; '' preflop and
+    The made-hand class this seat held on this street, read against the board rather than in
+    the absolute: a board that pairs itself does not give everyone a pair. '' preflop and
     wherever the hole cards are unknown.
 
 - code: hole_cards
@@ -135,6 +225,11 @@
   label: Flop suits
   type: enum
   values: ['', monotone, two_tone, rainbow]
+  value_labels:
+    '': Before the flop
+    monotone: Monotone
+    two_tone: Two-tone
+    rainbow: Rainbow
   tables: [decisions, player_hands]
   description: Suit pattern of the three flop cards; '' before the flop.
 
@@ -142,13 +237,35 @@
   label: Flop pairing
   type: enum
   values: ['', trips, paired, unpaired]
+  value_labels:
+    '': Before the flop
+    trips: Three of a kind on the board
+    paired: Paired
+    unpaired: Unpaired
   tables: [decisions, player_hands]
-  description: Whether the flop pairs; '' before the flop.
+  description: >-
+    Whether the flop holds three cards of one rank, two of one rank, or none alike;
+    '' before the flop.
 
 - code: flop_high_card
   label: Flop high card
   type: enum
   values: ['', '2', '3', '4', '5', '6', '7', '8', '9', T, J, Q, K, A]
+  value_labels:
+    '': Before the flop
+    '2': '2'
+    '3': '3'
+    '4': '4'
+    '5': '5'
+    '6': '6'
+    '7': '7'
+    '8': '8'
+    '9': '9'
+    T: T
+    J: J
+    Q: Q
+    K: K
+    A: A
   tables: [decisions, player_hands]
   description: The highest flop rank; '' before the flop.
 
@@ -156,8 +273,15 @@
   label: Flop connectedness
   type: enum
   values: ['', connected, semi_connected, disconnected]
+  value_labels:
+    '': Before the flop
+    connected: Connected
+    semi_connected: Semi-connected
+    disconnected: Disconnected
   tables: [decisions, player_hands]
-  description: Span of the flop ranks (2 or less, 4 or less, more); '' before the flop.
+  description: >-
+    How close the three flop ranks sit: connected when the highest minus the lowest is 2 or
+    less, semi-connected up to 4, disconnected beyond that; '' before the flop.
 
 - code: flop_span
   label: Flop rank span
@@ -170,8 +294,9 @@
   type: bool
   tables: [decisions, player_hands]
   description: >-
-    Acts last among the players still in the hand. Per decision on `decisions`; on the flop on
-    `player_hands`.
+    Acts last among the seats that act on the street: measured street by street on a
+    decision-grain report, and as of the flop on a hand-grain one, where a hand that never saw
+    a flop counts as 0 rather than as neither.
 
 - code: went_to_showdown
   label: Went to showdown
@@ -197,7 +322,10 @@
   type: number
   tables: [decisions, player_hands]
   group_by: false
-  description: Net won with all-in pots replaced by their equity share; equals net_won_bb otherwise.
+  description: >-
+    Net won, with an all-in pot replaced by its equity share wherever there was something to
+    adjust: chips still to be dealt, at least two contenders, and every one of their hands
+    shown. The amount actually won in every other hand, all-in or not.
 
 # ---- player_hands only: hand-grain facts ----------------------------------------------
 - code: did_vpip
@@ -281,6 +409,11 @@
   label: Street
   type: enum
   values: [preflop, flop, turn, river]
+  value_labels:
+    preflop: Preflop
+    flop: Flop
+    turn: Turn
+    river: River
   tables: [decisions]
   description: The street the decision is on.
 
@@ -295,13 +428,17 @@
   label: Preflop raises
   type: number
   tables: [decisions]
-  description: Raises before this decision on preflop; the hand's total on later streets.
+  description: >-
+    Raises made before this decision when the decision is preflop; the hand's preflop total on
+    later streets.
 
 - code: n_limpers
   label: Limpers
   type: number
   tables: [decisions]
-  description: Players who limped before this decision (preflop), or before the first raise.
+  description: >-
+    How many players limped before this decision; the hand's total on later streets. A limp is
+    a preflop call with no raise in front.
 
 - code: n_callers_before
   label: Callers before me
@@ -331,6 +468,19 @@
   label: Opener's position
   type: enum
   values: ['', UTG, UTG1, UTG2, MP, MP1, HJ, CO, BTN, SB, BB, UNKNOWN]
+  value_labels:
+    '': Nobody has raised yet
+    UTG: UTG
+    UTG1: UTG+1
+    UTG2: UTG+2
+    MP: MP
+    MP1: MP+1
+    HJ: HJ
+    CO: CO
+    BTN: BTN
+    SB: SB
+    BB: BB
+    UNKNOWN: Unknown
   tables: [decisions]
   description: The seat that made the first preflop raise; '' when nobody has raised yet.
 
@@ -338,6 +488,19 @@
   label: Last raiser's position
   type: enum
   values: ['', UTG, UTG1, UTG2, MP, MP1, HJ, CO, BTN, SB, BB, UNKNOWN]
+  value_labels:
+    '': No bet or raise yet
+    UTG: UTG
+    UTG1: UTG+1
+    UTG2: UTG+2
+    MP: MP
+    MP1: MP+1
+    HJ: HJ
+    CO: CO
+    BTN: BTN
+    SB: SB
+    BB: BB
+    UNKNOWN: Unknown
   tables: [decisions]
   description: The seat that made the most recent bet or raise on this street before this decision; '' when none.
 
@@ -357,8 +520,20 @@
   label: Facing
   type: enum
   values: [none, limp, bet, raise, 3bet, 4bet, 5bet_plus]
+  value_labels:
+    none: Nothing
+    limp: Limp
+    bet: Bet
+    raise: Raise
+    '3bet': '3-bet'
+    '4bet': '4-bet'
+    '5bet_plus': '5-bet or more'
   tables: [decisions]
-  description: What is in front of the seat at this decision (see the header of this file).
+  description: >-
+    What the seat has to answer at this decision. Preflop it counts the raising so far:
+    nothing, a limp, a raise, a 3-bet, a 4-bet, or a 5-bet and beyond. Postflop the same words
+    count the betting on this street: nothing, a bet, a raise, and '3bet' for anything past a
+    raise. Only 'none' means the same thing on both.
 
 - code: facing_is_cbet
   label: Facing a c-bet
@@ -394,8 +569,8 @@
   group_by: false
   description: >-
     This seat's own chips already in the pot before the decision, blinds and antes included.
-    Sum it, never count it. Added to net_won_bb it gives what the seat won from this point on,
-    which is the numerator of empirical EQR.
+    Sum it, never count it; added to what the seat finally won, it gives the chips won from
+    this decision onward, which is what the pool's empirical realization is measured from.
 
 - code: players_live
   label: Players live
@@ -431,32 +606,50 @@
   label: My line last street
   type: line
   tables: [decisions]
-  description: This seat's own action line on the previous street ('x', 'c', 'x-c', 'b-c'); '' preflop.
+  description: >-
+    This seat's own actions on the previous street, one letter each: f fold, x check, l limp (a preflop call with no raise in front), c call, b bet, r raise;
+    'x-c' is a check then a call, 'l-c' a limp then a call. '' preflop.
 
 - code: prev_street_faced
   label: Faced last street
   type: enum
   values: [none, limp, bet, raise, 3bet, 4bet, 5bet_plus]
+  value_labels:
+    none: Nothing
+    limp: Limp
+    bet: Bet
+    raise: Raise
+    '3bet': '3-bet'
+    '4bet': '4-bet'
+    '5bet_plus': '5-bet or more'
   tables: [decisions]
-  description: What the seat was facing at its last decision on the previous street; none preflop.
+  description: >-
+    What the seat had to answer at its last decision on the previous street; 'none' on preflop
+    rows, where there is no previous street.
 
 - code: preflop_line
   label: My preflop line
   type: line
   tables: [decisions]
-  description: This seat's own preflop actions so far ('r', 'l', 'c', 'l-c', 'r-c').
+  description: >-
+    This seat's own preflop actions in order, one letter each: f fold, x check, l limp (a preflop call with no raise in front), c call, b bet, r raise;
+    'l-c' is a limp then a call of a raise behind, 'x' a big blind checking a limped pot.
 
 - code: street_line
   label: My line this street
   type: line
   tables: [decisions]
-  description: This seat's own actions on this street before this decision; '' at the first.
+  description: >-
+    This seat's own actions on this street before this decision, one letter each:
+    f fold, x check, l limp (a preflop call with no raise in front), c call, b bet, r raise. '' at the seat's first decision on the street.
 
 - code: line_so_far
   label: My line so far
   type: line
   tables: [decisions]
-  description: Own actions per street joined by '/', up to this decision ('r/x-c/').
+  description: >-
+    This seat's own actions street by street, joined by '/': 'r/x-c/' is a preflop raise, a
+    flop check-call, and no turn action yet.
 
 - code: eff_stack_bb
   label: Effective stack (bb)
@@ -476,6 +669,21 @@
   label: Turn card
   type: enum
   values: ['', '2', '3', '4', '5', '6', '7', '8', '9', T, J, Q, K, A]
+  value_labels:
+    '': Before the turn
+    '2': '2'
+    '3': '3'
+    '4': '4'
+    '5': '5'
+    '6': '6'
+    '7': '7'
+    '8': '8'
+    '9': '9'
+    T: T
+    J: J
+    Q: Q
+    K: K
+    A: A
   tables: [decisions]
   description: The turn card's rank; '' before the turn.
 
@@ -495,6 +703,21 @@
   label: River card
   type: enum
   values: ['', '2', '3', '4', '5', '6', '7', '8', '9', T, J, Q, K, A]
+  value_labels:
+    '': Before the river
+    '2': '2'
+    '3': '3'
+    '4': '4'
+    '5': '5'
+    '6': '6'
+    '7': '7'
+    '8': '8'
+    '9': '9'
+    T: T
+    J: J
+    Q: Q
+    K: K
+    A: A
   tables: [decisions]
   description: The river card's rank; '' before the river.
 
@@ -533,6 +756,12 @@
   label: Action
   type: enum
   values: [fold, check, call, bet, raise]
+  value_labels:
+    fold: Fold
+    check: Check
+    call: Call
+    bet: Bet
+    raise: Raise
   tables: [decisions]
   description: What the seat did.
 

@@ -9,11 +9,12 @@
  * 9.07M pool hands, with cross-session opponent tracking "*possible (not yet built)*". This page is
  * that. It reads the pool only, and there is no hero equivalent — there cannot be.
  *
- * **The search does not use `GET /v1/pool/players`, and that is a finding, not a preference.**
- * That route matches the **start** of a `player_key`, and every key in the corpus is namespaced
- * `ggpoker:<name>` — so it answers "no such player" to every real opponent typed by name. The
- * search here is a substring over the same dimension through the ordinary report path; the
- * measurement and the reasoning are in `pool/stats.ts#searchPlayers`.
+ * **The search does not use the purpose-built route yet.** It could not: that route matched the
+ * **start** of a `player_key`, and every key in the corpus is namespaced `ggpoker:<name>`, so it
+ * answered "no such player" to every real opponent typed by name. ADR-062 rebuilt it as
+ * `POST /v1/pool/players`, which matches inside the name half and ranks the exact name first.
+ * Until this page moves onto it (plan step F.14) the search here stays a substring over the same
+ * dimension through the ordinary report path; the reasoning is in `pool/stats.ts#searchPlayers`.
  *
  * **A player report scopes; it never groups.** `player_key` is a `stats_daily`-only dimension, so
  * `group_by: ['player_key']` on a decision-grain report is a 400 by design; the dimension's own

@@ -27,8 +27,8 @@ from analysis.pool.realization import NodeRealization
 from analysis.pool.realization import realization as node_realization
 from analysis.pool.reconstruct import NodeEstimatedRange
 from analysis.pool.reconstruct import estimated_range as node_estimate
+from analysis.pool.service import PlayerMatches, PlayerSearch, pool_report, presets
 from analysis.pool.service import players as player_lookup
-from analysis.pool.service import pool_report, presets
 from api import cache, hand_query
 from api import hand_note_store as notes
 from api.deps import CurrentUserDep, SessionDep
@@ -43,7 +43,6 @@ from stats.service import Cache, validate_request
 
 router = APIRouter(prefix="/v1/pool", tags=["pool"], dependencies=[Depends(tenant_rate_limit)])
 
-Prefix = Annotated[str, Query(min_length=1, max_length=64)]
 Limit = Annotated[int, Query(ge=1, le=cohort_service.MAX_MEMBERS)]
 
 
@@ -175,10 +174,18 @@ async def pool_stats(
         raise _bad_request(exc) from exc
 
 
-@router.get("/players", response_model=ReportResult)
-def find_players(user: CurrentUserDep, prefix: Prefix, limit: Limit = 50) -> ReportResult:
-    """Pool players whose screen name starts with `prefix`, with headline stats."""
-    return player_lookup(prefix, user.tenant_id, limit=limit, cache=report_cache())
+@router.post("/players", response_model=PlayerMatches)
+def find_players(body: PlayerSearch, user: CurrentUserDep) -> PlayerMatches:
+    """Pool players whose screen name contains `body.name`, the exact one first, then busiest.
+
+    The name is part of a screen name, or a whole key pasted back (`<site>:<name>`); the match
+    is on the name half either way, and too short a name is a 400 that says so. A POST like
+    the other pool reads, so no access log ever holds a real screen name (ADR-062, ADR-058).
+    """
+    try:
+        return player_lookup(body.name, user.tenant_id, limit=body.limit)
+    except ReportError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.post("/node/frequencies", response_model=NodeFrequencies)
@@ -228,15 +235,9 @@ async def node_estimated_range_at(
     per-class rates really do produce the frequency tier 1 measured directly.
     """
     cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    asked = (body.node, body.prior, user.tenant_id)
     try:
-        return await run_in_threadpool(
-            node_estimate,
-            body.node,
-            body.prior,
-            user.tenant_id,
-            cohort=cohort,
-            cache=report_cache(),
-        )
+        return await run_in_threadpool(node_estimate, *asked, cohort=cohort, cache=report_cache())
     except ValueError as exc:
         raise _bad_request(exc) from exc
 

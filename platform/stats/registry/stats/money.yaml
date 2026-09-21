@@ -1,6 +1,10 @@
 # Money and volume: hand grain, sums over `marts.player_hands`.
 #
 # `per100` is 100 * numerator / denominator; `count` is the numerator alone.
+#
+# `ev_bb_per_100` is labelled "All-in adjusted bb/100" and not "EV bb/100" on purpose: "EV" in
+# this product already means a solver's expected value for a line, which is a different number
+# from an all-in adjusted result. One name per number (ADR-057 §5, ADR-062).
 
 - code: hands
   label: Hands
@@ -24,7 +28,7 @@
   description: Big blinds won per 100 hands.
 
 - code: ev_bb_per_100
-  label: EV bb/100
+  label: All-in adjusted bb/100
   category: money
   grain: hand
   format: per100

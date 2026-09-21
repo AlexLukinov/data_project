@@ -16,6 +16,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from analysis.pool.baselines import PopulationBaseline
+from analysis.pool.service import MAX_MATCHES, MIN_NAME
 from api.deps import CurrentUser, current_user
 from api.main import app
 from api.routers import hero as hero_router
@@ -123,11 +124,33 @@ async def test_pool_stats_read_the_population_only(client: AsyncClient, runner: 
     assert bad.status_code == 400 and "population dataset" in bad.text
 
 
-async def test_player_lookup_binds_the_prefix(client: AsyncClient, runner: FakeRunner) -> None:
-    res = await client.get("/v1/pool/players?prefix=vil&limit=5")
+async def test_player_lookup_matches_inside_the_name_and_says_how_many_matched(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    res = await client.post("/v1/pool/players", json={"name": "vil", "limit": 5})
     assert res.status_code == 200, res.text
-    assert res.json()["group_by"] == ["player_key"]
+    body = res.json()
+    assert body["group_by"] == ["player_key"] and body["matched"] == 1
+    assert body["matched_capped"] is False
     sql, params = runner.calls[-1]
-    assert "startsWith(s.player_key, {p0:String})" in sql and params["p0"] == "vil"
-    assert params["limit"] == 5
-    assert (await client.get("/v1/pool/players")).status_code == 422
+    assert "s.player_key LIKE {p0:String}" in sql and "startsWith" not in sql
+    assert params["p0"] == "%:%vil%", "anchored past the site, which no screen name is part of"
+    assert params["limit"] == MAX_MATCHES, "the ceiling is the search's, not the caller's"
+
+
+async def test_the_name_is_sent_in_a_body_so_no_access_log_can_hold_it() -> None:
+    """A screen name is personal data; a query string reaches every log on the way (ADR-058)."""
+    spec = app.openapi()["paths"]["/v1/pool/players"]
+    assert sorted(spec) == ["post"], "a GET would put the name in the request line"
+    assert "parameters" not in spec["post"], "and a query parameter would put it there too"
+
+
+async def test_a_lookup_too_short_to_answer_is_refused_in_a_sentence(
+    client: AsyncClient, runner: FakeRunner
+) -> None:
+    assert (await client.post("/v1/pool/players", json={})).status_code == 422
+    short = await client.post("/v1/pool/players", json={"name": "vi"})
+    assert short.status_code == 400 and f"at least {MIN_NAME} characters" in short.text
+    qualified = await client.post("/v1/pool/players", json={"name": "ggpoker:vi"})
+    assert qualified.status_code == 400, "the minimum is on the name, not on what was typed"
+    assert runner.calls == [], "nothing that wide should reach ClickHouse"

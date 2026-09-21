@@ -17,8 +17,9 @@
  *     `request.model_copy(update={'cohort': cohort})`, silently discarding whatever `cohort` the
  *     body carried. Send the saved cohort's id **or** an inline spec, never both — `run()` takes
  *     them as one argument so that is not expressible.
- *  3. **`GET /v1/pool/players` cannot serve a name a person types**, so the search here does not
- *     use it. See `searchPlayers` for the measurement and the reason.
+ *  3. **`POST /v1/pool/players` is the purpose-built route and it now works** (ADR-062). It could
+ *     not answer a typed name until then, which is why the search here still goes through the
+ *     ordinary report path; moving it over is plan step F.14. See `searchPlayers`.
  *  4. **A refused write is the server's sentence, not ours** (plan D.6b). A duplicate name is a 409
  *     whose detail names the cohort (`uq_cohorts_user_name`); a rule on an uncached stat is a 400 at
  *     *create* (`stats/query.py`), never at query time; an eleventh rule is a 422. Nothing here
@@ -101,8 +102,12 @@ export function poolRequest(request: ReportRequest, cohort?: CohortChoice | null
 /**
  * The report that finds a player by a fragment of their name.
  *
- * **Why not `GET /v1/pool/players`.** That route is the purpose-built one, and it cannot answer
- * this question: it compiles to `startsWith(player_key, …)`, but a `player_key` is **namespaced** —
+ * **Why not the purpose-built route.** It answers this question as of ADR-062; until then it could
+ * not, and this is the workaround that stood in for it. Moving the page onto `POST /v1/pool/players`
+ * is plan step F.14, and it deletes this function and `likeLiteral` with it.
+ *
+ * What was wrong with it, kept because it is why the dimension's own description changed: it
+ * compiled to `startsWith(player_key, …)`, but a `player_key` is **namespaced** —
  * every one of the 94,276 in the corpus reads `ggpoker:<name>`. So a prefix search for "Vill"
  * matches nothing, for any real opponent, and the page would answer "no such player" to every name
  * the founder typed — an assertion of absence that is not true, which is the §17 failure wearing

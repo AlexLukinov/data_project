@@ -9,9 +9,11 @@ in `scripts/v1_stats.py`), the v2 ones from `stats.service.run_report` -- the sa
 API uses -- with `hero_only` off so both sides measure every seat of a dataset, as the STATUS
 fingerprint does. Overall and by position, hero and population.
 
-Verdicts: a stat whose registry entry carries no `notes` must agree within rounding
-(MISMATCH otherwise); one with `notes` is expected to differ and is shown as `noted`. Stats
-new in v2 (no v1 counterpart) are listed at the end.
+Verdicts: a stat whose registry entry carries no `v1_parity` must agree within rounding
+(MISMATCH otherwise); one with `v1_parity` says there how its v2 definition departs from v1,
+so it is expected to differ and is shown as `noted`. Before ADR-062 the field read was
+`notes`, which now holds a caveat for a reader and says nothing about v1. Stats new in v2 (no
+v1 counterpart) are listed at the end.
 
 The v1 chain was dropped after `reports/parity_2026-09-09.md` (plan C.6). To run this again,
 restore it first: check out the v1 dbt models at commit `cab27e3`, create them empty with
@@ -201,7 +203,10 @@ def main(argv: list[str] | None = None) -> int:
     reg = registry()
     shared = [code for code in reg.stats if code in V1_STATS]
     new_codes = [code for code in reg.stats if code not in V1_STATS]
-    noted = {code for code in shared if reg.stats[code].notes}
+    # `v1_parity`, not `notes`: since ADR-062 `notes` is the caveat a reader sees and says
+    # nothing about v1, while `v1_parity` is exactly "this definition departs from v1, here is
+    # how much" -- which is the thing that makes a mismatch expected rather than a regression.
+    noted = {code for code in shared if reg.stats[code].v1_parity}
     overall = compare(shared, noted, by_position=False)
     by_position = compare(shared, noted, by_position=True)
     text = render(overall, by_position, new_codes)
