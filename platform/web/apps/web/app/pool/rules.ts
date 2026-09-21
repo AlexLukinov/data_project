@@ -15,7 +15,7 @@
  * it refuses, its sentence is shown, not ours.
  */
 
-import { describeApiError } from '../auth/api';
+import { describeApiError, validationMessages } from '../auth/api';
 import type { CohortOp, CohortRule, CohortSpec, Stat } from '../stats/api';
 
 /** `MAX_COHORT_RULES` in `stats/request.py`. */
@@ -81,31 +81,12 @@ export function draftProblems(name: string, rules: readonly RuleDraft[]): string
   return problems;
 }
 
-interface ValidationItem {
-  loc?: unknown;
-  msg?: unknown;
-}
-
-/** FastAPI's 422 `detail` is a list of `{loc, msg}`; each becomes "where: what", in the server's words. */
-function validationMessages(error: unknown): string[] {
-  if (typeof error !== 'object' || error === null) return [];
-  const data = (error as { data?: unknown }).data;
-  if (typeof data !== 'object' || data === null) return [];
-  const detail = (data as { detail?: unknown }).detail;
-  if (!Array.isArray(detail)) return [];
-  return (detail as unknown[]).map((raw) => {
-    const item = (typeof raw === 'object' && raw !== null ? raw : {}) as ValidationItem;
-    const where = Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '';
-    const what = typeof item.msg === 'string' ? item.msg : 'invalid';
-    return where === '' ? what : `${where}: ${what}`;
-  });
-}
-
 /**
  * One sentence for a refused save, in the server's words wherever it has any: a duplicate name is
  * its 409 ("a cohort named 'regs' already exists"), a rule on an uncached stat is its 400 at
- * create, and an eleventh rule is its 422 — whose detail is a list, which `describeApiError` alone
- * cannot read and would have reported as a bare status.
+ * create, and an eleventh rule is its 422, whose detail is a list of `{loc, msg}`. That list is
+ * read by the auth module's `validationMessages` — this file used to carry a copy of it, which is
+ * one drift away from the form quoting a different server than every other screen does.
  */
 export function describeCohortError(error: unknown): string {
   const messages = validationMessages(error);

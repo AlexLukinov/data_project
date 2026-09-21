@@ -15,7 +15,9 @@ import { computed, ref, watch } from 'vue';
 import type { RuleDraft } from '~/pool/rules';
 import { MAX_RULES, NAME_MAX, OPS, draftProblems, draftsOf, emptyRule, splitByCached, toSpec } from '~/pool/rules';
 import type { CohortIn } from '~/pool/stats';
+import { NO_STATS_FOR_RULES } from '~/pool/words';
 import type { CohortOp, Stat } from '~/stats/api';
+import { statEntry } from '~/stats/vocabulary';
 
 const props = defineProps<{
   stats: readonly Stat[];
@@ -71,6 +73,22 @@ function unknown(code: string): boolean {
   return code !== '' && !props.stats.some((stat) => stat.code === code);
 }
 
+/**
+ * What the chosen stat counts, and the band it usually falls in.
+ *
+ * A `<option>` cannot carry a description, so the select alone asked the founder to pick a
+ * threshold for a word — and the typical band `statEntry` appends is precisely what a threshold is
+ * chosen against: "Usually 18–28%" is the sentence that makes 25 mean something. Empty while the
+ * row names no stat at all, which is what an empty registry leaves behind.
+ */
+function ruleNote(code: string): string {
+  if (code === '') return '';
+  return statEntry(
+    props.stats.find((stat) => stat.code === code),
+    code,
+  ).definition;
+}
+
 function submit(): void {
   if (props.busy) return;
   if (problems.value.length > 0) {
@@ -98,7 +116,11 @@ function submit(): void {
 
     <p class="text-xs text-zinc-500">
       Every rule must hold for a player to be in the cohort. A stat that is not answered from the
-      daily rollup cannot define one, so it is listed below but cannot be chosen.
+      daily statistics cannot define one, so it is listed below but cannot be chosen.
+    </p>
+
+    <p v-if="props.stats.length === 0" role="alert" data-testid="cohort-no-stats" class="text-xs text-amber-700 dark:text-amber-400">
+      {{ NO_STATS_FOR_RULES }}
     </p>
 
     <ul class="space-y-2" data-testid="cohort-rules">
@@ -134,6 +156,8 @@ function submit(): void {
         />
 
         <button type="button" data-testid="rule-remove" class="text-xs underline underline-offset-2" @click="removeRule(index)">Remove</button>
+
+        <p v-if="ruleNote(rule.stat)" class="basis-full text-xs text-zinc-500" :data-testid="`rule-note-${index}`">{{ ruleNote(rule.stat) }}</p>
       </li>
     </ul>
 

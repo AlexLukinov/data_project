@@ -35,6 +35,14 @@ const { data, error, status } = await useAsyncData(
 
 const dates = computed(() => ({ from: filter.dateFrom, to: filter.dateTo }));
 const leaks = computed(() => data.value?.leaks ?? []);
+
+/**
+ * Ask for the registry again. The store turns the failure back into `definitions.error`, which is
+ * the sentence already on screen, so there is nothing here to rethrow into an unhandled rejection.
+ */
+function retryDefinitions(): void {
+  void definitions.load().catch(() => undefined);
+}
 </script>
 
 <template>
@@ -56,8 +64,13 @@ const leaks = computed(() => data.value?.leaks ?? []);
       <p class="text-xs text-zinc-500">These dates travel with the link into the hands.</p>
     </div>
 
+    <p v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline" data-testid="definitions-retry" @click="retryDefinitions">Try again</button>
+    </p>
+
     <p v-if="error" role="alert" data-testid="leaks-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(error) }}</p>
-    <p v-else-if="status === 'pending'" class="text-sm text-zinc-500">Comparing you with the field…</p>
+    <p v-else-if="status === 'pending'" role="status" data-testid="leaks-loading" class="text-sm text-zinc-500">Comparing you with the field…</p>
     <template v-else>
       <LeakTable :leaks="leaks" :dates="dates" />
       <p v-if="data" class="text-sm text-zinc-500" data-testid="leaks-floor">

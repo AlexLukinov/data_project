@@ -13,7 +13,7 @@ import { clausesToNode } from '../filter/clause';
 import { fromQuery } from '../filter/url';
 import type { Dimension, Stat } from '../stats/api';
 import type { Leak } from './api';
-import { handsQuery, isDrillable, leakDrill, ranked } from './leaks';
+import { handsQuery, isDrillable, leakDrill, leakRows, ranked } from './leaks';
 
 function dim(code: string, label: string, type: Dimension['type'], tables: Dimension['tables'], values: string[] = []): Dimension {
   return { code, label, type, tables, description: '', values, ops: null, group_by: true, buckets: {}, allowed_ops: type === 'bool' ? ['eq', 'ne'] : ['eq', 'in', 'ne', 'not_in'] };
@@ -152,5 +152,51 @@ describe('ranked', () => {
     const leaks = [leak('a', 'A', { score: 10 }), leak('b', 'B', { score: 90 }), leak('c', 'C', { score: 50 })];
     expect(ranked(leaks).map((l) => l.code)).toEqual(['b', 'c', 'a']);
     expect(leaks.map((l) => l.code)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('leakRows', () => {
+  const STATS: ReadonlyMap<string, Stat> = new Map([
+    ['fold_to_cbet_flop', { ...FOLD_TO_CBET, description: 'Folded facing the preflop aggressor’s flop bet.', typical: [40, 55] } as Stat],
+    ['vpip', VPIP],
+  ]);
+
+  it('explains a leak in the registry’s own words, which the response does not carry', () => {
+    // `/v1/hero/leaks` sends a label and no description at all, so the sentence has to be looked
+    // up against the registry this session loaded.
+    const rows = leakRows([leak('fold_to_cbet_flop', 'Fold to c-bet flop')], STATS, DIMS);
+    expect(rows[0]!.term.term).toBe('Fold to c-bet flop');
+    expect(rows[0]!.term.definition).toContain('Folded facing the preflop aggressor');
+    expect(rows[0]!.term.definition).toContain('Usually 40–55%.');
+  });
+
+  it('still names a stat the registry does not serve, and says it is unknown', () => {
+    const rows = leakRows([leak('ghost', 'Ghost %')], STATS, DIMS);
+    expect(rows[0]!.term.term).toBe('Ghost %');
+    expect(rows[0]!.term.definition).toContain('not in the registry');
+    expect(rows[0]!.drill.blocked).not.toBe('');
+    expect(rows[0]!.spotQuery).toBeNull();
+  });
+
+  it('reads the category rather than printing the code the API sends', () => {
+    const rows = leakRows([leak('fold_to_cbet_flop', 'Fold to c-bet flop', { category: 'preflop' })], STATS, DIMS);
+    expect(rows[0]!.category).toBe('Preflop');
+  });
+
+  it('carries the dates into both doors, so a leak and its hands answer the same question', () => {
+    const rows = leakRows([leak('fold_to_cbet_flop', 'Fold to c-bet flop')], STATS, DIMS, { from: '2026-01-01' });
+    expect(rows[0]!.spotQuery!.from).toBe('2026-01-01');
+    expect(rows[0]!.takenQuery!.from).toBe('2026-01-01');
+  });
+
+  it('offers no door where the leak cannot be opened, worst leak first', () => {
+    const rows = leakRows(
+      [leak('vpip', 'VPIP', { score: 10 }), leak('fold_to_cbet_flop', 'Fold to c-bet flop', { score: 90 })],
+      STATS,
+      DIMS,
+    );
+    expect(rows.map((row) => row.leak.code)).toEqual(['fold_to_cbet_flop', 'vpip']);
+    expect(rows[1]!.spotQuery).toBeNull();
+    expect(rows[1]!.takenQuery).toBeNull();
   });
 });

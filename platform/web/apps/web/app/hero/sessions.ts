@@ -16,6 +16,9 @@
  * make the same eleven hands "enough" on this screen and "not enough" on every other.
  */
 
+import type { Dimension, Stat } from '../stats/api';
+import type { TermEntry } from '../stats/vocabulary';
+import { dimensionEntry, statEntry } from '../stats/vocabulary';
 import type { Session, SessionsResult } from './api';
 
 /**
@@ -50,7 +53,7 @@ export interface SessionRow {
   /** Whether the sitting was won, lost, or exactly flat — for colour, from an exact number. */
   sense: 'good' | 'bad' | '';
   thin: boolean;
-  /** Why the rate is missing, for the title attribute and the screen reader. */
+  /** Why the rate is missing — the sentence `thinRateTerm` puts behind the word on the row. */
   note: string;
   /** `ggpoker · NL10`, or both lists joined where a sitting spanned more than one. */
   where: string;
@@ -111,7 +114,7 @@ export function sessionRow(session: Session): SessionRow {
     sense: session.net_bb > 0 ? 'good' : session.net_bb < 0 ? 'bad' : '',
     thin,
     note: thin
-      ? `${session.hands} hands is too few for a per-100 rate to mean anything — the big blinds beside it are exact`
+      ? `${session.hands} hands is too few for a per-100 rate to mean anything — the big blinds beside it are exact.`
       : '',
     where: where(session),
   };
@@ -132,6 +135,44 @@ export interface SessionTotals {
   winningText: string;
   /** The gap the split used, worded, because it decides what a "session" even is. */
   gapText: string;
+}
+
+/** The three money columns, each explained by the registry entry it is a total of (ADR-057). */
+export interface SessionHeaders {
+  net: TermEntry;
+  ev: TermEntry;
+  rate: TermEntry;
+}
+
+/** The codes behind the three columns: two sums over `player_hands`, and the rate itself. */
+const NET_CODE = 'net_won_bb';
+const EV_CODE = 'ev_won_bb';
+const RATE_CODE = 'bb_per_100';
+
+/**
+ * What `bb`, `EV bb` and `bb/100` mean, in the registry's own words.
+ *
+ * The three headings were bare abbreviations with nothing behind them, and the middle one is the
+ * app's worst ambiguity: "EV" here is the **all-in adjusted** total, while the poker glossary's
+ * EV is a solver's. Naming the dimension it sums (`ev_won_bb`, "All-in adjusted won (bb)") settles
+ * which of the two a reader is looking at without renaming the column they already know.
+ */
+export function sessionHeaders(stats: readonly Stat[], dims: ReadonlyMap<string, Dimension>): SessionHeaders {
+  return {
+    net: dimensionEntry(dims.get(NET_CODE), NET_CODE),
+    ev: dimensionEntry(dims.get(EV_CODE), EV_CODE),
+    rate: statEntry(stats.find((stat) => stat.code === RATE_CODE), RATE_CODE),
+  };
+}
+
+/**
+ * Why a sitting's rate is missing, as a word that can be hovered, tabbed to and tapped.
+ *
+ * The reason was on the cell's `title`, which is a mouse affordance on an element no keyboard can
+ * reach — so the one reader most likely to misread `—` as "nothing happened" never saw it.
+ */
+export function thinRateTerm(note: string): TermEntry {
+  return { term: 'too few hands', definition: note };
 }
 
 /**

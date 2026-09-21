@@ -32,7 +32,7 @@ export type SeriesKey = 'net' | 'ev' | 'showdown' | 'nonShowdown';
 export interface SeriesSpec {
   key: SeriesKey;
   label: string;
-  /** Plain English, for the legend's title and the screen reader. */
+  /** Plain English, one sentence, shown on the legend button's own tip and read to a screen reader. */
   description: string;
   /**
    * A dash pattern, `''` for a solid line. Identity is never colour alone (the palette clears
@@ -49,10 +49,10 @@ export interface SeriesSpec {
  * whatever is hidden — so toggling a line never repaints the ones that remain.
  */
 export const SERIES: readonly SeriesSpec[] = [
-  { key: 'net', label: 'Actual', description: 'Big blinds actually won, running total', dash: '', width: 2 },
-  { key: 'ev', label: 'EV', description: 'All-in adjusted: what the hands were worth when the money went in', dash: '6 4', width: 2 },
-  { key: 'showdown', label: 'Showdown', description: 'The part of the actual line won at showdown', dash: '1 4', width: 1.5 },
-  { key: 'nonShowdown', label: 'Non-showdown', description: 'The part won without a showdown — bets that took the pot', dash: '1 4', width: 1.5 },
+  { key: 'net', label: 'Actual', description: 'Big blinds the pots actually paid, as a running total.', dash: '', width: 2 },
+  { key: 'ev', label: 'All-in adjusted', description: 'What the hands were worth when the money went in all-in, as a running total.', dash: '6 4', width: 2 },
+  { key: 'showdown', label: 'Showdown', description: 'The part of the actual line won at showdown.', dash: '1 4', width: 1.5 },
+  { key: 'nonShowdown', label: 'Non-showdown', description: 'The part won without a showdown — bets that took the pot.', dash: '1 4', width: 1.5 },
 ];
 
 /** The drawing box, in viewBox units. Width is nominal; the SVG scales to its container. */

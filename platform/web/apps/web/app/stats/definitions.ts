@@ -16,6 +16,7 @@
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
 
+import { describeApiError } from '../auth/api';
 import type { Dimension, Stat, StatsApi } from './api';
 import type { GroupedDimensions } from './families';
 import { groupByFamily } from './families';
@@ -51,7 +52,13 @@ export function createDefinitions(api: StatsApi): Definitions {
       status.value = 'ready';
     } catch (cause) {
       status.value = 'error';
-      error.value = 'The stat registry could not be loaded, so the situation builder has no vocabulary.';
+      // The reason belongs in the same string: every screen that shows this shows only this, so
+      // without it the one sentence a stopped API earns is "could not be loaded".
+      //
+      // It names no control, because every page that awaits the registry renders this one sentence
+      // verbatim and most of them — My game, Leaks, a hand, the player list — have no situation
+      // builder to blame. What the loss costs is the same on all of them: the words.
+      error.value = `The stat registry could not be loaded, so nothing on this page can be named or explained. ${describeApiError(cause)}`;
       inflight = null;
       throw cause;
     }

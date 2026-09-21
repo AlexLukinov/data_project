@@ -105,9 +105,11 @@ describe('describeStat', () => {
     expect(counts?.detail).toBe('the sum of Net won (bb), divided by the number of rows');
   });
 
-  it('shows the typical band as a band, never as a gate', () => {
+  /* The unit is F.12c's: "between 0 and 10" beside a percentage band reads as a percentage, and
+     bb/100 is the one stat on this panel where being out by a factor is a whole year's winrate. */
+  it('shows the typical band as a band, never as a gate, and in the stat’s own unit', () => {
     expect(describeStat(FOLD_TO_CBET, DIMS).find((l) => l.term === 'Typically')?.detail).toBe('between 40% and 55%');
-    expect(describeStat(RATE, DIMS).find((l) => l.term === 'Typically')?.detail).toBe('between 0 and 10');
+    expect(describeStat(RATE, DIMS).find((l) => l.term === 'Typically')?.detail).toBe('between 0 and 10 bb/100');
   });
 
   it('refuses to imply a direction the registry does not commit to', () => {
@@ -127,16 +129,27 @@ describe('describeStat', () => {
 });
 
 describe('describeDimension', () => {
-  it('lists the values, wording the empty one', () => {
+  /* The values go through `stats/vocabulary.ts` now (ADR-057): this panel is where someone comes to
+     find out what `5bet_plus` means, and `'' (not applicable)` answered half in code, half in words. */
+  it('lists the values in the words the rest of the app reads them in', () => {
     const values = describeDimension(dim({ code: 'opener_position', type: 'enum', values: ['', 'UTG', 'BTN'] })).find((l) => l.term === 'Values');
-    expect(values?.detail).toBe("'' (not applicable), UTG, BTN");
+    expect(values?.detail).toBe('not applicable, UTG, BTN');
+    const facing = describeDimension(dim({ code: 'facing', type: 'enum', values: ['raise', '5bet_plus'] })).find((l) => l.term === 'Values');
+    expect(facing?.detail).toBe('raise, 5bet+');
   });
 
   it('says buckets are half-open, which is the trap they carry', () => {
     expect(describeDimension(STACK).find((l) => l.term === 'Grouped into')?.detail).toContain('half-open');
   });
 
-  it('names the tables that hold it, which is what decides a stat’s grain', () => {
+  it('prints the bounds behind a bucket name, which is the part the name hides', () => {
+    const sizing = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37], pot: [0.9, 1.1] } });
+    expect(describeDimension(sizing).find((l) => l.term === 'Grouped into')?.detail).toContain('small (under 0.37 of the pot)');
+  });
+
+  it('names the tables that hold it in the words the screen uses, not the engine’s', () => {
     expect(describeDimension(FACING).find((l) => l.term === 'Held on')?.detail).toBe('decisions');
+    const position = dim({ code: 'position', type: 'enum', tables: ['player_hands', 'stats_daily'] });
+    expect(describeDimension(position).find((l) => l.term === 'Held on')?.detail).toBe('hands and the daily statistics');
   });
 });

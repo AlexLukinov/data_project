@@ -21,6 +21,15 @@ export interface PathedFile {
 
 const HIDDEN = /^\./;
 
+/**
+ * What both screens that read a drop — Upload hand histories and Import ranges — say when the
+ * browser will not hand the bytes over. The thrown message is the browser's own ("The requested
+ * file could not be read, typically due to permission problems"), which names nothing the reader
+ * can act on, while both screens carry the same two pick links right above the sentence.
+ */
+export const UNREADABLE_DROP =
+  'Those files could not be read. One may have moved since it was chosen, or the browser refused to open it — choose files or a folder again with the links above.';
+
 function fileOf(entry: EntryLike): Promise<File> {
   return new Promise((resolve, reject) => entry.file!(resolve, reject));
 }
@@ -64,7 +73,10 @@ export function pickedFiles(list: FileList): PathedFile[] {
     .map((file) => ({ path: file.webkitRelativePath || file.name, file }));
 }
 
-/** Read the texts; a file that cannot be read becomes an empty text the importer rejects. */
+/**
+ * Read the texts. One file the browser refuses fails the whole read — there is no half-read
+ * folder to review — so every caller catches it and says `UNREADABLE_DROP`.
+ */
 export async function readImportFiles(files: readonly PathedFile[]): Promise<ImportFile[]> {
   return Promise.all(files.map(async ({ path, file }) => ({ name: path, text: await file.text() })));
 }

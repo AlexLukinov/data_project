@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Dimension, Stat } from '../stats/api';
 import type { Session, SessionsResult } from './api';
-import { THIN_HANDS, duration, sessionRow, sessionRows, sessionTotals, when } from './sessions';
+import { THIN_HANDS, duration, sessionHeaders, sessionRow, sessionRows, sessionTotals, thinRateTerm, when } from './sessions';
 
 function session(over: Partial<Session> = {}): Session {
   return {
@@ -132,5 +133,73 @@ describe('sessionTotals', () => {
 
   it('has no share to report when nothing was played', () => {
     expect(sessionTotals({ ...result, sessions: [] }).winningText).toBe('—');
+  });
+});
+
+describe('sessionHeaders', () => {
+  /** Copied verbatim from `stats/registry/dimensions.yaml` and `stats/registry/stats/money.yaml`. */
+  const DIMS: ReadonlyMap<string, Dimension> = new Map([
+    [
+      'net_won_bb',
+      {
+        code: 'net_won_bb',
+        label: 'Net won (bb)',
+        type: 'number',
+        tables: ['decisions', 'player_hands'],
+        description: 'Chips won minus chips put in, in big blinds. Sum it, never count it.',
+        values: [],
+        ops: null,
+        group_by: false,
+        buckets: {},
+        allowed_ops: ['lt', 'gt'],
+      },
+    ],
+    [
+      'ev_won_bb',
+      {
+        code: 'ev_won_bb',
+        label: 'All-in adjusted won (bb)',
+        type: 'number',
+        tables: ['decisions', 'player_hands'],
+        description: 'Net won with all-in pots replaced by their equity share; equals net_won_bb otherwise.',
+        values: [],
+        ops: null,
+        group_by: false,
+        buckets: {},
+        allowed_ops: ['lt', 'gt'],
+      },
+    ],
+  ]);
+
+  const STATS: Stat[] = [
+    { code: 'bb_per_100', label: 'bb/100', category: 'money', grain: 'hand', format: 'per100', description: 'Big blinds won per 100 hands.', typical: [0, 10], cached: true },
+  ];
+
+  it('names the three money columns from the registry, not from the abbreviations on screen', () => {
+    const headers = sessionHeaders(STATS, DIMS);
+    expect(headers.net.term).toBe('Net won (bb)');
+    expect(headers.rate.term).toBe('bb/100');
+    expect(headers.rate.definition).toContain('Big blinds won per 100 hands.');
+  });
+
+  it('settles which EV the middle column means, because the app has two', () => {
+    // The glossary's EV is a solver's; this one is the all-in adjusted total. A column headed
+    // "EV bb" with nothing behind it cannot tell a reader which of the two they are looking at.
+    expect(sessionHeaders(STATS, DIMS).ev.term).toBe('All-in adjusted won (bb)');
+  });
+
+  it('reads even when the registry did not load, rather than throwing inside a table head', () => {
+    const headers = sessionHeaders([], new Map());
+    expect(headers.net.term).toBe('net_won_bb');
+    expect(headers.rate.definition).toContain('not in the registry');
+  });
+});
+
+describe('thinRateTerm', () => {
+  it('puts the reason a rate is missing behind a word, not behind a mouse-only title', () => {
+    const row = sessionRow(session({ hands: 11, bb_per_100: -131.82 }));
+    const term = thinRateTerm(row.note);
+    expect(term.term).toBe('too few hands');
+    expect(term.definition).toContain('11 hands is too few');
   });
 });

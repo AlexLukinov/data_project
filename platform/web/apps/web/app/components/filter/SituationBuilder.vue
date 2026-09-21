@@ -7,10 +7,17 @@
  * name, and anything the registry grows that nobody has classified yet still appears, under
  * "Other". The output is the shared filter store's clause list — this component owns no state
  * of its own beyond which family is open and what has been typed in the search box.
+ *
+ * Each column's own sentence rides on its button through `RegistryTerm`'s trigger slot (ADR-057):
+ * the button stays the button — same testid, same click — and only gains an explanation that a
+ * keyboard and a finger can reach, which the `title` it replaces never was. The tables behind a
+ * column are named the way the screen names them ("hands", "decisions"), not as `player_hands`.
  */
 import { computed, ref } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { Dimension } from '~/stats/api';
+import { dimensionEntry } from '~/stats/vocabulary';
 import { useDefinitionsStore } from '~/stores/definitions';
 import { useFilterStore } from '~/stores/filter';
 import ClauseRow from './ClauseRow.vue';
@@ -90,18 +97,20 @@ function add(dim: Dimension): void {
             <span class="ml-auto text-xs text-zinc-500">{{ group.dimensions.length }}</span>
           </button>
           <div v-if="isOpen(group.name)" class="flex flex-wrap gap-1 px-3 pb-3">
-            <button
-              v-for="dim in group.dimensions"
-              :key="dim.code"
-              type="button"
-              :title="`${dim.description} · on ${dim.tables.join(', ')}`"
-              :data-testid="`add-${dim.code}`"
-              class="rounded border px-2 py-0.5 text-xs"
-              :class="used.has(dim.code) ? 'border-zinc-900 dark:border-zinc-100' : 'border-zinc-300 dark:border-zinc-700'"
-              @click="add(dim)"
-            >
-              {{ dim.label }}
-            </button>
+            <RegistryTerm v-for="dim in group.dimensions" :key="dim.code" :entry="dimensionEntry(dim, dim.code)">
+              <template #default="{ describedby }">
+                <button
+                  type="button"
+                  :aria-describedby="describedby"
+                  :data-testid="`add-${dim.code}`"
+                  class="rounded border px-2 py-0.5 text-xs"
+                  :class="used.has(dim.code) ? 'border-zinc-900 dark:border-zinc-100' : 'border-zinc-300 dark:border-zinc-700'"
+                  @click="add(dim)"
+                >
+                  {{ dim.label }}
+                </button>
+              </template>
+            </RegistryTerm>
           </div>
         </div>
       </div>

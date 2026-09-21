@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Dimension, Stat } from '../stats/api';
-import { TABLE_FOR_GRAIN, columnProblems, fits, groupByCategory, groupableDimensions, keepFitting, narrowByGroupBy, usableStats } from './columns';
+import { TABLE_FOR_GRAIN, columnProblems, fits, groupByCategory, groupableDimensions, hiddenStatsWords, keepFitting, narrowByGroupBy, noStatsWords, usableStats } from './columns';
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
   return {
@@ -128,5 +128,50 @@ describe('groupByCategory', () => {
     const groups = groupByCategory(STATS);
     expect(groups.map((g) => g.category)).toEqual(['preflop', 'postflop', 'money']);
     expect(groups[0]!.stats.map((s) => s.code)).toEqual(['vpip', 'threebet']);
+  });
+
+  it('spells the four headings the way a tip spells them, from one list', () => {
+    expect(groupByCategory(STATS).map((g) => g.label)).toEqual(['Preflop', 'Postflop', 'Money']);
+  });
+});
+
+/* Three reasons used to share one sentence, and the one that mattered was the first: with the
+   registry unread the picker is empty for a reason that has nothing to do with the situation, and
+   it blamed the situation anyway (F.12c, ADR-057). */
+describe('noStatsWords', () => {
+  it('blames the registry when the registry is what did not arrive', () => {
+    const words = noStatsWords({ loaded: false, search: '', tables: [] });
+    expect(words).toContain('registry did not load');
+    expect(words).not.toContain('situation');
+  });
+
+  it('names the search that matched nothing, and how to undo it', () => {
+    const words = noStatsWords({ loaded: true, search: 'squeez', tables: ALL });
+    expect(words).toContain('No stat matches “squeez”');
+    expect(words).toContain('Clear the search box');
+  });
+
+  it('blames the situation only when the situation is what is left', () => {
+    const words = noStatsWords({ loaded: true, search: '', tables: ['decisions'] });
+    expect(words).toContain('answered on decisions');
+    expect(words).toContain('Remove a condition or a row grouping');
+  });
+
+  it('says plainly that no single table is left, rather than naming none', () => {
+    const words = noStatsWords({ loaded: true, search: '', tables: [] });
+    expect(words).toContain('no single table');
+    expect(words).not.toContain('answered on .');
+  });
+});
+
+describe('hiddenStatsWords', () => {
+  it('counts in the singular when one stat is hidden, and names where the rest are counted', () => {
+    expect(hiddenStatsWords(1, ['decisions'])).toContain('1 stat hidden');
+    expect(hiddenStatsWords(12, ['player_hands', 'stats_daily'])).toContain('12 stats hidden');
+    expect(hiddenStatsWords(12, ['player_hands', 'stats_daily'])).toContain('hands and the daily statistics');
+  });
+
+  it('says “no single table” rather than trailing off when nothing is left', () => {
+    expect(hiddenStatsWords(40, [])).toContain('no single table');
   });
 });

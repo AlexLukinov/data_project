@@ -16,9 +16,13 @@ import { computed } from 'vue';
 import { describeApiError } from '~/auth/api';
 import { useDefinitionsStore } from '~/stores/definitions';
 import { useFilterStore } from '~/stores/filter';
+import EmptyState from '~/components/reports/EmptyState.vue';
 import FilterBar from '~/components/filter/FilterBar.vue';
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
+import { handsEmptyView } from '~/hands/emptyState';
 import { createHandNotesApi } from '~/hands/notes';
 import { unsearchableReason } from '~/hands/searchable';
+import { dimensionEntry } from '~/stats/vocabulary';
 
 const api = useHands();
 const notesApi = createHandNotesApi(useApi());
@@ -40,10 +44,31 @@ const tagChoices = computed(() => {
   return tag.value !== '' && !known.includes(tag.value) ? [tag.value, ...known] : known;
 });
 
-function setTag(event: Event): void {
-  const next = (event.target as HTMLSelectElement).value;
+function chooseTag(next: string): void {
   void router.replace({ query: { ...route.query, tag: next === '' ? undefined : next } });
 }
+
+function setTag(event: Event): void {
+  chooseTag((event.target as HTMLSelectElement).value);
+}
+
+/** The registry retried where the reader is, since a page with no vocabulary can do nothing. */
+function loadDefinitions(): void {
+  // The failure is already on screen as `definitions.error`; a second copy of it would say the
+  // same thing twice.
+  void definitions.load().catch(() => undefined);
+}
+
+/**
+ * The four columns the registry names. The header used to read "stake · seat · cards · bb" —
+ * four words of our own for four entries that already have a label and a sentence (ADR-057).
+ */
+const columns = computed(() => ({
+  stake: dimensionEntry(definitions.byCode.get('stake_level'), 'stake_level'),
+  seat: dimensionEntry(definitions.byCode.get('position'), 'position'),
+  cards: dimensionEntry(definitions.byCode.get('hole_cards'), 'hole_cards'),
+  won: dimensionEntry(definitions.byCode.get('net_won_bb'), 'net_won_bb'),
+}));
 
 /** Why this situation cannot be asked of a hand list, if it cannot (plan D.7). */
 const unsearchable = computed(() => unsearchableReason(filter.clauses, definitions.byCode));
@@ -81,6 +106,30 @@ const rows = computed(() => data.value ?? []);
 /** The endpoints answer with a bare array, so a full page is the only sign there are more. */
 const truncated = computed(() => rows.value.length === limit);
 
+/** What an empty list is for, why it is empty and the ways out — worded in `hands/emptyState`. */
+const empty = computed(() =>
+  handsEmptyView({
+    dataset: filter.dataset,
+    sentence: filter.sentence,
+    // Only a complete clause narrows the list; an incomplete one is `filter-problem`'s business.
+    hasClauses: filter.active,
+    dateFrom: filter.dateFrom,
+    dateTo: filter.dateTo,
+    tag: tag.value,
+  }),
+);
+
+/** Each way out belongs to whoever holds the narrowing: the store, or this page's own `?tag=`. */
+function widen(action: string): void {
+  if (action === 'clear-situation') filter.clear();
+  if (action === 'clear-dates') {
+    filter.dateFrom = '';
+    filter.dateTo = '';
+  }
+  if (action === 'clear-tag') chooseTag('');
+  if (action === 'other-dataset') filter.dataset = filter.dataset === 'hero' ? 'population' : 'hero';
+}
+
 function day(iso: string): string {
   return iso.slice(0, 16).replace('T', ' ');
 }
@@ -92,6 +141,11 @@ function day(iso: string): string {
       <h1 class="text-2xl font-semibold">Hands</h1>
       <NuxtLink to="/hands/paste" data-testid="hands-paste-link" class="ml-auto rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900">Paste a hand</NuxtLink>
     </div>
+
+    <p v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+      {{ definitions.error }}
+      <button type="button" class="underline" data-testid="definitions-retry" @click="loadDefinitions">Try again</button>
+    </p>
 
     <FilterBar />
 
@@ -110,21 +164,19 @@ function day(iso: string): string {
     <p v-if="unsearchable" role="status" data-testid="hands-unsearchable" class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">{{ unsearchable }}</p>
     <p v-else-if="error" role="alert" data-testid="hands-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(error) }}</p>
     <p v-else-if="status === 'pending'" class="text-sm text-zinc-500" data-testid="hands-loading">Finding the hands for this situation…</p>
-    <p v-else-if="rows.length === 0" class="text-sm text-zinc-500" data-testid="hands-empty">
-      No hands match. <span v-if="filter.dataset === 'hero'">Upload some on <NuxtLink to="/upload" class="underline">the Upload page</NuxtLink>, or <NuxtLink to="/hands/paste" class="underline">paste one</NuxtLink>.</span>
-    </p>
+    <EmptyState v-else-if="status === 'success' && rows.length === 0" :view="empty" testid="hands-empty" @act="widen" />
 
-    <div v-else class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+    <div v-else-if="rows.length > 0" class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
       <table class="w-full text-sm">
         <thead class="text-left text-xs text-zinc-500">
           <tr>
-            <th class="p-2">played</th>
-            <th class="p-2">stake</th>
-            <th class="p-2">seat</th>
-            <th class="p-2">cards</th>
-            <th class="p-2">board</th>
-            <th class="p-2 text-right">bb</th>
-            <th class="p-2">tags</th>
+            <th class="p-2">Played</th>
+            <th class="p-2"><RegistryTerm :entry="columns.stake" /></th>
+            <th class="p-2"><RegistryTerm :entry="columns.seat" /></th>
+            <th class="p-2"><RegistryTerm :entry="columns.cards" /></th>
+            <th class="p-2">Board</th>
+            <th class="p-2 text-right"><RegistryTerm :entry="columns.won" /></th>
+            <th class="p-2">Tags</th>
           </tr>
         </thead>
         <tbody>

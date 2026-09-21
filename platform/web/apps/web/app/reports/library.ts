@@ -16,6 +16,7 @@
 import type { Ref } from 'vue';
 import { ref, shallowRef } from 'vue';
 
+import { describeApiError } from '../auth/api';
 import type { Module, Preset, ReportsApi, SavedReport, SavedReportIn } from './api';
 
 export type LibraryStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -83,7 +84,10 @@ async function fetchAll(api: ReportsApi, cells: Cells): Promise<void> {
     cells.status.value = 'ready';
   } catch (cause) {
     cells.status.value = 'error';
-    cells.error.value = 'The standard reports could not be loaded. Build a report by hand, or try again.';
+    // The reason belongs in the same string, as it does in `stats/definitions.ts`: the screens that
+    // show this show only this, and "could not be loaded" on its own is indistinguishable from an
+    // empty library — which is exactly the reading that made `library-empty` say "None yet".
+    cells.error.value = `The standard reports and your own saved ones could not be read, so the list below is empty rather than short. ${describeApiError(cause)}`;
     throw cause;
   }
 }

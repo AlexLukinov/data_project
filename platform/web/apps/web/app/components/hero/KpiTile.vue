@@ -13,35 +13,48 @@
  * decided the interval. What is left here is layout — and the one rule layout can still break:
  * the comparison line is rendered from `view.deltaText`, which is empty exactly when the delta
  * is withheld, so a thin cell or a count cannot grow a comparison by being styled.
+ *
+ * **Three words on this tile now explain themselves** (ADR-057): the stat's own label, "thin", and
+ * "the field". All three were `title` text or nothing at all, and `title` is a mouse affordance —
+ * no keyboard, no touch — on the tile a first-time reader meets before anything else.
+ *
+ * Which is why a thin tile dims its numbers and not itself. `opacity` on the wrapper would fade the
+ * three tips with it — including the one explaining why the tile is faded — and, worse, make the
+ * tile a stacking context the tip's `z-index` cannot escape, so it would be painted over by the
+ * next tile along. Only what is actually unreliable is dimmed: the figure and the comparison.
  */
 import { MetricValue } from '@poker/ui';
+import { computed } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { KpiTileView } from '~/hero/kpis';
+import { thinTerm } from '~/hero/kpis';
+import { APP_TERMS } from '~/stats/vocabulary';
 
 const props = defineProps<{ tile: KpiTileView }>();
 
-/** Description, caveats and the typical band, as one hover string. Never invented here. */
-function explain(tile: KpiTileView): string {
-  const parts = [tile.description, tile.notes];
-  if (tile.typical) parts.push(`Usually ${tile.typical[0]}–${tile.typical[1]}${tile.format.unit}.`);
-  if (tile.view.note !== '') parts.push(tile.view.note);
-  return parts.filter((part) => part !== '').join(' ');
-}
+/** "the field" is the app's word, not the registry's, so it comes from the app's own list. */
+const FIELD = APP_TERMS.field;
+
+const thin = computed(() => thinTerm(props.tile.view));
+/** Too few hands to read: the numbers are faded, the words that explain them are not. */
+const dimmed = computed(() => (props.tile.view.thin ? 'opacity-60' : ''));
 </script>
 
 <template>
-  <div
-    class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
-    :class="props.tile.view.thin ? 'opacity-60' : ''"
-    :data-testid="`kpi-${props.tile.code}`"
-  >
-    <h3 class="text-xs font-medium text-zinc-500" :title="explain(props.tile)">
-      {{ props.tile.label }}
-      <span v-if="props.tile.view.thin" class="ml-1 text-amber-600 dark:text-amber-500" :data-testid="`kpi-thin-${props.tile.code}`">thin</span>
+  <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" :data-testid="`kpi-${props.tile.code}`">
+    <h3 class="text-xs font-medium text-zinc-500">
+      <RegistryTerm :entry="props.tile.term" :label="props.tile.label" :name="props.tile.code" />
+      <RegistryTerm v-if="props.tile.view.thin" :entry="thin" class="ml-1 text-amber-600 dark:text-amber-500">
+        <template #default="{ describedby }">
+          <span class="pk-term-text" tabindex="0" :aria-describedby="describedby" :data-term="thin.term" :data-testid="`kpi-thin-${props.tile.code}`">{{ thin.term }}</span>
+        </template>
+      </RegistryTerm>
     </h3>
 
     <MetricValue
       class="mt-1"
+      :class="dimmed"
       :value="props.tile.value"
       :low="props.tile.low"
       :high="props.tile.high"
@@ -54,11 +67,11 @@ function explain(tile: KpiTileView): string {
     />
 
     <p v-if="props.tile.view.baselineText !== ''" class="mt-1 text-xs text-zinc-500" :data-testid="`kpi-vs-${props.tile.code}`">
-      the field {{ props.tile.view.baselineText }}
+      <RegistryTerm :entry="FIELD" /> <span :class="dimmed">{{ props.tile.view.baselineText }}</span>
       <span
         v-if="props.tile.view.deltaText !== ''"
         class="ml-1 tabular-nums"
-        :class="props.tile.view.deltaSense === 'bad' ? 'text-red-600 dark:text-red-400' : props.tile.view.deltaSense === 'good' ? 'text-emerald-600 dark:text-emerald-400' : ''"
+        :class="[dimmed, props.tile.view.deltaSense === 'bad' ? 'text-red-600 dark:text-red-400' : props.tile.view.deltaSense === 'good' ? 'text-emerald-600 dark:text-emerald-400' : '']"
         :data-testid="`kpi-delta-${props.tile.code}`"
       >{{ props.tile.view.deltaText }}</span>
     </p>

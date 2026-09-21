@@ -7,7 +7,16 @@ import type { Stat } from '~/stats/api';
 
 import CohortForm from './CohortForm.vue';
 
-const VPIP: Stat = { code: 'vpip', label: 'VPIP', category: 'preflop', grain: 'hand', format: 'percent', cached: true };
+const VPIP: Stat = {
+  code: 'vpip',
+  label: 'VPIP',
+  category: 'preflop',
+  grain: 'hand',
+  format: 'percent',
+  cached: true,
+  description: 'Voluntarily put money in the pot preflop, per hand dealt in.',
+  typical: [18, 28],
+};
 
 function form(initial: CohortIn | null = null) {
   return mount(CohortForm, { props: { stats: [VPIP], initial, replacing: false, busy: false, failure: '' } });
@@ -18,6 +27,21 @@ const find = (w: ReturnType<typeof form>, id: string) => w.find(`[data-testid="$
 async function name(w: ReturnType<typeof form>): Promise<void> {
   await find(w, 'cohort-name').setValue('loose players');
 }
+
+describe('CohortForm — what a rule is about', () => {
+  /* A select cannot describe its options, so a threshold was picked for a word. */
+  it('says what the chosen stat counts, and the band the threshold sits against', () => {
+    const note = find(form(), 'rule-note-0').text();
+    expect(note).toContain('Voluntarily put money in the pot preflop');
+    expect(note).toContain('Usually 18–28%');
+  });
+
+  it('says the registry did not load rather than showing a picker with nothing in it', () => {
+    const w = mount(CohortForm, { props: { stats: [], initial: null, replacing: false, busy: false, failure: '' } });
+    expect(find(w, 'cohort-no-stats').exists()).toBe(true);
+    expect(find(w, 'rule-note-0').exists()).toBe(false);
+  });
+});
 
 describe('CohortForm — the rule value', () => {
   it('refuses to save a rule whose value was emptied, and says which rule', async () => {

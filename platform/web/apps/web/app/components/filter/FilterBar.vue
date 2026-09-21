@@ -9,7 +9,10 @@
  */
 import { computed, ref } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
+import { grainNote } from '~/filter/grain';
 import { clauseLabel } from '~/filter/label';
+import { dimensionEntry } from '~/stats/vocabulary';
 import { useDefinitionsStore } from '~/stores/definitions';
 import { useFilterStore } from '~/stores/filter';
 import SituationBuilder from './SituationBuilder.vue';
@@ -23,15 +26,21 @@ const editing = ref(false);
 /**
  * A situation drawn from decision-grain columns cannot be measured by a hand-grain stat: the
  * router refuses the pair before it validates anything else. Saying so here costs nothing and
- * saves a 400 nobody can read.
+ * saves a 400 nobody can read. The words are `filter/grain.ts`'s, so they are tested as text.
  */
-const grainNote = computed(() => {
-  if (filter.clauses.length === 0) return '';
-  const tables = filter.tables;
-  if (tables.length === 0) return 'No table holds all of these columns at once — this situation cannot be measured.';
-  if (!tables.includes('player_hands')) return 'Decision-grain only: hand-grain stats (VPIP, PFR…) cannot be measured here.';
-  return '';
-});
+const note = computed(() => grainNote(filter.tables, definitions.stats));
+
+/**
+ * A chip is the one place a situation is read at a glance, so it carries the column's own
+ * explanation. The remove button says the column's label — a screen reader used to hear
+ * `opener_position`, which is a name only this codebase uses.
+ */
+const chips = computed(() =>
+  filter.clauses.map((clause, index) => {
+    const dim = definitions.byCode.get(clause.dim);
+    return { key: `${clause.dim}-${index}`, code: clause.dim, index, label: clauseLabel(clause, dim), entry: dimensionEntry(dim, clause.dim) };
+  }),
+);
 </script>
 
 <template>
@@ -58,14 +67,14 @@ const grainNote = computed(() => {
 
     <p class="text-sm" data-testid="filter-sentence"><span class="text-zinc-500">Showing:</span> {{ filter.sentence }}</p>
 
-    <ul v-if="filter.clauses.length && !editing" class="flex flex-wrap gap-1" data-testid="filter-chips">
-      <li v-for="(clause, index) in filter.clauses" :key="`${clause.dim}-${index}`" class="flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-0.5 text-xs dark:border-zinc-700" :data-testid="`chip-${clause.dim}`">
-        {{ clauseLabel(clause, definitions.byCode.get(clause.dim)) }}
-        <button type="button" :aria-label="`remove ${clause.dim}`" class="text-zinc-500" @click="filter.remove(index)">×</button>
+    <ul v-if="chips.length && !editing" class="flex flex-wrap gap-1" data-testid="filter-chips">
+      <li v-for="chip in chips" :key="chip.key" class="flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-0.5 text-xs dark:border-zinc-700" :data-testid="`chip-${chip.code}`">
+        <RegistryTerm :entry="chip.entry" :label="chip.label" :name="chip.code" />
+        <button type="button" :aria-label="`remove ${chip.entry.term}`" :data-testid="`chip-remove-${chip.code}`" class="text-zinc-500" @click="filter.remove(chip.index)">×</button>
       </li>
     </ul>
 
-    <p v-if="grainNote" data-testid="filter-grain" class="text-xs text-amber-700 dark:text-amber-400">{{ grainNote }}</p>
+    <p v-if="note" data-testid="filter-grain" class="text-xs text-amber-700 dark:text-amber-400">{{ note.lead }}<RegistryTerm v-if="note.term" :entry="note.term" />{{ note.tail }}</p>
     <p v-for="problem in filter.problems" :key="problem" role="alert" data-testid="filter-problem" class="text-xs text-amber-700 dark:text-amber-400">{{ problem }}</p>
 
     <SituationBuilder v-if="editing" />

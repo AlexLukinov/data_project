@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { RangeSummary, RangesApi, StoredRange } from './api';
 import type { CachedRange, RangeCache } from './cache';
-import { createLibrary, describeLibraryError, filterLocally } from './library';
+import { createLibrary, describeBackupError, describeLibraryError, filterLocally } from './library';
 
 const KEY = nodeKey('UTG', { action_sequence: [step('UTG', 'raise')] });
 const stored = (id: string, version = 1): StoredRange => ({
@@ -128,9 +128,25 @@ describe('the library', () => {
   it('describes a failure in one sentence', () => {
     expect(describeLibraryError(new TypeError('fetch failed'))).toContain('did not answer');
     expect(describeLibraryError({ status: 409, data: { detail: "a range named 'x' already exists" } })).toBe("a range named 'x' already exists");
-    expect(describeLibraryError({ statusCode: 500 })).toBe('The API answered with status 500.');
+    // Reworded with `describeApiError`: a bare 5xx is usually the account's query budget, so the
+    // sentence offers another attempt before it points at the terminal.
+    expect(describeLibraryError({ statusCode: 500 })).toBe(
+      'The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+    );
     const dexie = Object.assign(new Error('Transaction aborted'), { name: 'AbortError' });
     expect(describeLibraryError(dexie)).toBe('AbortError: Transaction aborted');
+  });
+
+  it('never promises a cached copy for the backup, which only the server can build', () => {
+    const silent = describeBackupError(new TypeError('fetch failed'));
+    expect(silent).toContain('did not answer');
+    expect(silent).not.toContain('cached copy');
+    expect(silent).toContain('make api');
+    // No longer the API's own "Not authenticated": by the time a page reads this the refresh
+    // cookie is gone and the session is anonymous, so the sentence names the header's Sign in.
+    expect(describeBackupError({ status: 401, data: { detail: 'Not authenticated' } })).toBe(
+      'Your sign-in has expired. Use Sign in at the top of the page, then try again.',
+    );
   });
 
   it('reports a cache failure without going offline', async () => {

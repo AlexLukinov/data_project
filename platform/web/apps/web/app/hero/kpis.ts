@@ -20,6 +20,8 @@
 import { cellView } from '../reports/cell';
 import type { CellView } from '../reports/cell';
 import type { ConfidenceLevel, ReportRequest, ReportResult, Stat } from '../stats/api';
+import type { TermEntry } from '../stats/vocabulary';
+import { APP_TERMS, statEntry } from '../stats/vocabulary';
 
 /** The level every tile asks for. One number, so a screenful of tiles cannot disagree. */
 export const KPI_CONFIDENCE: ConfidenceLevel = 95;
@@ -105,12 +107,12 @@ export function kpiFormat(stat: Stat): KpiFormat {
 export interface KpiTileView {
   code: string;
   label: string;
-  /** The registry's own sentence, shown on hover. Never a phrase invented by the client. */
-  description: string;
-  /** The registry's caveats on the definition, where it records any. */
-  notes: string;
-  /** The band this stat usually falls in, for reading the value. Never for gating it. */
-  typical: readonly [number, number] | null;
+  /**
+   * The registry's own words for this stat — the sentence and the band — as `RegistryTerm` shows
+   * them (ADR-057). The tile used to assemble that string itself, into a `title` no keyboard and
+   * no touch could reach, and wrote the band as `0–10bb/100` with the space missing.
+   */
+  term: TermEntry;
   /** The raw value, handed to `MetricValue`; `null` when there is nothing to show. */
   value: number | null;
   low: number | null;
@@ -144,9 +146,7 @@ export function kpiTiles(
       {
         code,
         label: stat.label,
-        description: stat.description ?? '',
-        notes: stat.notes ?? '',
-        typical: stat.typical ?? null,
+        term: statEntry(stat, code),
         value: view.empty ? null : (row?.cells[code]?.value ?? null),
         low: view.low,
         high: view.high,
@@ -159,6 +159,17 @@ export function kpiTiles(
       },
     ];
   });
+}
+
+/**
+ * Why a tile is dimmed, in the reader's words rather than the engine's.
+ *
+ * "thin" is ours, not the registry's, so its sentence comes from `APP_TERMS`; the cell's own note
+ * says which sample earned the word here, and that is the half a generic definition cannot carry.
+ * The note went into the tile's `title` before, where a touch reader never met it.
+ */
+export function thinTerm(view: CellView): TermEntry {
+  return view.note === '' ? APP_TERMS.thin : { ...APP_TERMS.thin, formula: view.note };
 }
 
 /**

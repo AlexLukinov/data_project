@@ -12,6 +12,7 @@
 import { byModule } from '~/reports/library';
 import type { ModulePreset } from '~/reports/library';
 import type { SavedReport } from '~/reports/api';
+import PresetButton from './PresetButton.vue';
 
 const props = defineProps<{
   presets: readonly ModulePreset[];
@@ -19,6 +20,12 @@ const props = defineProps<{
   /** The saved report currently open, so the list can say which one you are looking at. */
   openId: string | null;
   busy: boolean;
+  /**
+   * Whether the library failed to load. An empty list then means "not read", not "none saved",
+   * and "None yet. Build a report and save it" would be telling someone their own reports are
+   * gone. The page's own `library-error` says what happened; this line just gets out of the way.
+   */
+  failed: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -33,18 +40,7 @@ const emit = defineEmits<{
     <div v-for="group in byModule(props.presets)" :key="group.module" class="space-y-1">
       <p class="text-xs text-zinc-500">Standard reports — {{ group.label }}</p>
       <div class="flex flex-wrap gap-1">
-        <button
-          v-for="preset in group.presets"
-          :key="preset.code"
-          type="button"
-          :title="preset.description"
-          :disabled="props.busy"
-          :data-testid="`preset-${preset.code}`"
-          class="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          @click="emit('openPreset', preset)"
-        >
-          {{ preset.label }}
-        </button>
+        <PresetButton v-for="preset in group.presets" :key="preset.code" :preset="preset" :disabled="props.busy" :testid="`preset-${preset.code}`" @open="emit('openPreset', preset)" />
       </div>
     </div>
 
@@ -79,7 +75,7 @@ const emit = defineEmits<{
           </button>
         </li>
       </ul>
-      <p v-else class="text-sm text-zinc-500" data-testid="library-empty">
+      <p v-else-if="!props.failed" class="text-sm text-zinc-500" data-testid="library-empty">
         None yet. Build a report and save it — it reopens from its own link.
       </p>
     </div>

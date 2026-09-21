@@ -6,11 +6,18 @@
 // `leakDrill` reads the situation out of the stat's own registry entry, so the link opens the
 // same question the leak was scored on. Where it cannot, the row says why in place of a link:
 // no leak is ever shown with a door that leads to a 400.
+//
+// Six column headings and thirty-nine stat labels, and until F.12c not one of them said what it
+// meant. `leakRows` pairs each leak with its registry entry and `RegistryTerm` shows it; the four
+// headings that are the app's own words — you, the field, gap, spots — come from `APP_TERMS`,
+// because "gap" is in percentage points and "spots" is a sample, and neither is guessable.
 import { computed } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { DrillDates } from '~/hero/leaks';
-import { handsQuery, leakDrill, ranked } from '~/hero/leaks';
+import { leakRows } from '~/hero/leaks';
 import type { Leak } from '~/hero/api';
+import { APP_TERMS } from '~/stats/vocabulary';
 import { useDefinitionsStore } from '~/stores/definitions';
 
 const props = defineProps<{ leaks: readonly Leak[]; dates?: DrillDates }>();
@@ -18,17 +25,9 @@ const props = defineProps<{ leaks: readonly Leak[]; dates?: DrillDates }>();
 const definitions = useDefinitionsStore();
 const byCode = computed(() => new Map(definitions.stats.map((stat) => [stat.code, stat])));
 
-const rows = computed(() =>
-  ranked(props.leaks).map((leak) => {
-    const drill = leakDrill(leak, byCode.value.get(leak.code), definitions.byCode);
-    return {
-      leak,
-      drill,
-      spotQuery: drill.spot === null ? null : handsQuery(drill.spot, props.dates),
-      takenQuery: drill.taken === null ? null : handsQuery(drill.taken, props.dates),
-    };
-  }),
-);
+const rows = computed(() => leakRows(props.leaks, byCode.value, definitions.byCode, props.dates));
+
+const TERMS = APP_TERMS;
 
 /** A percentage as the rest of the UI writes one. */
 function pct(value: number): string {
@@ -66,17 +65,17 @@ function worse(leak: Leak): boolean | null {
         <tr>
           <th class="p-2">stat</th>
           <th class="p-2 text-right">you</th>
-          <th class="p-2 text-right">the field</th>
-          <th class="p-2 text-right">gap</th>
-          <th class="p-2 text-right">spots</th>
+          <th class="p-2 text-right"><RegistryTerm :entry="TERMS.field" /></th>
+          <th class="p-2 text-right"><RegistryTerm :entry="TERMS.gap" /></th>
+          <th class="p-2 text-right"><RegistryTerm :entry="TERMS.spots" /></th>
           <th class="p-2">the hands</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="row.leak.code" class="border-t border-zinc-200 align-top dark:border-zinc-800" :data-testid="`leak-row-${row.leak.code}`">
           <td class="p-2">
-            <span class="font-medium">{{ row.leak.label }}</span>
-            <span class="ml-2 text-xs text-zinc-500">{{ row.leak.category }}</span>
+            <RegistryTerm class="font-medium" :entry="row.term" :label="row.leak.label" :name="row.leak.code" />
+            <span class="ml-2 text-xs text-zinc-500">{{ row.category }}</span>
             <span v-if="row.leak.typical" class="ml-2 text-xs text-zinc-400">usually {{ row.leak.typical[0] }}–{{ row.leak.typical[1] }}%</span>
           </td>
           <td class="p-2 text-right tabular-nums font-medium">{{ pct(row.leak.value) }}</td>

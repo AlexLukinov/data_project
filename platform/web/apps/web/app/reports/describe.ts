@@ -15,7 +15,8 @@
 
 import { clauseLabel } from '../filter/label';
 import { flatten } from '../filter/node';
-import type { Dimension, Expr, FilterNode, Stat } from '../stats/api';
+import type { Dimension, Expr, FilterNode, Stat, StatFormat } from '../stats/api';
+import { bucketWords, tableWords, valueWords } from '../stats/vocabulary';
 
 /** One row of the panel: what it is called, and what it says. */
 export interface DefinitionLine {
@@ -100,21 +101,36 @@ function countsSentence(stat: Stat, dims: ReadonlyMap<string, Dimension>): strin
   return denominator === '' ? numerator : `${numerator}, divided by ${denominator}`;
 }
 
+/** The unit the band is read in. A per-100 band with no unit reads as a percentage; it is not one. */
+const UNIT_WORDS: Record<StatFormat, string> = { percent: '%', per100: ' bb/100', ratio: '', count: '' };
+
 function typicalSentence(stat: Stat): string {
   const [low, high] = stat.typical!;
-  const unit = stat.format === 'percent' ? '%' : '';
-  return `between ${low}${unit} and ${high}${unit}`;
+  const unit = UNIT_WORDS[stat.format];
+  if (unit === '%') return `between ${low}% and ${high}%`;
+  return `between ${low} and ${high}${unit}`;
 }
 
-/** Everything the registry knows about a dimension — what a group-by column actually splits by. */
+/**
+ * Everything the registry knows about a dimension — what a group-by column actually splits by.
+ *
+ * The values, the tables and the buckets all go through `stats/vocabulary.ts` (ADR-057), because
+ * this panel is where someone comes to find out what `two_tone` or `small` means, and answering
+ * "small, mid, large, pot, overbet" is answering with the question. The `Column` line keeps the
+ * raw code on purpose: it is what a saved link and an API body are written in.
+ */
 export function describeDimension(dim: Dimension): DefinitionLine[] {
   const lines: DefinitionLine[] = [{ term: 'Column', detail: `${dim.code} — ${dim.type}` }];
   if (dim.description) lines.push({ term: 'Means', detail: dim.description });
-  lines.push({ term: 'Held on', detail: dim.tables.join(', ') });
+  const held = tableWords(dim.tables);
+  if (held !== '') lines.push({ term: 'Held on', detail: held });
   if (dim.values.length > 0) {
-    lines.push({ term: 'Values', detail: dim.values.map((value) => (value === '' ? "'' (not applicable)" : value)).join(', ') });
+    lines.push({ term: 'Values', detail: dim.values.map((value) => valueWords(dim, value)).join(', ') });
   }
   const buckets = Object.keys(dim.buckets);
-  if (buckets.length > 0) lines.push({ term: 'Grouped into', detail: `${buckets.join(', ')} — each half-open, so the top of one is the bottom of the next` });
+  if (buckets.length > 0) {
+    const named = buckets.map((name) => bucketWords(dim, name)).join(', ');
+    lines.push({ term: 'Grouped into', detail: `${named} — each half-open, so the top of one is the bottom of the next` });
+  }
   return lines;
 }

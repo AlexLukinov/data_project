@@ -21,6 +21,7 @@
 
 import type { Dimension, Grain, Stat } from '../stats/api';
 import { MAX_GROUP_BY, MAX_STATS } from '../stats/api';
+import { categoryWords, tableWords } from '../stats/vocabulary';
 
 /** The table a stat of each grain is computed on (`stats/definitions.py#TABLE_FOR_GRAIN`). */
 export const TABLE_FOR_GRAIN: Record<Grain, string> = { hand: 'player_hands', decision: 'decisions' };
@@ -105,18 +106,46 @@ export interface StatGroup {
   stats: Stat[];
 }
 
-const CATEGORY_LABELS: Record<Stat['category'], string> = {
-  preflop: 'Preflop',
-  postflop: 'Postflop',
-  showdown: 'Showdown',
-  money: 'Money',
-};
-
 /** Stats by category, in reading order, with empty categories left out. */
 export function groupByCategory(stats: readonly Stat[]): StatGroup[] {
   return CATEGORY_ORDER.map((category) => ({
     category,
-    label: CATEGORY_LABELS[category],
+    label: categoryWords(category),
     stats: stats.filter((stat) => stat.category === category),
   })).filter((group) => group.stats.length > 0);
+}
+
+/** What the picker knows about why it is offering nothing. */
+export interface EmptyPickerFacts {
+  /** Whether the registry served any stat at all — false when `/v1/definitions` never answered. */
+  readonly loaded: boolean;
+  /** What is typed in the search box, already trimmed. */
+  readonly search: string;
+  /** The fact tables the situation and the grouping leave. */
+  readonly tables: readonly string[];
+}
+
+const REGISTRY_GONE = 'The stat registry did not load, so there is nothing here to choose from. Until it does, no report can name a column.';
+const NO_TABLE = 'No stat can be measured on this situation: no single table holds every column it names, so there is nothing to count over. Remove a condition or a row grouping.';
+
+/**
+ * Why no stat is on offer — three different reasons that used to share one sentence.
+ *
+ * The one that mattered was the first: with the registry unread, `usable` is empty for a reason
+ * that has nothing to do with the situation, and the picker blamed the situation anyway. A screen
+ * that explains an absence with the wrong cause is worse than one that says nothing.
+ */
+export function noStatsWords(facts: EmptyPickerFacts): string {
+  if (!facts.loaded) return REGISTRY_GONE;
+  if (facts.search !== '') return `No stat matches “${facts.search}”. Clear the search box to see every stat this situation can measure.`;
+  const held = tableWords(facts.tables);
+  if (held === '') return NO_TABLE;
+  return `No stat can be measured on this situation: it is answered on ${held}, and every stat is counted somewhere else. Remove a condition or a row grouping to bring them back.`;
+}
+
+/** How many stats this situation rules out, and where the ones left are counted. */
+export function hiddenStatsWords(hidden: number, tables: readonly string[]): string {
+  const held = tableWords(tables);
+  const where = held === '' ? 'no single table' : held;
+  return `${hidden} stat${hidden === 1 ? '' : 's'} hidden: this situation and grouping are answered on ${where}, and those are counted elsewhere.`;
 }

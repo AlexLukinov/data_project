@@ -86,9 +86,18 @@ export function movers(answer: NodeEstimatedRange, limit: number): ClassEstimate
     .slice(0, limit);
 }
 
-/** Ask for the reconstruction of `prior` at `key`, or `null` if the pool cannot answer at all. */
+/**
+ * Ask for the reconstruction of `prior` at `key`. `null` means the prior was empty — there was
+ * nothing to reconstruct and nothing was asked.
+ *
+ * A refusal **rejects**. It used to be caught here and returned as the same `null`, which put the
+ * tier-3 section in exactly the state it has when no chart of mine is stored: absent, with the
+ * showdown range still drawn beside it and nothing saying the reconstruction had been asked for and
+ * failed. Two different things must not render as one silence (audit §2.13), so the caller catches
+ * this and says which one it is.
+ */
 export async function estimateAt(api: PoolApi, key: NodeKey, prior: WeightedRange): Promise<NodeEstimatedRange | null> {
   const weights = classWeights(prior);
   if (Object.keys(weights).length === 0) return null;
-  return api.estimatedRange(key, weights).catch(() => null);
+  return api.estimatedRange(key, weights);
 }

@@ -18,6 +18,13 @@ function recorder(): { fetch: Fetcher; calls: Call[] } {
   return { fetch, calls };
 }
 
+/** The JSON a call sent. A `FormData` body is only ever an upload, so reading a field off one here is a bug worth a throw. */
+function jsonBody(call: Call | undefined): Record<string, unknown> {
+  const body = call?.options?.body;
+  if (body === undefined || body instanceof FormData) throw new Error(`expected a JSON body, got ${String(body)}`);
+  return body;
+}
+
 const KEY = nodeKey('UTG', { action_sequence: [step('UTG', 'raise', { size_bb: 2.5 })] });
 
 describe('createRangesApi', () => {
@@ -51,11 +58,11 @@ describe('createRangesApi', () => {
       ['/v1/ranges/bulk', 'POST'],
       ['/v1/ranges/export', 'GET'],
     ]);
-    const created = calls[3]!.options!.body!;
+    const created = jsonBody(calls[3]);
     expect(created.node_key).toEqual({ stake: '', table_size: 6, eff_stack_bb: 100, hero_position: 'UTG', villain_position: null, action_sequence: [{ position: 'UTG', action: 'raise', size_bb: 2.5, size_pct: null }], street: 'preflop', board_texture: [] });
     expect(created.weights).toBe('AsAh: 1');
     expect(calls[4]!.options!.body).toEqual({ name: 'UTG open' });
-    expect(calls[9]!.options!.body!.hero_position).toBe('UTG');
+    expect(jsonBody(calls[9]).hero_position).toBe('UTG');
     const bulk = calls[10]!.options!.body as { on_conflict: string; ranges: { node_key: { hero_position: string } }[] };
     expect(bulk.on_conflict).toBe('skip');
     expect(bulk.ranges[0]!.node_key.hero_position).toBe('UTG');

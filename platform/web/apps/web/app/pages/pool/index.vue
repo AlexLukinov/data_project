@@ -21,17 +21,21 @@ import CohortGrids from '~/components/pool/CohortGrids.vue';
 import CohortPicker from '~/components/pool/CohortPicker.vue';
 import FilterBar from '~/components/filter/FilterBar.vue';
 import DefinitionPanel from '~/components/reports/DefinitionPanel.vue';
+import EmptyState from '~/components/reports/EmptyState.vue';
 import GroupByPicker from '~/components/reports/GroupByPicker.vue';
+import PresetButton from '~/components/reports/PresetButton.vue';
 import StatPicker from '~/components/reports/StatPicker.vue';
 import { describeApiError } from '~/auth/api';
 import { createReportsApi } from '~/reports/api';
-import type { Preset } from '~/reports/api';
 import { MIN_N_CHOICES } from '~/reports/cell';
+import type { EmptyStateView } from '~/reports/emptyState';
+import { poolEmptyView, poolIdleView } from '~/reports/emptyState';
 import { createColumnsModel } from '~/reports/model';
 import { align, sameShape } from '~/pool/compare';
 import { lockedToPopulation } from '~/pool/population';
-import type { CohortChoice } from '~/pool/stats';
-import { cohortChoices, createPoolStatsApi } from '~/pool/stats';
+import { createPoolScope } from '~/pool/scope';
+import { createPoolStatsApi, describeRules } from '~/pool/stats';
+import { gridHeading, unknownCohortWords } from '~/pool/words';
 import type { ReportResult } from '~/stats/api';
 import { useDefinitionsStore } from '~/stores/definitions';
 import { useFilterStore } from '~/stores/filter';
@@ -47,8 +51,13 @@ const columns = createColumnsModel(
   lockedToPopulation(filter),
 );
 
-const presets = ref<Preset[]>([]);
-const choices = ref<CohortChoice[]>([]);
+const scope = createPoolScope({
+  reports,
+  pool,
+  stats: computed(() => definitions.stats),
+  open: columns.apply,
+});
+
 const primary = ref<string | null>(null);
 const against = ref<string | null>(null);
 const left = ref<ReportResult | null>(null);
@@ -77,21 +86,76 @@ function single(value: unknown): string | null {
 }
 
 await useAsyncData('definitions', () => definitions.load(), { server: false });
-await useAsyncData('pool-scope', loadScope, { server: false });
+await useAsyncData('pool-scope', () => scope.load(), { server: false });
 
-if (columns.stats.value.length === 0 && presets.value[0] !== undefined) columns.apply(presets.value[0].request);
+if (columns.stats.value.length === 0 && scope.presets.value[0] !== undefined) scope.apply(scope.presets.value[0]);
 
-const cohortOf = (key: string | null): CohortChoice | null => choices.value.find((choice) => choice.key === key) ?? null;
 const describedStat = computed(() => definitions.stats.find((stat) => stat.code === describing.value));
 const describedDim = computed(() => (describedStat.value === undefined ? definitions.byCode.get(describing.value) : undefined));
-const canRun = computed(() => columns.problems.value.length === 0 && filter.problems.length === 0);
-const labelOf = (key: string | null): string => cohortOf(key)?.label ?? 'The whole field';
 
-/** The pool's own presets and the cohorts it can be sliced by — both from the server, neither authored here. */
-async function loadScope(): Promise<void> {
-  const [shipped, saved] = await Promise.all([reports.poolPresets(), pool.cohorts().catch(() => [])]);
-  presets.value = shipped.reports;
-  choices.value = cohortChoices(shipped.cohorts, saved);
+/**
+ * A cohort in the link that is not on offer. Blocking the run is the point: the key resolved to
+ * `null`, and `null` is also how "the whole field" is spelled, so the report would have measured
+ * every player in the pool under the missing cohort's name.
+ */
+const unresolved = computed(() => [primary.value, against.value].find((key) => key !== null && scope.cohortOf(key) === null) ?? null);
+/* Either half of the picker can be the one that failed: `?cohort=preset:regs` is the link the
+   cohorts page writes for a *shipped* cohort, and those arrive with the presets. */
+const listFailed = computed(() => scope.savedProblem.value !== '' || scope.problem.value !== '');
+const cohortProblem = computed(() => (unresolved.value === null ? '' : unknownCohortWords(unresolved.value, listFailed.value)));
+const canRun = computed(() => columns.problems.value.length === 0 && filter.problems.length === 0 && cohortProblem.value === '');
+
+/** True while the report's *own* cohort is what scopes it — the picker's choice always wins. */
+const storedRule = computed(() => primary.value === null && columns.cohortOn.value && columns.cohort.value !== null);
+const labelOf = (key: string | null): string => gridHeading(scope.cohortOf(key)?.label ?? null, storedRule.value);
+
+const idleView = computed(() =>
+  poolIdleView({
+    reportName: scope.openPreset.value?.label ?? null,
+    hasStat: columns.stats.value.length > 0,
+    canRun: canRun.value,
+    cohortLabel: scope.cohortOf(primary.value)?.label ?? null,
+    storedRule: storedRule.value,
+  }),
+);
+
+/** Why one grid came back with no rows — worded for the cohort *that* grid asked about. */
+function emptyView(side: 'left' | 'right'): EmptyStateView {
+  return poolEmptyView({
+    sentence: filter.sentence,
+    hasClauses: filter.active,
+    dateFrom: filter.dateFrom,
+    dateTo: filter.dateTo,
+    rawFilter: !columns.editable.value,
+    cohortLabel: scope.cohortOf(side === 'left' ? primary.value : against.value)?.label ?? null,
+    storedRule: storedRule.value,
+    canRun: canRun.value,
+    side,
+  });
+}
+
+/**
+ * Ask for the registry again. The store turns the failure back into `definitions.error`, which is
+ * the sentence already on screen, so there is nothing here to rethrow into an unhandled rejection.
+ */
+function retryDefinitions(): void {
+  void definitions.load().catch(() => undefined);
+}
+
+/**
+ * The ways out an empty state offers: only this page can clear its own filter or run its report.
+ * The side matters for one of them — "Measure the whole field" clears the *left* grid's cohort, and
+ * the picker has no whole field for the right-hand one, so that grid does not offer it and the side
+ * is passed here so it cannot arrive from there anyway.
+ */
+function widen(key: string, side: 'left' | 'right' = 'left'): void {
+  if (key === 'clear-situation') filter.clear();
+  if (key === 'clear-dates') {
+    filter.dateFrom = '';
+    filter.dateTo = '';
+  }
+  if (key === 'whole-field' && side === 'left') primary.value = null;
+  if (key === 'run') void run();
 }
 
 /**
@@ -102,12 +166,15 @@ async function loadScope(): Promise<void> {
  * that changed between the two calls, not a formality.
  */
 async function run(): Promise<void> {
+  /* Not only the button's `disabled`: an empty state offers Run report too, and a question this
+     page has already said it cannot ask must not be answered by a different one. */
+  if (!canRun.value) return;
   busy.value = true;
   failure.value = '';
   try {
     const request = columns.request();
-    const first = await pool.run(request, cohortOf(primary.value));
-    const second = against.value === null ? null : await pool.run(request, cohortOf(against.value));
+    const first = await pool.run(request, scope.cohortOf(primary.value));
+    const second = against.value === null ? null : await pool.run(request, scope.cohortOf(against.value));
     [left.value, right.value] = second !== null && sameShape(first, second) ? align(first, second) : [first, second];
     stale.value = false;
   } catch (error) {
@@ -133,7 +200,7 @@ watch(
   <section class="space-y-4">
     <div class="flex flex-wrap items-baseline gap-3">
       <h1 class="text-2xl font-semibold">The pool</h1>
-      <p class="text-sm text-zinc-500" data-testid="pool-scope">the population — {{ choices.length }} cohorts available</p>
+      <p class="text-sm text-zinc-500" data-testid="pool-scope">the population — {{ scope.choices.value.length }} cohorts available</p>
       <NuxtLink to="/pool/players" class="text-sm underline underline-offset-2">Find a player</NuxtLink>
       <NuxtLink to="/pool/cohorts" class="text-sm underline underline-offset-2">Cohorts</NuxtLink>
       <NuxtLink to="/ranges/compare" class="text-sm underline underline-offset-2">Pool ranges</NuxtLink>
@@ -148,24 +215,28 @@ watch(
       </button>
     </div>
 
+    <div v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="retryDefinitions">Try again</button>
+    </div>
+
+    <div v-if="scope.problem.value" role="alert" data-testid="pool-scope-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ scope.problem.value }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="scope.load()">Try again</button>
+    </div>
+
+    <div v-if="scope.savedProblem.value" role="alert" data-testid="pool-cohorts-error" class="rounded border border-amber-300 p-3 text-sm text-amber-900 dark:border-amber-700 dark:text-amber-100">
+      {{ scope.savedProblem.value }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="scope.load()">Try again</button>
+    </div>
+
     <p class="text-xs text-zinc-500" data-testid="dataset-locked">
       Every report on this page reads the population. The dataset is not a choice here — for your
       own hands, use <NuxtLink to="/reports" class="underline underline-offset-2">Reports</NuxtLink>.
     </p>
 
     <div class="flex flex-wrap gap-2">
-      <button
-        v-for="preset in presets"
-        :key="preset.code"
-        type="button"
-        :disabled="busy"
-        :data-testid="`pool-preset-${preset.code}`"
-        :title="preset.description"
-        class="rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
-        @click="columns.apply(preset.request)"
-      >
-        {{ preset.label }}
-      </button>
+      <PresetButton v-for="preset in scope.presets.value" :key="preset.code" :preset="preset" :disabled="busy" :testid="`pool-preset-${preset.code}`" size="md" @open="scope.apply(preset)" />
     </div>
 
     <FilterBar :datasets="false" />
@@ -177,7 +248,7 @@ watch(
 
     <div class="grid gap-4 md:grid-cols-2">
       <GroupByPicker :dimensions="definitions.dimensions" :selected="columns.groupBy.value" :by-code="definitions.byCode" @change="columns.setGroupBy" @describe="describing = $event" />
-      <CohortPicker :choices="choices" :primary="primary" :against="against" :busy="busy" @update:primary="primary = $event" @update:against="against = $event" />
+      <CohortPicker :choices="scope.choices.value" :primary="primary" :against="against" :busy="busy" @update:primary="primary = $event" @update:against="against = $event" />
     </div>
 
     <label class="flex items-center gap-2 text-sm">
@@ -186,6 +257,12 @@ watch(
         <option v-for="choice in MIN_N_CHOICES" :key="choice" :value="choice">{{ choice === 0 ? 'never — show every number' : `${choice} observations` }}</option>
       </select>
     </label>
+
+    <p v-if="storedRule && columns.cohort.value" class="text-xs text-zinc-500" data-testid="cohort-note">
+      This standard report carries a rule of its own, so it is not measuring the whole field: only
+      players whose {{ describeRules(columns.cohort.value, definitions.stats) }}. Choosing a cohort
+      under “Which players” replaces it.
+    </p>
 
     <StatPicker
       :usable="columns.usable.value"
@@ -200,8 +277,12 @@ watch(
     <DefinitionPanel v-if="describing" :stat="describedStat" :dimension="describedDim" :dimensions="definitions.byCode" @close="describing = ''" />
 
     <p v-for="problem in columns.problems.value" :key="problem" role="alert" data-testid="column-problem" class="text-xs text-amber-700 dark:text-amber-400">{{ problem }}</p>
+    <p v-if="cohortProblem" role="alert" data-testid="cohort-unknown" class="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">{{ cohortProblem }}</p>
     <p v-if="failure" role="alert" data-testid="report-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">{{ failure }}</p>
     <p v-if="stale && left" class="text-xs text-amber-700 dark:text-amber-400" data-testid="report-stale">The question has changed since this ran. Run again to refresh it.</p>
+
+    <EmptyState v-if="left === null && !busy && !failure" :view="idleView" testid="pool-idle" @act="widen" />
+    <p v-else-if="busy && left === null" role="status" class="text-sm text-zinc-500" data-testid="pool-running">Running the report over the pool…</p>
 
     <CohortGrids
       :left="{ label: labelOf(primary), result: left }"
@@ -210,6 +291,10 @@ watch(
       :dimensions="definitions.byCode"
       :min-n="columns.minN.value"
       @describe="describing = $event"
-    />
+    >
+      <template #empty="{ side }">
+        <EmptyState :view="emptyView(side)" :testid="`pool-empty-${side}`" @act="(key: string) => widen(key, side)" />
+      </template>
+    </CohortGrids>
   </section>
 </template>

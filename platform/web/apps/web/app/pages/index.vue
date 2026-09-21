@@ -20,6 +20,14 @@
  * has never had it. The KPIs are `POST /v1/reports/run` (ungrouped, compared against the field,
  * `confidence: 95`), and the other three are their own routes. They load independently and each
  * panel owns its own failure, so a slow pool baseline cannot keep the sessions off the screen.
+ *
+ * **What the page says when it has nothing** (F.12c). Four requests in flight, a registry that did
+ * not load, and an account with no hands at all used to look like one another: a screen of dashes
+ * with nothing written on it. Each now says which of the three it is — the four pending lines are
+ * selectable, the registry failure is a line with a Try again, and a report that read every hand
+ * and counted none is a first run rather than an error, so it names the Upload page. The prose
+ * itself is `hero/words.ts`, tested as text, and it has **one** name for the all-in adjusted
+ * winrate where this page once had three.
  */
 import { computed } from 'vue';
 
@@ -28,8 +36,10 @@ import WinningsChart from '~/components/charts/WinningsChart.vue';
 import KpiTile from '~/components/hero/KpiTile.vue';
 import LeakTable from '~/components/hero/LeakTable.vue';
 import SessionTable from '~/components/hero/SessionTable.vue';
+import EmptyState from '~/components/reports/EmptyState.vue';
 import { createHeroApi } from '~/hero/api';
-import { KPI_RESULT_COUNT, evGap, kpiRequest, kpiTiles } from '~/hero/kpis';
+import { KPI_RESULT_COUNT, kpiRequest, kpiTiles } from '~/hero/kpis';
+import { heroEmptyView, luckWords, winningsCaption } from '~/hero/words';
 import { createStatsApi } from '~/stats/api';
 import { useDefinitionsStore } from '~/stores/definitions';
 import { useFilterStore } from '~/stores/filter';
@@ -57,19 +67,25 @@ const result = computed(() => tiles.value.slice(0, KPI_RESULT_COUNT));
 const style = computed(() => tiles.value.slice(KPI_RESULT_COUNT));
 const topLeaks = computed(() => (leaks.data.value?.leaks ?? []).slice(0, TOP_LEAKS));
 
+/** The one sentence the page exists to say, and the sentence it says when there is nothing yet. */
+const luck = computed(() => luckWords(tiles.value));
+const empty = computed(() => heroEmptyView(kpis.data.value?.hands ?? null, dates.value));
+const caption = winningsCaption();
+
 /**
- * The one sentence the page exists to say. It is arithmetic on two numbers the server sent, and
- * it is stated only when both are there — never "you are running about average" by default.
+ * Ask for the registry again. The store turns the failure back into `definitions.error`, which is
+ * the sentence already on screen, so there is nothing here to rethrow into an unhandled rejection.
  */
-const luck = computed(() => {
-  const gap = evGap(tiles.value);
-  if (gap === null) return '';
-  const size = Math.abs(gap).toFixed(2);
-  if (Math.abs(gap) < 0.5) return `Your actual and all-in adjusted winrates are within ${size} bb/100 of each other — the cards have paid about what they were worth.`;
-  return gap < 0
-    ? `You are running ${size} bb/100 below all-in EV: the pots have paid less than the hands were worth.`
-    : `You are running ${size} bb/100 above all-in EV: the pots have paid more than the hands were worth.`;
-});
+function retryDefinitions(): void {
+  void definitions.load().catch(() => undefined);
+}
+
+/** The empty state's only button: the dates are this page's, so this page clears them. */
+function widen(key: string): void {
+  if (key !== 'clear-dates') return;
+  filter.dateFrom = '';
+  filter.dateTo = '';
+}
 
 const health = await useFetch<{ status: string; clickhouse?: string }>(`${useRuntimeConfig().public.apiBase}/health`, { server: false, lazy: true });
 </script>
@@ -88,6 +104,11 @@ const health = await useFetch<{ status: string; clickhouse?: string }>(`${useRun
       </label>
     </div>
 
+    <p v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline" data-testid="definitions-retry" @click="retryDefinitions">Try again</button>
+    </p>
+
     <!-- The result, then the play behind it. -->
     <div class="space-y-3">
       <p v-if="kpis.error.value" role="alert" data-testid="kpis-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(kpis.error.value) }}</p>
@@ -98,7 +119,8 @@ const health = await useFetch<{ status: string; clickhouse?: string }>(`${useRun
         <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="kpi-style">
           <KpiTile v-for="tile in style" :key="tile.code" :tile="tile" />
         </div>
-        <p v-if="kpis.status.value === 'pending'" class="text-sm text-zinc-500">Measuring you against the field…</p>
+        <p v-if="kpis.status.value === 'pending'" role="status" data-testid="kpis-loading" class="text-sm text-zinc-500">Measuring you against the field…</p>
+        <EmptyState v-else-if="empty" :view="empty" testid="hero-empty" @act="widen" />
         <p v-else-if="luck !== ''" class="text-sm text-zinc-600 dark:text-zinc-400" data-testid="hero-luck">{{ luck }}</p>
       </template>
     </div>
@@ -106,14 +128,10 @@ const health = await useFetch<{ status: string; clickhouse?: string }>(`${useRun
     <section class="space-y-2">
       <div class="flex flex-wrap items-baseline gap-3">
         <h2 class="font-medium">Winnings</h2>
-        <p class="text-sm text-zinc-500">
-          Running totals in big blinds; the dashed line across the middle is break-even. Showdown
-          and non-showdown add up to the actual line; EV is what the hands were worth when the
-          money went all-in. Click a name to hide a line — the axis rescales to what is left.
-        </p>
+        <p class="text-sm text-zinc-500" data-testid="winnings-caption">{{ caption }}</p>
       </div>
       <p v-if="winnings.error.value" role="alert" data-testid="winnings-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(winnings.error.value) }}</p>
-      <p v-else-if="winnings.status.value === 'pending'" class="text-sm text-zinc-500">Drawing the curve…</p>
+      <p v-else-if="winnings.status.value === 'pending'" role="status" data-testid="winnings-loading" class="text-sm text-zinc-500">Drawing the curve…</p>
       <WinningsChart v-else :points="winnings.data.value?.points ?? []" />
     </section>
 
@@ -126,14 +144,14 @@ const health = await useFetch<{ status: string; clickhouse?: string }>(`${useRun
         </p>
       </div>
       <p v-if="leaks.error.value" role="alert" data-testid="hero-leaks-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(leaks.error.value) }}</p>
-      <p v-else-if="leaks.status.value === 'pending'" class="text-sm text-zinc-500">Comparing you with the field…</p>
+      <p v-else-if="leaks.status.value === 'pending'" role="status" data-testid="hero-leaks-loading" class="text-sm text-zinc-500">Comparing you with the field…</p>
       <LeakTable v-else :leaks="topLeaks" :dates="dates" />
     </section>
 
     <section class="space-y-2">
       <h2 class="font-medium">Sessions</h2>
       <p v-if="sessions.error.value" role="alert" data-testid="sessions-error" class="text-sm text-red-600 dark:text-red-400">{{ describeApiError(sessions.error.value) }}</p>
-      <p v-else-if="sessions.status.value === 'pending'" class="text-sm text-zinc-500">Splitting the hands into sittings…</p>
+      <p v-else-if="sessions.status.value === 'pending'" role="status" data-testid="sessions-loading" class="text-sm text-zinc-500">Splitting the hands into sittings…</p>
       <SessionTable v-else-if="sessions.data.value" :result="sessions.data.value" />
     </section>
 

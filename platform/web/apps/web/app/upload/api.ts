@@ -97,9 +97,8 @@ export function createUploadsApi(fetch: Fetcher): UploadsApi {
       form.append('site', choice.site);
       form.append('dataset', choice.dataset);
       // ofetch sends a FormData untouched and the browser sets the multipart boundary, so no
-      // Content-Type is set here. `FetchOptions.body` is typed for JSON; widening it is recorded
-      // as a merge follow-up in ADR-051, so this one call site casts instead.
-      return fetch<UploadAccepted>('/v1/uploads', { method: 'POST', body: form as unknown as Record<string, unknown> });
+      // Content-Type is set here.
+      return fetch<UploadAccepted>('/v1/uploads', { method: 'POST', body: form });
     },
     accounts: () => fetch<PokerAccount[]>('/v1/auth/poker-accounts'),
     addAccount: (site, screenName) => fetch<PokerAccount>('/v1/auth/poker-accounts', { method: 'POST', body: { site, screen_name: screenName } }),

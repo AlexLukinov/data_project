@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Cell, Stat, StatFormat } from '../stats/api';
+import type { Cell, Dimension, Stat, StatFormat } from '../stats/api';
 import { MIN_N, cellView, formatGroupValue, formatN, formatValue } from './cell';
 
 function stat(over: Partial<Stat> & Pick<Stat, 'code'>): Stat {
   return { label: over.code, category: 'postflop', grain: 'decision', format: 'percent', ...over } as Stat;
+}
+
+function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
+  return { label: over.code, tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
 }
 
 function cell(over: Partial<Cell> = {}): Cell {
@@ -125,12 +129,28 @@ describe('cellView — direction is only coloured where the registry commits', (
   });
 });
 
+/* The column is now an argument (ADR-057): the same string reads one way as an enum value and
+   another way as somebody's screen name, and only the dimension says which of the two it is. */
 describe('formatGroupValue', () => {
+  const FACING = dim({ code: 'facing', type: 'enum', values: ['5bet_plus', ''] });
+  const PLAYER = dim({ code: 'player_key', type: 'string', tables: ['stats_daily'] });
+  const SIZE = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37], overbet: [1.1, null] } });
+
   it("words the registry's two conventions the way the filter chips do", () => {
-    expect(formatGroupValue('5bet_plus')).toBe('5bet+');
-    expect(formatGroupValue('')).toBe('not applicable');
-    expect(formatGroupValue('BTN')).toBe('BTN');
+    expect(formatGroupValue('5bet_plus', FACING)).toBe('5bet+');
+    expect(formatGroupValue('', FACING)).toBe('not applicable');
+    expect(formatGroupValue('BTN', FACING)).toBe('BTN');
     expect(formatGroupValue(null)).toBe('—');
     expect(formatGroupValue(1000)).toBe('1,000');
+  });
+
+  it('leaves a value alone off an enum, so a player called a_plus_b keeps their name', () => {
+    expect(formatGroupValue('a_plus_b', PLAYER)).toBe('a_plus_b');
+    expect(formatGroupValue('a_plus_b')).toBe('a_plus_b');
+  });
+
+  it('prints what a bucket covers, because “small” on its own says nothing', () => {
+    expect(formatGroupValue('small', SIZE)).toBe('small (under 0.37 of the pot)');
+    expect(formatGroupValue('overbet', SIZE)).toBe('overbet (1.1 of the pot and up)');
   });
 });

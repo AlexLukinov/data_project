@@ -8,14 +8,18 @@
  * Two shapes are recognised by their vocabulary rather than by name, so a registry addition is
  * handled on the day it ships: a seat enum is any enum that lists the seats, and it gets the
  * `PositionPicker`; everything else falls back to a select or a text box.
+ *
+ * What a choice **shows** and what it **sends** are two different strings (ADR-053): the text is
+ * the registry's words — `small (under 0.37 of the pot)`, `5bet+` — and the value is the
+ * registry's own code, unchanged, so a value read here and a value sent still agree.
  */
 import { computed, ref } from 'vue';
 import { ActionLine, NumberInput, PositionPicker, formatDecimal, parseDecimal } from '@poker/ui';
 
 import type { Dimension } from '~/stats/api';
+import { bucketWords, valueWords } from '~/stats/vocabulary';
 import type { Clause } from '~/filter/clause';
 import { BUCKET_OP, arity } from '~/filter/clause';
-import { valueLabel } from '~/filter/label';
 
 const props = defineProps<{ clause: Clause; dim: Dimension }>();
 const emit = defineEmits<{ 'update:values': [values: string[]] }>();
@@ -77,7 +81,7 @@ function putList(text: string): void {
 
 <template>
   <select v-if="clause.op === BUCKET_OP" :value="at(0)" :aria-label="`${dim.label} range`" data-testid="clause-bucket" class="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @change="put(0, ($event.target as HTMLSelectElement).value)">
-    <option v-for="name in buckets" :key="name" :value="name">{{ name }}</option>
+    <option v-for="name in buckets" :key="name" :value="name">{{ bucketWords(dim, name) }}</option>
   </select>
 
   <PositionPicker
@@ -94,11 +98,11 @@ function putList(text: string): void {
   </div>
 
   <div v-else-if="dim.type === 'enum' && listOp" class="flex flex-wrap gap-1 text-sm" data-testid="clause-enum-many">
-    <button v-for="value in dim.values" :key="value" type="button" :aria-pressed="clause.values.includes(value)" class="rounded border px-2 py-0.5" :class="clause.values.includes(value) ? 'border-zinc-900 font-medium dark:border-zinc-100' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'" @click="toggleEnum(value)">{{ valueLabel(value) }}</button>
+    <button v-for="value in dim.values" :key="value" type="button" :aria-pressed="clause.values.includes(value)" class="rounded border px-2 py-0.5" :class="clause.values.includes(value) ? 'border-zinc-900 font-medium dark:border-zinc-100' : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'" @click="toggleEnum(value)">{{ valueWords(dim, value) }}</button>
   </div>
 
   <select v-else-if="dim.type === 'enum'" :value="at(0)" :aria-label="dim.label" data-testid="clause-enum" class="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @change="put(0, ($event.target as HTMLSelectElement).value)">
-    <option v-for="value in dim.values" :key="value" :value="value">{{ valueLabel(value) }}</option>
+    <option v-for="value in dim.values" :key="value" :value="value">{{ valueWords(dim, value) }}</option>
   </select>
 
   <ActionLine

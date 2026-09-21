@@ -19,11 +19,15 @@
  * ground changes. They stay overridable as custom properties.
  *
  * Colour is never the only encoding anyway: each line has its own dash pattern, each is labelled
- * at its own end, and the legend doubles as the on/off control.
+ * at its own end, and the legend doubles as the on/off control. Each legend button also carries
+ * the sentence saying what its line draws, on a tip that opens to hover, focus **and** tap
+ * (ADR-057); it was a `title`, which is only ever the first of those three.
  */
 import { computed, ref } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { WinningsPoint } from '~/hero/api';
+import { WINNINGS_EMPTY, seriesTerm } from '~/hero/words';
 import type { Plotted, SeriesKey } from '~/hero/winnings';
 import { BOX, SERIES, geometry, nearestPoint } from '~/hero/winnings';
 
@@ -68,32 +72,34 @@ function money(value: number): string {
 <template>
   <div class="space-y-2">
     <div class="flex flex-wrap gap-x-4 gap-y-1" role="group" aria-label="Which lines are drawn">
-      <button
-        v-for="series in SERIES"
-        :key="series.key"
-        type="button"
-        class="flex items-center gap-1.5 text-xs"
-        :class="visible.includes(series.key) ? 'text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 line-through dark:text-zinc-600'"
-        :title="series.description"
-        :aria-pressed="visible.includes(series.key)"
-        :data-testid="`winnings-toggle-${series.key}`"
-        @click="toggle(series.key)"
-      >
-        <svg width="18" height="8" aria-hidden="true" class="shrink-0">
-          <line
-            x1="1" y1="4" x2="17" y2="4"
-            :data-series="series.key"
-            :stroke-dasharray="series.dash || undefined"
-            :stroke-width="series.width"
-            :opacity="visible.includes(series.key) ? 1 : 0.35"
-          />
-        </svg>
-        {{ series.label }}
-      </button>
+      <RegistryTerm v-for="series in SERIES" :key="series.key" :entry="seriesTerm(series)">
+        <template #default="{ describedby }">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-xs"
+            :class="visible.includes(series.key) ? 'text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 line-through dark:text-zinc-600'"
+            :aria-describedby="describedby"
+            :aria-pressed="visible.includes(series.key)"
+            :data-testid="`winnings-toggle-${series.key}`"
+            @click="toggle(series.key)"
+          >
+            <svg width="18" height="8" aria-hidden="true" class="shrink-0">
+              <line
+                x1="1" y1="4" x2="17" y2="4"
+                :data-series="series.key"
+                :stroke-dasharray="series.dash || undefined"
+                :stroke-width="series.width"
+                :opacity="visible.includes(series.key) ? 1 : 0.35"
+              />
+            </svg>
+            {{ series.label }}
+          </button>
+        </template>
+      </RegistryTerm>
     </div>
 
     <p v-if="geo === null" class="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700" data-testid="winnings-empty">
-      No hands in this range — so there is no curve to draw. Widen the dates, or import a session.
+      {{ WINNINGS_EMPTY }}
     </p>
 
     <div v-else class="relative">

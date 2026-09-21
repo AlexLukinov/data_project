@@ -41,15 +41,25 @@ describe('the registry store', () => {
     expect(registry.groups.value.map((g) => g.name)).toEqual(['Table', 'Street']);
   });
 
-  it('says why the builder has no vocabulary, and can be retried', async () => {
+  it('says what the loss costs without naming a control, and can be retried', async () => {
+    // The sentence is rendered verbatim on every page that awaits the registry, most of which have
+    // no situation builder, so it may not name one: what it says is what all of them lose.
     const api = fakeApi(new Error('offline'));
     const registry = createDefinitions(api);
     await expect(registry.load()).rejects.toThrow('offline');
     expect(registry.status.value).toBe('error');
     expect(registry.error.value).toContain('registry');
+    expect(registry.error.value).toContain('nothing on this page can be named or explained');
+    expect(registry.error.value).not.toContain('situation builder');
 
     await expect(registry.load()).rejects.toThrow('offline');
     expect(api.calls).toBe(2);
+  });
+
+  it('says what went wrong, not only that something did', async () => {
+    const registry = createDefinitions(fakeApi(new TypeError('Failed to fetch')));
+    await registry.load().catch(() => undefined);
+    expect(registry.error.value).toContain('did not answer');
   });
 
   it('does not swallow the failure into a half-loaded registry', async () => {

@@ -5,7 +5,10 @@
 import { POSITIONS, nodeKeyLabel } from '@poker/core';
 import { computed, ref } from 'vue';
 
+import { describeApiError } from '~/auth/api';
+import { LIBRARY_UNREADABLE } from '~/hands/study';
 import type { RangeSource } from '~/ranges/api';
+import { describeBackupError } from '~/ranges/library';
 import { useRangesStore } from '~/stores/ranges';
 
 const store = useRangesStore();
@@ -13,11 +16,19 @@ const q = ref('');
 const source = ref<'' | RangeSource>('');
 const position = ref('');
 const filters = computed(() => ({ q: q.value || undefined, source: source.value || undefined, hero_position: position.value || undefined }));
-const { refresh } = await useAsyncData('ranges', () => store.load(filters.value), { server: false, watch: [filters] });
+// A silent API is not a failure here — `store.load()` answers from this browser's own copy and
+// says so through `ranges-offline`. What reaches `loadError` is that copy refusing too, which
+// leaves the store on 'loading': without this the table below was simply empty, for no stated
+// reason and with neither "no ranges yet" nor the offline line to explain it.
+const { refresh, error: loadError } = await useAsyncData('ranges', () => store.load(filters.value), { server: false, watch: [filters] });
 
 const backupError = ref<string | null>(null);
 
-/** The library as our own JSON, saved through a temporary link; `poker-importers` reads it back. */
+/**
+ * The library as our own JSON, saved through a temporary link; `poker-importers` reads it back.
+ * Anything here can fail — the server's own list, and the browser's file save — and the bare catch
+ * this replaces blamed a stopped API for all of it, including a sign-in that had simply expired.
+ */
 async function backup(): Promise<void> {
   backupError.value = null;
   try {
@@ -28,8 +39,8 @@ async function backup(): Promise<void> {
     a.download = `poker-ranges-${doc.exported_at.slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  } catch {
-    backupError.value = 'The backup needs the API: start it with `make api` in platform/.';
+  } catch (e) {
+    backupError.value = `The backup was not downloaded. ${describeBackupError(e)}`;
   }
 }
 
@@ -50,7 +61,7 @@ function day(iso: string): string {
     </div>
 
     <p v-if="store.error" role="status" data-testid="ranges-offline" class="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">{{ store.error }}</p>
-    <p v-if="backupError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ backupError }}</p>
+    <p v-if="backupError" role="alert" data-testid="ranges-backup-error" class="text-sm text-red-600 dark:text-red-400">{{ backupError }}</p>
 
     <form class="flex flex-wrap gap-2 text-sm" @submit.prevent="refresh()">
       <input v-model.lazy="q" type="search" placeholder="search names" aria-label="search names" class="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" />
@@ -67,7 +78,11 @@ function day(iso: string): string {
       <span class="self-center text-zinc-500" data-testid="ranges-count">{{ store.items.length }} range{{ store.items.length === 1 ? '' : 's' }}</span>
     </form>
 
-    <p v-if="store.status === 'ready' && store.items.length === 0" class="text-sm text-zinc-500" data-testid="ranges-empty">
+    <p v-if="loadError" role="alert" data-testid="ranges-load-error" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+      {{ LIBRARY_UNREADABLE }} {{ describeApiError(loadError) }}
+    </p>
+
+    <p v-else-if="store.status === 'ready' && store.items.length === 0" class="text-sm text-zinc-500" data-testid="ranges-empty">
       No ranges yet. <NuxtLink to="/ranges/import" class="underline">Import a folder of charts</NuxtLink> to start the library.
     </p>
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { validationMessages } from '../auth/api';
 import type { CohortSpec, Stat } from '../stats/api';
 import { MAX_RULES, NAME_MAX, OPS, describeCohortError, draftProblems, draftsOf, emptyRule, splitByCached, toSpec } from './rules';
 
@@ -150,7 +151,13 @@ describe('describeCohortError', () => {
 
   it('falls back to the plain description for anything else', () => {
     expect(describeCohortError({ status: 404, data: { detail: 'Not found' } })).toBe('Not found');
-    expect(describeCohortError({ status: 500 })).toBe('The API answered with status 500.');
+    expect(describeCohortError({ status: 500 })).toContain('the terminal running `make api`');
     expect(describeCohortError(new TypeError('Failed to fetch'))).toMatch(/did not answer/);
+  });
+
+  /* The copy that used to live in rules.ts read a 422 exactly as the auth module does — until one of them moved. */
+  it('reads the list with the same function every other screen uses', () => {
+    const error = { status: 422, data: { detail: [{ loc: ['body', 'criteria', 'rules'], msg: 'List should have at most 10 items' }] } };
+    expect(describeCohortError(error)).toBe(validationMessages(error).join(' · '));
   });
 });

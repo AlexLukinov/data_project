@@ -25,8 +25,8 @@
  * rather than information.
  */
 
-import { valueLabel } from '../filter/label';
-import type { Cell, ConfidenceLevel, Stat, StatFormat } from '../stats/api';
+import type { Cell, ConfidenceLevel, Dimension, Stat, StatFormat } from '../stats/api';
+import { valueWords } from '../stats/vocabulary';
 
 /**
  * The sample a cell needs before its delta is worth drawing.
@@ -205,12 +205,14 @@ function note(empty: boolean, thin: boolean, n: number, minN: number): string {
 }
 
 /**
- * A row's group key as it reads. The registry's two conventions are worded in exactly one place
- * — `filter/label.ts`, which the filter chips already use — so a `pot_type` row heading says
- * `5bet+` and not `5bet_plus`, and an empty key says "not applicable" rather than looking like a
- * rendering bug.
+ * A row's group key as it reads, given the column it is a value of (ADR-057).
+ *
+ * The dimension is the whole point of the argument. Without it the old wording could only guess:
+ * it rewrote `5bet_plus` as `5bet+` for every string it met, which is right for an enum and wrong
+ * for a pool player called `a_plus_b`, and it could not print what a bucket named `small` covers
+ * because the bounds live on the dimension. `stats/vocabulary.ts` owns both rules, so a row
+ * heading, a filter chip and a definition panel cannot spell the same value three ways.
  */
-export function formatGroupValue(value: string | number | null): string {
-  if (value === null) return DASH;
-  return typeof value === 'number' ? value.toLocaleString(LOCALE) : valueLabel(value);
+export function formatGroupValue(value: string | number | null, dim?: Dimension): string {
+  return valueWords(dim, value);
 }

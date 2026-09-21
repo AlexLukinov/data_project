@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Cell, ReportResult, Stat } from '../stats/api';
-import { KPI_CODES, KPI_CONFIDENCE, evGap, kpiFormat, kpiRequest, kpiTiles } from './kpis';
+import { KPI_CODES, KPI_CONFIDENCE, evGap, kpiFormat, kpiRequest, kpiTiles, thinTerm } from './kpis';
 
 function stat(over: Partial<Stat> & Pick<Stat, 'code'>): Stat {
   return { label: over.code, category: 'preflop', grain: 'hand', format: 'percent', ...over } as Stat;
@@ -9,7 +9,7 @@ function stat(over: Partial<Stat> & Pick<Stat, 'code'>): Stat {
 
 const STATS: Stat[] = [
   stat({ code: 'hands', label: 'Hands', format: 'count' }),
-  stat({ code: 'bb_per_100', label: 'bb/100', format: 'per100', higher_is_better: true }),
+  stat({ code: 'bb_per_100', label: 'bb/100', format: 'per100', higher_is_better: true, typical: [0, 10], description: 'Big blinds won per 100 hands.' }),
   stat({ code: 'ev_bb_per_100', label: 'EV bb/100', format: 'per100', higher_is_better: true }),
   stat({ code: 'vpip', label: 'VPIP', description: 'Voluntarily put money in the pot preflop.' }),
   stat({ code: 'pfr', label: 'PFR' }),
@@ -149,7 +149,15 @@ describe('kpiTiles', () => {
 
   it('carries the description from the registry rather than a phrase invented here', () => {
     const tiles = kpiTiles(result({ vpip: { value: 22.96 } }), STATS, ['vpip']);
-    expect(tiles[0]!.description).toBe('Voluntarily put money in the pot preflop.');
+    expect(tiles[0]!.term.term).toBe('VPIP');
+    expect(tiles[0]!.term.definition).toContain('Voluntarily put money in the pot preflop.');
+  });
+
+  it('writes the typical band with a space before its unit', () => {
+    // The tile used to build this string itself and wrote "Usually 0–10bb/100.", which is the
+    // one place on the dashboard a number and its unit ran together.
+    const tiles = kpiTiles(result({ bb_per_100: { value: 1.2 } }), STATS, ['bb_per_100']);
+    expect(tiles[0]!.term.definition).toContain('Usually 0–10 bb/100.');
   });
 
   it('costs one tile, not the page, when the registry does not know a code', () => {
@@ -161,6 +169,27 @@ describe('kpiTiles', () => {
     const tiles = kpiTiles(null, STATS);
     expect(tiles).toHaveLength(KPI_CODES.length);
     expect(tiles.every((tile) => tile.value === null && tile.n === null)).toBe(true);
+  });
+});
+
+describe('thinTerm', () => {
+  it('says what "thin" means and which sample earned the word here', () => {
+    const tiles = kpiTiles(
+      result({ threebet: { value: 0, n: 3, baseline: 8.1, baseline_n: 900_000, delta: -8.1 } }),
+      STATS,
+      ['threebet'],
+    );
+    const term = thinTerm(tiles[0]!.view);
+    expect(term.term).toBe('thin');
+    expect(term.definition).toContain('too few times to compare');
+    // The cell's own reason, which a generic definition cannot carry.
+    expect(term.formula).toBe(tiles[0]!.view.note);
+    expect(term.formula).not.toBe('');
+  });
+
+  it('carries no second line when the cell has no note to give', () => {
+    const tiles = kpiTiles(result({ vpip: { value: 22.96 } }), STATS, ['vpip']);
+    expect(thinTerm(tiles[0]!.view).formula).toBeUndefined();
   });
 });
 

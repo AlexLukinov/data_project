@@ -7,7 +7,8 @@
 
 export interface FetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  body?: Record<string, unknown>;
+  /** JSON on every call but one: an upload sends a `FormData`, which ofetch passes through as it is. */
+  body?: Record<string, unknown> | FormData;
   headers?: Record<string, string>;
   credentials?: RequestCredentials;
 }
@@ -115,25 +116,78 @@ const SIGN_IN_MESSAGES: Record<number, string> = {
 
 const NO_ANSWER = 'The API did not answer. Start it with `make api` in platform/ and try again.';
 
-/** One actionable sentence for a failed sign-in or registration. */
+/** One actionable sentence for a failed sign-in or registration. Read from the raw error: the sign-in form awaits its own call. */
 export function describeSignInError(error: unknown): string {
   const status = errorStatus(error);
   if (status === undefined) return NO_ANSWER;
   return SIGN_IN_MESSAGES[status] ?? errorDetail(error) ?? `The API answered with status ${status}.`;
 }
 
+/** The flag Nuxt stamps on every error it hands a page (`isNuxtError`, `nuxt/dist/app/composables/error.js`). */
+const NUXT_ERROR_SIGNATURE = '__nuxt_error';
+
+/**
+ * What actually threw behind a `useAsyncData` error. Nuxt stores h3's `createError(thrown)`, whose
+ * `statusCode` is 500 whenever nothing answered — so a stopped API reads as "status 500" on every
+ * page that awaits its data, unless the original is dug back out of `cause` (h3 sets that to
+ * `thrown.cause || thrown`: a network failure arrives as its TypeError, an HTTP one as the fetch
+ * error itself). Only Nuxt's own flag opens a wrapper: an error that carries a `cause` for its own
+ * reasons is still its own message, and is handed back untouched.
+ *
+ * `errorStatus` and `isUnauthorized` deliberately do **not** unwrap: `session.ts` reads them on the
+ * raw rejection of a call it made itself, where a 401 must stay a 401.
+ */
+export function unwrapAsyncDataError(error: unknown): unknown {
+  if (typeof error !== 'object' || error === null || !(NUXT_ERROR_SIGNATURE in error)) return error;
+  return (error as { cause?: unknown }).cause ?? error;
+}
+
+/**
+ * What the API's catch-all sends for anything it did not classify (`api/main.py`). It is a
+ * developer's noun with no next step, so it counts as *no* detail here — the sentence below says
+ * what it stands for instead. `hands/study.ts` knows the same string; its own wording names the
+ * step being replayed, which this one cannot.
+ */
+const SANITIZED = 'Internal server error';
+
+/**
+ * A 5xx the API would not describe. Most of them are one thing: ClickHouse refusing a query
+ * because the account is already running as many as its budget allows (plan E.3), which arrives
+ * unclassified and so sanitized. Nothing is broken and nothing is missing — the question is worth
+ * asking again — so the sentence says that first and the terminal second.
+ */
+const API_BROKE =
+  'The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.';
+
+/**
+ * A 401 outside the sign-in form. `session.ts` has already tried the refresh cookie and cleared the
+ * session, so the API's own "Invalid or expired token" would be wrapped in a retry that cannot
+ * work: nothing signs the reader back in mid-page. The header's Sign in link is the only way out.
+ */
+const SIGN_IN_EXPIRED = 'Your sign-in has expired. Use Sign in at the top of the page, then try again.';
+
 /**
  * One sentence for any other failed call: the API's own detail (a 422's list joined with " · "),
- * else its status, else what threw. `whenSilent` is what to say when nothing answered at all,
- * which differs per screen.
+ * else what its bare status means, else what threw. The error is unwrapped first, because a page
+ * that got it from `useAsyncData` is holding Nuxt's wrapper rather than the failure itself.
+ * `whenSilent` is what to say when nothing answered at all, which differs per screen.
+ *
+ * A 5xx is read before its detail, because this API's catch-all always sends one and it says
+ * nothing; a 5xx that does say something — tenancy's 504 "This query took longer than the
+ * account's budget allows." — still speaks for itself.
  */
 export function describeApiError(error: unknown, whenSilent = NO_ANSWER): string {
-  const status = errorStatus(error);
+  const thrown = unwrapAsyncDataError(error);
+  const status = errorStatus(thrown);
   if (status !== undefined) {
-    const listed = validationMessages(error);
+    if (status === 401) return SIGN_IN_EXPIRED;
+    const listed = validationMessages(thrown);
     if (listed.length > 0) return listed.join(' · ');
-    return errorDetail(error) ?? `The API answered with status ${status}.`;
+    const detail = errorDetail(thrown);
+    if (status >= 500 && (detail === null || detail === SANITIZED)) return API_BROKE;
+    if (detail !== null) return detail;
+    return `The API answered with status ${status}, which this page did not expect. Reload and try again.`;
   }
-  if (error instanceof Error && error.name !== 'FetchError' && error.name !== 'TypeError') return `${error.name}: ${error.message}`;
+  if (thrown instanceof Error && thrown.name !== 'FetchError' && thrown.name !== 'TypeError') return `${thrown.name}: ${thrown.message}`;
   return whenSilent;
 }

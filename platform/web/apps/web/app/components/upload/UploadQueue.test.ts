@@ -187,7 +187,10 @@ describe('UploadQueue', () => {
     add(w, [pathed('a.txt')]);
     await flushPromises();
     expect(texts(w, 'upload-item-state')).toEqual(['Sent']);
-    expect(texts(w, 'upload-item-detail')).toEqual(['Could not check on it: The API answered with status 502.']);
+    // The bare-5xx sentence was reworded in `auth/api.ts`: a refusal under load is asked again.
+    expect(texts(w, 'upload-item-detail')).toEqual([
+      'Could not check on it: The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+    ]);
 
     fail = false;
     await vi.advanceTimersByTimeAsync(POLL_MS);

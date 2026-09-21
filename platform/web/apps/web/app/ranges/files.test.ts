@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EntryLike } from './files';
-import { collectEntries, readImportFiles } from './files';
+import { UNREADABLE_DROP, collectEntries, readImportFiles } from './files';
 
 function fileEntry(path: string, text: string): EntryLike {
   const name = path.split('/').pop()!;
@@ -23,6 +23,20 @@ function dirEntry(path: string, children: EntryLike[]): EntryLike {
     }),
   };
 }
+
+describe('a read the browser refuses', () => {
+  it('fails the whole read, which is why both screens catch it', async () => {
+    const refused = new File([''], 'a.txt');
+    refused.text = () => Promise.reject(new Error('ENOENT: no such file or directory'));
+    await expect(readImportFiles([{ path: 'charts/a.txt', file: refused }])).rejects.toThrow('ENOENT');
+  });
+
+  it('is said in the words of the two pick links both screens carry', () => {
+    expect(UNREADABLE_DROP).toContain('files');
+    expect(UNREADABLE_DROP).toContain('a folder');
+    expect(UNREADABLE_DROP).not.toContain('Error');
+  });
+});
 
 describe('collectEntries', () => {
   it('walks folders depth first, keeps paths, skips hidden files', async () => {

@@ -50,8 +50,31 @@ describe('createNodeRangeReader', () => {
     expect(lookup).toHaveBeenCalledTimes(2);
   });
 
-  it('reports nothing stored when the API is away, instead of failing the step', async () => {
-    const reader = createNodeRangeReader(() => Promise.reject(new Error('offline')));
-    await expect(reader.at(GG_HAND, 7)).resolves.toEqual({ mine: null, villain: null, villainNode: expect.anything() });
+  it('reports a library it could not read as failed, not as nothing stored', async () => {
+    const reader = createNodeRangeReader(() => Promise.reject(new Error('the offline copy failed too')));
+    const found = await reader.at(GG_HAND, 7);
+    expect(found).toEqual({ mine: null, villain: null, villainNode: expect.anything(), failed: true });
+  });
+
+  it('asks again on the next step, having cached nothing a failure produced', async () => {
+    const lookup = vi.fn().mockRejectedValueOnce(new Error('the offline copy failed too')).mockResolvedValue([stored('SB')]);
+    const reader = createNodeRangeReader(lookup);
+
+    expect((await reader.at(GG_HAND, 7)).failed).toBe(true);
+    const second = await reader.at(GG_HAND, 7);
+    expect(second.failed).toBe(false);
+    expect(second.mine?.name).toBe('SB');
+  });
+
+  it('asks again for a situation the offline copy said it had nothing for', async () => {
+    // The cached copy knows only the charts the library held when it was last listed, so its
+    // "nothing here" must not become this page's answer for the rest of the session.
+    let offline = true;
+    const lookup = vi.fn(async () => (offline ? [] : [stored('SB')]));
+    const reader = createNodeRangeReader(lookup, () => offline);
+
+    expect((await reader.at(GG_HAND, 7)).mine).toBeNull();
+    offline = false;
+    expect((await reader.at(GG_HAND, 7)).mine?.name).toBe('SB');
   });
 });

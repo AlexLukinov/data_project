@@ -96,7 +96,11 @@ describe('HandNotes', () => {
     await w.find('textarea').setValue('kept');
     vi.advanceTimersByTime(AUTOSAVE_MS);
     await flushPromises();
-    expect(text(w, 'note-status')).toBe('Not saved: Internal server error');
+    // No longer the API's sanitized noun: `describeApiError` reads a 5xx it would not describe as
+    // a refusal under load, so the note says the save is worth making again.
+    expect(text(w, 'note-status')).toBe(
+      'Not saved: The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+    );
     expect((w.find('textarea').element as HTMLTextAreaElement).value).toBe('kept');
   });
 

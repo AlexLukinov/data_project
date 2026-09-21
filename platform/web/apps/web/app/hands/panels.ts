@@ -17,9 +17,11 @@ export interface NodeRanges {
   /** The stored range for what the other seat did before that. */
   readonly villain: StoredRange | null;
   readonly villainNode: NodeKey | null;
+  /** The library could not be read at all, so `mine` being null means nothing was asked. */
+  readonly failed: boolean;
 }
 
-export const NO_RANGES: NodeRanges = { mine: null, villain: null, villainNode: null };
+export const NO_RANGES: NodeRanges = { mine: null, villain: null, villainNode: null, failed: false };
 
 /** The action index of the last decision strictly before `index`, or -1. */
 function lastDecisionBefore(hand: ReplayHand, index: number): number {
@@ -52,11 +54,14 @@ export interface NodeRangeReader {
 }
 
 /**
- * A reader over the library's `lookup`, with one cache entry per situation. A lookup that fails
- * (the API is away) resolves to "nothing stored" rather than throwing: the replayer must keep
- * working with no server, since the hand it is showing is already in the browser.
+ * A reader over the library's `lookup`, with one cache entry per situation. The replayer keeps
+ * working with no server — the hand it is showing is already in the browser — but a failure is
+ * reported as one: `failed` is not `mine: null`, and the panel that draws it says so (audit
+ * §2.13). Nothing an unanswered question produced is ever cached: a lookup that threw is asked
+ * again on the next step, and so is an empty answer that came from the offline copy, which knows
+ * only the charts it held when the library was last listed.
  */
-export function createNodeRangeReader(lookup: Lookup): NodeRangeReader {
+export function createNodeRangeReader(lookup: Lookup, offline: () => boolean = () => false): NodeRangeReader {
   const cache = new Map<string, StoredRange | null>();
 
   async function first(key: NodeKey | null): Promise<StoredRange | null> {
@@ -64,9 +69,8 @@ export function createNodeRangeReader(lookup: Lookup): NodeRangeReader {
     const id = canonicalNodeKey(key);
     const hit = cache.get(id);
     if (hit !== undefined) return hit;
-    const found = await lookup(key).catch(() => []);
-    const range = found[0] ?? null;
-    cache.set(id, range);
+    const range = (await lookup(key))[0] ?? null;
+    if (range !== null || !offline()) cache.set(id, range);
     return range;
   }
 
@@ -74,8 +78,12 @@ export function createNodeRangeReader(lookup: Lookup): NodeRangeReader {
     async at(hand, index) {
       const mineKey = nodeKeyAt(hand, index);
       const villainKey = nodeKeyAt(hand, villainStep(hand, index));
-      const [mine, villain] = await Promise.all([first(mineKey), first(villainKey)]);
-      return { mine, villain, villainNode: villainKey };
+      try {
+        const [mine, villain] = await Promise.all([first(mineKey), first(villainKey)]);
+        return { mine, villain, villainNode: villainKey, failed: false };
+      } catch {
+        return { ...NO_RANGES, villainNode: villainKey, failed: true };
+      }
     },
   };
 }

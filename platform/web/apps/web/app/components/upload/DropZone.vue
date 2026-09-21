@@ -13,7 +13,7 @@
 import { ref } from 'vue';
 
 import type { PathedFile } from '~/ranges/files';
-import { collectEntries, entriesOf, pickedFiles } from '~/ranges/files';
+import { UNREADABLE_DROP, collectEntries, entriesOf, pickedFiles } from '~/ranges/files';
 
 const props = defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{ files: [files: PathedFile[]]; reading: [reading: boolean] }>();
@@ -28,8 +28,8 @@ async function onDrop(event: DragEvent): Promise<void> {
   try {
     const files = await collectEntries(entriesOf(event.dataTransfer));
     if (files.length > 0) emit('files', files);
-  } catch (error) {
-    problem.value = `Could not read what was dropped: ${error instanceof Error ? error.message : String(error)}`;
+  } catch {
+    problem.value = UNREADABLE_DROP;
   } finally {
     setReading(false);
   }
@@ -42,7 +42,12 @@ function setReading(value: boolean): void {
 
 function onPick(event: Event): void {
   const input = event.target as HTMLInputElement;
-  if (input.files !== null && input.files.length > 0) emit('files', pickedFiles(input.files));
+  if (input.files !== null && input.files.length > 0) {
+    // The unreadable-drop sentence sends the reader to these very links, so a pick that worked has
+    // to take it down; leaving it up reads as the pick having failed too.
+    problem.value = '';
+    emit('files', pickedFiles(input.files));
+  }
   // Cleared so choosing the same file again is a change again.
   input.value = '';
 }

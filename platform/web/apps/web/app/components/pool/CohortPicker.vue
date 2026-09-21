@@ -42,12 +42,15 @@ function chosenKey(event: Event): string | null {
 /**
  * A cohort's rule as one sentence.
  *
- * The two sources punctuate differently — the server's shipped description is a full sentence
- * ending in a period, while a saved cohort's is `describeRules`' bare "vpip ≥ 35" — so the period
- * is normalised here rather than doubled for one source and missing for the other.
+ * The two sources read differently and are joined differently. A shipped cohort's description is
+ * the server's own prose ("Tight, high volume"), so it is something the players *match*; a saved
+ * one is `describeRules`' rule in the registry's labels and the form's own comparisons ("VPIP is
+ * below 25"), which is something the players *are*. Both end in a single period, whether or not
+ * the source brought one.
  */
 function sentence(choice: CohortChoice): string {
-  return `players matching ${choice.description.replace(/\.$/, '')}.`;
+  const rule = choice.description.replace(/\.$/, '');
+  return choice.id === null ? `players matching ${rule}.` : `players whose ${rule}.`;
 }
 </script>
 

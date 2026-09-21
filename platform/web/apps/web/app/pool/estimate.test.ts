@@ -109,8 +109,10 @@ describe('estimateAt', () => {
     expect(asked).toBe(0);
   });
 
-  it('is silent rather than loud when the pool cannot answer', async () => {
+  /* `null` is "there was nothing to reconstruct". A refusal must not arrive wearing that answer:
+     the page draws the same blank for both, so one of them has to be loud. */
+  it('lets a refusal through rather than returning the empty-prior answer', async () => {
     const api = { estimatedRange: async () => { throw new Error('500'); } } as unknown as PoolApi;
-    expect(await estimateAt(api, { hero_position: 'UTG' } as never, range('AA'))).toBeNull();
+    await expect(estimateAt(api, { hero_position: 'UTG' } as never, range('AA'))).rejects.toThrow('500');
   });
 });

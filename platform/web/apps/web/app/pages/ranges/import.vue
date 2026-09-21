@@ -8,11 +8,12 @@ import { importFiles } from '@poker/importers';
 import { NodeKeyEditor, RangeMatrix } from '@poker/ui';
 import { computed, ref } from 'vue';
 
+import { describeApiError } from '~/auth/api';
 import ImportReviewTable from '~/components/ranges/ImportReviewTable.vue';
 import type { BulkOut, OnConflict, RangeSource } from '~/ranges/api';
-import { collectEntries, entriesOf, pickedFiles, readImportFiles } from '~/ranges/files';
+import type { PathedFile } from '~/ranges/files';
+import { UNREADABLE_DROP, collectEntries, entriesOf, pickedFiles, readImportFiles } from '~/ranges/files';
 import type { ReviewRow } from '~/ranges/review';
-import { describeLibraryError } from '~/ranges/library';
 import { applyToAll, buildReview, duplicateNames, reviewSummary, toBulkBody } from '~/ranges/review';
 import { useRangesStore } from '~/stores/ranges';
 
@@ -26,27 +27,44 @@ const batchTags = ref('');
 const onConflict = ref<OnConflict>('version');
 const report = ref<BulkOut | null>(null);
 const problem = ref<string | null>(null);
+/**
+ * A drop or a pick the browser would not open. It is said by the drop area rather than beside the
+ * Save button, because nothing was read and the whole review section below stays unrendered.
+ */
+const readProblem = ref<string | null>(null);
 const busy = ref(false);
 
 const summary = computed(() => reviewSummary(rows.value));
 const duplicates = computed(() => duplicateNames(rows.value));
 const selected = computed(() => rows.value.find((r) => r.id === selectedId.value) ?? null);
 
-async function load(files: Parameters<typeof readImportFiles>[0]): Promise<void> {
-  report.value = problem.value = null;
-  const texts = await readImportFiles(files);
-  rows.value = buildReview(importFiles(texts, importer.value === 'auto' ? {} : { importer: importer.value }));
-  selectedId.value = rows.value[0]?.id ?? null;
+/**
+ * Walk what was handed over and read it. Every step of that is the browser's to refuse — a folder
+ * it will not list, a file that moved since the drag began — and an unread drop used to leave the
+ * page exactly as it was, as if nothing had been dropped on it at all.
+ */
+async function load(collect: () => Promise<PathedFile[]>): Promise<void> {
+  report.value = problem.value = readProblem.value = null;
+  try {
+    const texts = await readImportFiles(await collect());
+    rows.value = buildReview(importFiles(texts, importer.value === 'auto' ? {} : { importer: importer.value }));
+    selectedId.value = rows.value[0]?.id ?? null;
+  } catch {
+    rows.value = [];
+    selectedId.value = null;
+    readProblem.value = UNREADABLE_DROP;
+  }
 }
 
 async function onDrop(event: DragEvent): Promise<void> {
-  if (event.dataTransfer === null) return;
-  await load(await collectEntries(entriesOf(event.dataTransfer)));
+  const transfer = event.dataTransfer;
+  if (transfer === null) return;
+  await load(() => collectEntries(entriesOf(transfer)));
 }
 
 async function onPick(event: Event): Promise<void> {
   const list = (event.target as HTMLInputElement).files;
-  if (list !== null) await load(pickedFiles(list));
+  if (list !== null) await load(async () => pickedFiles(list));
 }
 
 function patch(id: number, change: Partial<ReviewRow>): void {
@@ -68,7 +86,9 @@ async function commit(): Promise<void> {
   try {
     report.value = await store.importBulk(toBulkBody(rows.value, onConflict.value));
   } catch (e) {
-    problem.value = describeLibraryError(e);
+    // Not `describeLibraryError`: this is a write, and the offline copy cannot stand in for one,
+    // so "showing the cached copy" would promise a saved range that was never saved.
+    problem.value = `Nothing was saved to the library. ${describeApiError(e)}`;
   } finally {
     busy.value = false;
   }
@@ -109,6 +129,8 @@ async function commit(): Promise<void> {
       </label>
     </div>
 
+    <p v-if="readProblem" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="import-read-error">{{ readProblem }}</p>
+
     <template v-if="rows.length > 0 && !report">
       <p class="text-sm" data-testid="import-summary">
         {{ summary.total }} range{{ summary.total === 1 ? '' : 's' }} read · {{ summary.ready }} ready · {{ summary.needsSituation }} need a situation · {{ summary.failed }} failed · <strong>{{ summary.sending }} will be saved</strong>
@@ -147,7 +169,7 @@ async function commit(): Promise<void> {
         </div>
       </div>
 
-      <p v-if="problem" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ problem }}</p>
+      <p v-if="problem" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="import-problem">{{ problem }}</p>
       <button type="button" data-testid="import-commit" :disabled="busy || summary.sending === 0" class="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900" @click="commit">
         Save {{ summary.sending }} range{{ summary.sending === 1 ? '' : 's' }} to the library
       </button>

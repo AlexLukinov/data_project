@@ -11,22 +11,30 @@
  * The `savedId` prop is the whole difference between `/reports` and `/reports/<id>`, and it is a
  * prop rather than a `useRoute()` read so that D.4 and D.6 can mount this with an id of their own.
  * Running is always explicit: a report over 73M decisions is not a keystroke.
+ *
+ * Both moments before a number exists — nothing run yet, and run with nothing to show — are taught
+ * rather than left blank (audit §2.4), and every failure this page could otherwise hide behind an
+ * empty list says so in its own line: "no saved reports" and "your saved reports could not be read"
+ * look identical on screen and mean opposite things.
  */
 import { computed, ref, watch } from 'vue';
 
 import FilterBar from '~/components/filter/FilterBar.vue';
 import DefinitionPanel from './DefinitionPanel.vue';
+import EmptyState from './EmptyState.vue';
 import GroupByPicker from './GroupByPicker.vue';
 import PresetMenu from './PresetMenu.vue';
+import ReadingOptions from './ReadingOptions.vue';
 import SaveReportDialog from './SaveReportDialog.vue';
 import StatGrid from './StatGrid.vue';
 import StatPicker from './StatPicker.vue';
 import { describeApiError } from '~/auth/api';
 import type { Module, SavedReport } from '~/reports/api';
-import { MIN_N_CHOICES } from '~/reports/cell';
+import { reportEmptyView, reportIdleView } from '~/reports/emptyState';
 import type { ModulePreset } from '~/reports/library';
 import { nameTaken } from '~/reports/library';
 import { createColumnsModel } from '~/reports/model';
+import { widenFilter } from '~/reports/widen';
 import type { ReportRequest, ReportResult } from '~/stats/api';
 import { createStatsApi } from '~/stats/api';
 import { useDefinitionsStore } from '~/stores/definitions';
@@ -72,10 +80,7 @@ useReportUrl(columns);
 await useAsyncData('definitions', () => definitions.load(), { server: false });
 await useAsyncData('report-library', () => library.load(), { server: false });
 
-/* What a link opens: a saved report named in the path wins; otherwise the URL's own columns; and
-   failing both, the first standard report — the server's idea of where to start, not the client's. */
-if (props.savedId !== null) openSaved(props.savedId);
-else if (columns.stats.value.length === 0) openFirstPreset();
+openLinked();
 
 const describedStat = computed(() => definitions.stats.find((stat) => stat.code === describing.value));
 const describedDim = computed(() => (describedStat.value === undefined ? definitions.byCode.get(describing.value) : undefined));
@@ -83,18 +88,46 @@ const openReport = computed(() => (openId.value === null ? null : (library.saved
 const taken = computed(() => nameTaken(library.saved, savingName.value, openId.value));
 const canRun = computed(() => columns.problems.value.length === 0 && filter.problems.length === 0);
 
-function openFirstPreset(): void {
+/* `canRun` travels into both views because an empty state must not offer a Run door the disabled
+   button above it has already refused: `run()` returns early, and a button that answers a click
+   with nothing is worse than no button. */
+const idleView = computed(() => reportIdleView({ reportName: openReport.value?.name ?? null, hasStat: columns.stats.value.length > 0, canRun: canRun.value }));
+
+/** Why this report came back with no rows, worded from the question that was actually sent. */
+const emptyView = computed(() => reportEmptyView({ dataset: filter.dataset, sentence: filter.sentence, hasClauses: filter.active, dateFrom: filter.dateFrom, dateTo: filter.dateTo, rawFilter: !columns.editable.value, canRun: canRun.value }));
+
+/* What a link opens: a saved report named in the path wins; otherwise the URL's own columns; and
+   failing both, the first standard report — the server's idea of where to start, not the client's.
+   A library retry runs it again, because until the library is read `openSaved` refuses: otherwise
+   the header names a saved report whose columns this page never loaded, and Run runs the URL's. */
+function openLinked(): void {
   const first = library.presets[0];
-  if (first !== undefined) apply(first.request, null);
+  if (props.savedId !== null) openSaved(props.savedId);
+  else if (columns.stats.value.length === 0 && first !== undefined) apply(first.request, null);
 }
 
+/* A library that failed to load has no saved report in it, so "it may have been deleted" would be
+   this page inventing a cause; `library-error` already says the true one. */
 function openSaved(id: string): void {
+  if (library.status === 'error') return;
   const report = library.savedReport(id);
   if (report === undefined) {
     failure.value = 'That saved report is not in your library — it may have been deleted.';
     return;
   }
   apply(report.definition, report.id);
+}
+
+/* Each store turns its own failure back into the sentence already on screen, so a second failure
+   replaces that line rather than becoming an unhandled rejection; a library that reads on the
+   second try then opens what the link named, which the failed first try could not. */
+function retry(what: 'definitions' | 'library'): void {
+  void (what === 'definitions' ? definitions.load() : library.load().then(openLinked)).catch(() => undefined);
+}
+
+/** The ways out an empty state offers. `widenFilter` owns the filter's; running is this page's. */
+function widen(key: string): void {
+  if (!widenFilter(key, filter) && key === 'run') void run();
 }
 
 /** Load a document and remember which stored thing, if any, is on screen. */
@@ -113,6 +146,8 @@ function goTo(id: string | null): Promise<unknown> {
 }
 
 async function run(): Promise<void> {
+  /* Not only the button's `disabled`: an empty state offers Run report as a second door. */
+  if (!canRun.value) return;
   busy.value = true;
   failure.value = '';
   try {
@@ -201,10 +236,19 @@ watch(
       </button>
     </div>
 
-    <p v-if="library.status === 'error'" role="alert" data-testid="library-error" class="text-sm text-red-600 dark:text-red-400">{{ library.error }}</p>
+    <div v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="retry('definitions')">Try again</button>
+    </div>
+
+    <div v-if="library.status === 'error'" role="alert" data-testid="library-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ library.error }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="retry('library')">Try again</button>
+    </div>
+
     <p v-if="deleteFailure" role="alert" data-testid="report-delete-error" class="text-sm text-red-600 dark:text-red-400">{{ deleteFailure }}</p>
 
-    <PresetMenu :presets="library.presets" :saved="library.saved" :open-id="openId" :busy="busy" @open-preset="openPreset" @open-saved="openStored" @remove="remove" />
+    <PresetMenu :presets="library.presets" :saved="library.saved" :open-id="openId" :busy="busy" :failed="library.status === 'error'" @open-preset="openPreset" @open-saved="openStored" @remove="remove" />
 
     <FilterBar />
 
@@ -216,25 +260,7 @@ watch(
     <div class="grid gap-4 md:grid-cols-2">
       <GroupByPicker :dimensions="definitions.dimensions" :selected="columns.groupBy.value" :by-code="definitions.byCode" @change="columns.setGroupBy" @describe="describing = $event" />
 
-      <section class="space-y-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-        <h2 class="text-sm font-medium">How to read it</h2>
-        <label class="flex flex-wrap items-center gap-2 text-sm">
-          <input v-model="columns.compare.value" type="checkbox" data-testid="compare-toggle" />
-          <span>Compare each cell with the field</span>
-          <span v-if="columns.compare.value && !columns.compareOn.value" class="text-xs text-amber-700 dark:text-amber-400" data-testid="compare-inert">
-            remembered, but not in effect on a pool report — there is no hero seat to compare
-          </span>
-        </label>
-        <label class="flex items-center gap-2 text-sm">
-          <span class="text-zinc-500">grey a cell under</span>
-          <select v-model.number="columns.minN.value" data-testid="minn-select" class="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700">
-            <option v-for="choice in MIN_N_CHOICES" :key="choice" :value="choice">{{ choice === 0 ? 'never — show every number' : `${choice} observations` }}</option>
-          </select>
-        </label>
-        <p v-if="columns.cohortOn.value" class="text-xs text-zinc-500" data-testid="cohort-note">
-          Scoped to players matching {{ columns.cohort.value?.rules.map((rule) => `${rule.stat} ${rule.op} ${rule.value}`).join(' and ') }}.
-        </p>
-      </section>
+      <ReadingOptions v-model:compare="columns.compare.value" v-model:min-n="columns.minN.value" :compare-on="columns.compareOn.value" :cohort="columns.cohort.value" :cohort-on="columns.cohortOn.value" :stats="definitions.stats" />
     </div>
 
     <StatPicker
@@ -253,7 +279,12 @@ watch(
     <p v-if="failure" role="alert" data-testid="report-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">{{ failure }}</p>
     <p v-if="stale && result" class="text-xs text-amber-700 dark:text-amber-400" data-testid="report-stale">The question has changed since this ran. Run again to refresh it.</p>
 
-    <StatGrid :result="result" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="columns.minN.value" @describe="describing = $event" />
+    <EmptyState v-if="result === null && !busy && !failure" :view="idleView" testid="report-idle" @act="widen" />
+    <p v-else-if="busy && result === null" role="status" class="text-sm text-zinc-500" data-testid="report-running">Running the report over every hand it covers…</p>
+
+    <StatGrid :result="result" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="columns.minN.value" @describe="describing = $event">
+      <template #empty><EmptyState :view="emptyView" testid="report-empty" @act="widen" /></template>
+    </StatGrid>
 
     <SaveReportDialog
       :open="dialogOpen"

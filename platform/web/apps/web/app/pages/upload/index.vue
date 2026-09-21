@@ -46,14 +46,6 @@ const {
   refresh: refreshUploads,
 } = await useAsyncData('uploads-recent', () => api.list(RECENT_UPLOADS), { server: false, default: () => [] });
 
-/**
- * `useAsyncData` wraps what threw in an error of its own, which reads as a 500 even when nothing
- * answered; the sentence is about what actually threw.
- */
-function reason(error: { cause?: unknown } | null | undefined): string {
-  return describeApiError(error?.cause ?? error);
-}
-
 function onFiles(files: PathedFile[]): void {
   queue.value?.add(files);
 }
@@ -89,7 +81,7 @@ function onFiles(files: PathedFile[]): void {
 
     <p v-if="locked" role="status" aria-live="polite" class="text-sm text-zinc-500" data-testid="upload-locked">The dataset and the site stay as they are until these files are sent.</p>
     <p v-if="sitesError" role="alert" data-testid="upload-sites-error" class="text-sm text-red-600 dark:text-red-400">
-      Could not load the list of sites, so each file's site will be detected: {{ reason(sitesError) }}
+      Could not load the list of sites, so each file's site will be detected: {{ describeApiError(sitesError) }}
     </p>
 
     <DropZone :disabled="locked" @files="onFiles" @reading="reading = $event" />
@@ -97,7 +89,7 @@ function onFiles(files: PathedFile[]): void {
 
     <section class="space-y-2">
       <h2 class="font-medium">Recent uploads</h2>
-      <p v-if="uploadsError" role="alert" data-testid="uploads-error" class="text-sm text-red-600 dark:text-red-400">Could not load your recent uploads: {{ reason(uploadsError) }}</p>
+      <p v-if="uploadsError" role="alert" data-testid="uploads-error" class="text-sm text-red-600 dark:text-red-400">Could not load your recent uploads: {{ describeApiError(uploadsError) }}</p>
       <p v-else-if="uploadsStatus === 'pending' && uploads.length === 0" class="text-sm text-zinc-500" data-testid="uploads-loading">Loading your recent uploads…</p>
       <UploadList v-else :rows="uploads" />
     </section>

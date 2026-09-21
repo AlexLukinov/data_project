@@ -19,9 +19,11 @@
  * purpose: a list that fails to reload after the server accepted the row is a reload failure with
  * its own sentence, never a refused save with the form still open over a row that now exists.
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import CohortForm from '~/components/pool/CohortForm.vue';
+import DefinitionPanel from '~/components/reports/DefinitionPanel.vue';
+import EmptyState from '~/components/reports/EmptyState.vue';
 import StatGrid from '~/components/reports/StatGrid.vue';
 import { describeApiError } from '~/auth/api';
 import { createReportsApi } from '~/reports/api';
@@ -29,6 +31,7 @@ import { MIN_N } from '~/reports/cell';
 import { describeCohortError } from '~/pool/rules';
 import type { CohortChoice, CohortIn, PoolCohort } from '~/pool/stats';
 import { MEMBER_LIMIT, cohortChoices, createPoolStatsApi } from '~/pool/stats';
+import { LIST_NOT_REREAD, cohortsEmptyView, emptyMembersView, savedCohortsErrorWords, shippedCohortsErrorWords } from '~/pool/words';
 import type { ReportResult } from '~/stats/api';
 import { useDefinitionsStore } from '~/stores/definitions';
 
@@ -45,6 +48,9 @@ const size = ref<number | null>(null);
 const members = ref<ReportResult | null>(null);
 const failure = ref('');
 const busy = ref(false);
+const describing = ref('');
+const shippedProblem = ref('');
+const savedProblem = ref('');
 
 /** The form: closed, or open with what it starts from and the saved row it replaces, if any. */
 const form = ref<{ initial: CohortIn | null; replacing: PoolCohort | null } | null>(null);
@@ -56,20 +62,43 @@ const listFailure = ref('');
 await useAsyncData('definitions', () => definitions.load(), { server: false });
 await useAsyncData('pool-cohorts', load, { server: false });
 
+const problems = computed(() => [shippedProblem.value, savedProblem.value].filter((problem) => problem !== ''));
+const membersEmpty = emptyMembersView();
+const describedStat = computed(() => definitions.stats.find((stat) => stat.code === describing.value));
+const describedDim = computed(() => (describedStat.value === undefined ? definitions.byCode.get(describing.value) : undefined));
+
+/**
+ * Both lists, each answering for itself. Settled rather than joined: the shipped cohorts and the
+ * founder's own fail separately, and a page that shows "No cohorts." over a failed call is telling
+ * the founder their cohorts are gone. The saved half used to be swallowed by a `.catch(() => [])`
+ * outright, so a saved cohort could disappear from this page without a word.
+ */
 async function load(): Promise<void> {
-  const [shipped, mine] = await Promise.all([reports.poolPresets(), pool.cohorts().catch(() => [])]);
-  saved.value = mine;
-  choices.value = cohortChoices(shipped.cohorts, mine);
+  shippedProblem.value = '';
+  savedProblem.value = '';
+  const [shipped, mine] = await Promise.allSettled([reports.poolPresets(), pool.cohorts()]);
+  if (shipped.status === 'rejected') shippedProblem.value = shippedCohortsErrorWords(describeApiError(shipped.reason));
+  if (mine.status === 'rejected') savedProblem.value = savedCohortsErrorWords(describeApiError(mine.reason));
+  saved.value = mine.status === 'fulfilled' ? mine.value : [];
+  choices.value = cohortChoices(shipped.status === 'fulfilled' ? shipped.value.cohorts : [], saved.value, definitions.stats);
+  /* The list has now been read back, so "it may not show it yet" is no longer true of the rows
+     under it — a Try again that worked must not leave that sentence contradicting them. A read
+     that failed again leaves it, because the write it speaks for is still unconfirmed. */
+  if (savedProblem.value === '') listFailure.value = '';
 }
 
 /** Read the list back after a write. A failed read is its own sentence, never mistaken for a refused write. */
 async function reload(): Promise<void> {
-  listFailure.value = '';
-  try {
-    await load();
-  } catch (error) {
-    listFailure.value = describeApiError(error);
-  }
+  await load();
+  if (savedProblem.value !== '') listFailure.value = LIST_NOT_REREAD;
+}
+
+/**
+ * Ask for the registry again. The store keeps the reason in `definitions.error`, which is the
+ * sentence already on screen, so there is nothing here to rethrow into an unhandled rejection.
+ */
+function retryDefinitions(): void {
+  void definitions.load().catch(() => undefined);
 }
 
 /**
@@ -168,10 +197,20 @@ async function remove(choice: CohortChoice): Promise<void> {
       </button>
     </div>
 
-    <p class="text-sm text-zinc-500">
+    <p class="max-w-2xl text-sm text-zinc-500">
       A cohort is a rule about how someone plays, applied when a report runs — not a saved list of
       names. Measuring the field with one scopes every number to the players who match it today.
     </p>
+
+    <div v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="retryDefinitions">Try again</button>
+    </div>
+
+    <div v-if="problems.length" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      <p v-for="problem in problems" :key="problem" role="alert" data-testid="cohorts-load-error">{{ problem }}</p>
+      <button type="button" class="mt-1 underline underline-offset-2" @click="load()">Try again</button>
+    </div>
 
     <CohortForm
       v-if="form !== null"
@@ -185,11 +224,9 @@ async function remove(choice: CohortChoice): Promise<void> {
     />
 
     <p v-if="deleteFailure" role="alert" data-testid="cohort-delete-error" class="text-sm text-red-600 dark:text-red-400">{{ deleteFailure }}</p>
-    <p v-if="listFailure" role="alert" data-testid="cohort-list-error" class="text-sm text-red-600 dark:text-red-400">
-      The change was saved, but the list could not be read back: {{ listFailure }}
-    </p>
+    <p v-if="listFailure" role="alert" data-testid="cohort-list-error" class="text-sm text-red-600 dark:text-red-400">{{ listFailure }}</p>
 
-    <p v-if="choices.length === 0" class="text-sm text-zinc-500" data-testid="no-cohorts">No cohorts.</p>
+    <EmptyState v-if="choices.length === 0 && problems.length === 0" :view="cohortsEmptyView()" testid="no-cohorts" @act="openNew" />
 
     <ul class="space-y-2" data-testid="cohort-list">
       <li
@@ -224,16 +261,21 @@ async function remove(choice: CohortChoice): Promise<void> {
             makes a cohort of your own with the same rules, which does list the players it names.
           </p>
           <template v-else>
-            <p v-if="busy" class="text-xs text-zinc-500">Counting…</p>
-            <p v-else-if="size !== null" class="text-xs text-zinc-500" data-testid="cohort-size">
-              <strong class="tabular-nums">{{ size.toLocaleString('en-US') }}</strong> players match right now;
-              showing the first {{ Math.min(MEMBERS_SHOWN, MEMBER_LIMIT) }}.
-            </p>
+            <p v-if="busy" class="text-xs text-zinc-500" data-testid="cohort-counting">Counting…</p>
+            <template v-else-if="size !== null">
+              <p v-if="size > 0" class="text-xs text-zinc-500" data-testid="cohort-size">
+                <strong class="tabular-nums">{{ size.toLocaleString('en-US') }}</strong> players match right now;
+                showing the first {{ Math.min(MEMBERS_SHOWN, MEMBER_LIMIT) }}.
+              </p>
+              <EmptyState v-else :view="membersEmpty" testid="cohort-none" @act="openFrom(choice)" />
+            </template>
             <p v-if="failure" role="alert" data-testid="cohort-error" class="text-sm text-red-600 dark:text-red-400">{{ failure }}</p>
-            <StatGrid :result="members" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="MIN_N" />
+            <StatGrid v-if="size !== 0" :result="members" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="MIN_N" @describe="describing = $event" />
           </template>
         </div>
       </li>
     </ul>
+
+    <DefinitionPanel v-if="describing" :stat="describedStat" :dimension="describedDim" :dimensions="definitions.byCode" @close="describing = ''" />
   </section>
 </template>

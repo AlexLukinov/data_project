@@ -51,10 +51,20 @@ interface State {
 
 const NO_ANSWER = 'The API did not answer; showing the cached copy. Start it with `make api` in platform/.';
 const CACHE_FAILED = 'The offline copy could not be updated';
+const NO_BACKUP =
+  'The API did not answer, and a backup is built from the library on the server rather than from this browser. Start it with `make api` in platform/ and download again.';
 
 /** One sentence for a failed library call; a silent API means the cached copy is what is shown. */
 export function describeLibraryError(error: unknown): string {
   return describeApiError(error, NO_ANSWER);
+}
+
+/**
+ * The same for the backup, which is the one read the offline copy cannot stand in for: it asks the
+ * server for every range at once, so "showing the cached copy" would be a promise nothing kept.
+ */
+export function describeBackupError(error: unknown): string {
+  return describeApiError(error, NO_BACKUP);
 }
 
 /** The list filters applied to the cached copy, for when the API is away. */

@@ -22,6 +22,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{ describe: [code: string] }>();
 
+defineSlots<{
+  /**
+   * What a grid with no rows says, forwarded to `StatGrid`'s own `empty` slot. Scoped by side
+   * because the two grids are two different cohorts: "no hand from the players in Regs" under the
+   * left grid and the same sentence under the right one would name the wrong cohort in half the
+   * comparisons. Left unpassed, each grid keeps StatGrid's own fallback.
+   */
+  empty?: (props: { side: 'left' | 'right' }) => unknown;
+}>();
+
 /** How many of the field's hands a side rests on, so a cohort's size is never implied by the grid. */
 function hands(side: { result: ReportResult | null } | null): string {
   return side?.result == null ? '' : `${side.result.hands.toLocaleString('en-US')} hands`;
@@ -35,7 +45,9 @@ function hands(side: { result: ReportResult | null } | null): string {
         <span data-testid="grid-left-label">{{ props.left.label }}</span>
         <span class="text-xs font-normal text-zinc-500 tabular-nums" data-testid="grid-left-hands">{{ hands(props.left) }}</span>
       </h2>
-      <StatGrid :result="props.left.result" :stats="props.stats" :dimensions="props.dimensions" :min-n="props.minN" @describe="emit('describe', $event)" />
+      <StatGrid :result="props.left.result" :stats="props.stats" :dimensions="props.dimensions" :min-n="props.minN" @describe="emit('describe', $event)">
+        <template v-if="$slots.empty" #empty><slot name="empty" side="left" /></template>
+      </StatGrid>
     </section>
 
     <section v-if="props.right" class="space-y-2 min-w-0">
@@ -43,7 +55,9 @@ function hands(side: { result: ReportResult | null } | null): string {
         <span data-testid="grid-right-label">{{ props.right.label }}</span>
         <span class="text-xs font-normal text-zinc-500 tabular-nums" data-testid="grid-right-hands">{{ hands(props.right) }}</span>
       </h2>
-      <StatGrid :result="props.right.result" :stats="props.stats" :dimensions="props.dimensions" :min-n="props.minN" @describe="emit('describe', $event)" />
+      <StatGrid :result="props.right.result" :stats="props.stats" :dimensions="props.dimensions" :min-n="props.minN" @describe="emit('describe', $event)">
+        <template v-if="$slots.empty" #empty><slot name="empty" side="right" /></template>
+      </StatGrid>
     </section>
   </div>
 </template>

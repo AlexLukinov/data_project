@@ -11,6 +11,7 @@ import { createAnalysesApi } from '~/analyze/api';
 import { useEditableOdds } from '~/composables/useEditableOdds';
 import type { NodeRanges } from '~/hands/panels';
 import { NO_RANGES, createNodeRangeReader } from '~/hands/panels';
+import { LIBRARY_UNREADABLE, analyzeProblem, oddsPanelsNote, offlineRangeNote, poolProblem, realizationProblem } from '~/hands/study';
 import type { NodeFrequencies, NodeRealization } from '~/pool/api';
 import { createPoolApi } from '~/pool/api';
 import { classEquity } from '~/pool/estimate';
@@ -21,7 +22,12 @@ const props = defineProps<{ hand: ReplayHand; watchSeat?: number | null; handTex
 
 const store = useRangesStore();
 const { service } = useEquityService();
-const reader = createNodeRangeReader((key) => store.lookup(key));
+// The reader is told when the library is answering from the browser's own copy, so an empty
+// answer from it is asked again rather than kept as this session's answer (`hands/panels.ts`).
+const reader = createNodeRangeReader(
+  (key) => store.lookup(key),
+  () => store.status === 'offline',
+);
 const poolApi = createPoolApi(useApi());
 const analysesApi = createAnalysesApi(useApi());
 
@@ -32,6 +38,11 @@ const ranges = ref<NodeRanges>(NO_RANGES);
 const pool = ref<NodeFrequencies | null>(null);
 const realized = ref<NodeRealization | null>(null);
 const equity = ref<EquityResult | null>(null);
+const poolFailure = ref('');
+const realizedFailure = ref('');
+
+/** The situation every answer on screen is for: a marker each late answer is checked against. */
+let asked = '';
 
 async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
   node.value = next;
@@ -39,32 +50,40 @@ async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
   pool.value = null;
   realized.value = null;
   equity.value = null;
+  poolFailure.value = '';
+  realizedFailure.value = '';
+  // The charts are marked with the same `asked` situation as the pool's answers, and for the same
+  // reason: stepping quickly, an earlier step's lookup can settle last, and its charts — or its
+  // `failed` flag, which prints "your range library could not be read" — would land under the
+  // label of the step the reader is now on.
+  const id = next === null ? '' : canonicalNodeKey(next);
+  asked = id;
   const [found] = await Promise.all([reader.at(props.hand, at.index), askThePool(next)]);
-  ranges.value = found;
+  if (asked === id) ranges.value = found;
 }
 
 /**
- * What the field does here (tier 1). A silent API leaves the panel empty, never wrong.
+ * What the field does here (tier 1), and what it won from here (plan F.10).
  *
- * The answer is kept only while it is still the answer to the question on screen — compared by
+ * Each answer is kept only while it is still the answer to the question on screen — compared by
  * the situation itself, not by object identity, because `node.value` hands back a reactive
  * proxy that never equals the key that was asked about.
+ *
+ * Neither is swallowed any more. The two calls settle independently, so one refusal does not take
+ * the other's answer with it, and a failure becomes a sentence rather than an absent panel: the
+ * database refuses a fifth simultaneous query, and a reader stepping quickly through a hand would
+ * otherwise read that refusal as "the field has never played this spot" (`hands/study.ts`).
  */
-let asked = '';
-
 async function askThePool(key: NodeKey | null): Promise<void> {
   if (key === null) return;
   const id = canonicalNodeKey(key);
   asked = id;
-  const [answer, won] = await Promise.all([
-    poolApi.frequencies(key).catch(() => null),
-    // Empirical EQR (plan F.10) needs `invested_bb`, so this is silent until the mart is
-    // rebuilt with it — the same rule as the rest: an unanswerable question shows nothing.
-    poolApi.realization(key).catch(() => null),
-  ]);
+  const [answer, won] = await Promise.allSettled([poolApi.frequencies(key), poolApi.realization(key)]);
   if (asked !== id) return;
-  pool.value = answer;
-  realized.value = won;
+  pool.value = answer.status === 'fulfilled' ? answer.value : null;
+  poolFailure.value = answer.status === 'rejected' ? poolProblem(answer.reason) : '';
+  realized.value = won.status === 'fulfilled' ? won.value : null;
+  realizedFailure.value = won.status === 'rejected' ? realizationProblem(won.reason) : '';
 }
 
 const poolActions = computed(() => Object.entries(pool.value?.frequencies ?? {}).sort((a, b) => b[1] - a[1]));
@@ -102,6 +121,8 @@ const potBefore = computed(() => Math.max(0, (state.value?.pot ?? 0) - toCall.va
  * left to follow the bet (`null`), so a bigger bet typed in asks for a bigger call.
  */
 const odds = reactive(useEditableOdds(() => ({ pot: potBefore.value, bet: toCall.value, call: null, rakeConfig: NO_RAKE })));
+/** Why there is nothing for those two panels to work from, or `''` while there is. */
+const noOdds = computed(() => oddsPanelsNote(potBefore.value, toCall.value));
 
 function body(range: NodeRanges['mine']): WeightedRange | null {
   return range === null ? null : { ...parseRange(range.weights).range, label: range.name };
@@ -117,11 +138,13 @@ const watched = computed(() => props.hand.seats.find((s) => s.seat === props.wat
  * text, because nothing on the server has stored it (ADR-029) and the analysis must reopen.
  */
 const starting = ref(false);
+const startFailure = ref('');
 
 async function analyzeThisNode(): Promise<void> {
   const key = node.value;
   if (key === null || starting.value) return;
   starting.value = true;
+  startFailure.value = '';
   try {
     const stored = props.hand.handUid !== '';
     const created = await analysesApi.create({
@@ -133,6 +156,10 @@ async function analyzeThisNode(): Promise<void> {
       action_index: state.value?.index ?? 0,
     });
     await navigateTo(`/analyze/${created.id}`);
+  } catch (cause) {
+    // Without this the press was an unhandled rejection: the button came back to life and the
+    // page stayed where it was, with nothing to say why.
+    startFailure.value = analyzeProblem(cause);
   } finally {
     starting.value = false;
   }
@@ -152,6 +179,7 @@ async function analyzeThisNode(): Promise<void> {
           <button v-if="node" type="button" class="rounded border border-zinc-300 px-2 py-0.5 text-sm dark:border-zinc-700" data-testid="study-analyze" :disabled="starting" @click="analyzeThisNode">Analyze this node</button>
         </div>
         <p v-if="watched" class="text-sm text-zinc-500" data-testid="study-watching">Watching {{ watched.position }} {{ watched.name }}<span v-if="watched.cards.length"> with {{ watched.cards.join(' ') }}</span></p>
+        <p v-if="startFailure" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-analyze-error">{{ startFailure }}</p>
 
         <div v-if="pool" class="space-y-1" data-testid="study-pool">
           <p v-if="pool.enough" class="flex flex-wrap gap-x-3 text-sm">
@@ -162,11 +190,14 @@ async function analyzeThisNode(): Promise<void> {
           <p v-else class="text-sm text-zinc-500">The pool has not played this situation often enough to show frequencies.</p>
           <PoolDataBadge :tier="1" :sample-size="pool.sample_size" :enough="pool.enough" :min-n="pool.min_n" />
         </div>
+        <p v-else-if="poolFailure" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-pool-error">{{ poolFailure }}</p>
 
         <div v-if="mine">
           <p class="mb-1 text-sm">My chart here: <span class="font-medium" data-testid="study-my-range">{{ ranges.mine?.name }}</span></p>
           <RangeMatrix :range="mine" mode="view" :blocked-cards="board" />
         </div>
+        <p v-else-if="ranges.failed" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-range-error">{{ LIBRARY_UNREADABLE }}</p>
+        <p v-else-if="store.status === 'offline'" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-no-range">{{ offlineRangeNote(store.error) }}</p>
         <p v-else class="text-sm text-zinc-500" data-testid="study-no-range">
           Nothing stored for this situation.
           <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink> and they will show up here as you step.
@@ -174,7 +205,7 @@ async function analyzeThisNode(): Promise<void> {
       </div>
 
       <div class="space-y-4">
-        <div v-if="toCall > 0" class="space-y-4">
+        <div v-if="noOdds === ''" class="space-y-4">
           <PotOddsPanel v-model:pot="odds.pot" v-model:bet="odds.bet" v-model:call="odds.call" v-model:implied-extra="odds.impliedExtra" v-model:rake-config="odds.rakeConfig" data-testid="study-pot-odds" />
           <MDFPanel v-model:pot="odds.pot" v-model:bet="odds.bet" :rake-config="odds.rakeConfig" :range="mine" />
           <p v-if="odds.edited" class="text-sm text-zinc-500" data-testid="study-odds-edited">
@@ -182,7 +213,7 @@ async function analyzeThisNode(): Promise<void> {
             <button type="button" class="underline" data-testid="study-odds-reset" @click="odds.reset()">Back to the hand's numbers</button>
           </p>
         </div>
-        <p v-else class="text-sm text-zinc-500" data-testid="study-nothing-faced">Nothing to call at this step — pot odds and MDF appear when there is a bet in front.</p>
+        <p v-else class="text-sm text-zinc-500" data-testid="study-nothing-faced">{{ noOdds }}</p>
 
         <ComboDistributionPanel v-if="mine" :range="mine" :board="board" :group-by="['made', 'draw']" />
         <EquityCalculator v-if="both.length === 2" :ranges="both" :board="board" :service="service" @result="equity = $event" />
@@ -190,7 +221,8 @@ async function analyzeThisNode(): Promise<void> {
           No stored range for {{ nodeKeyLabel(ranges.villainNode) }}, so there is nothing to run the equity against yet.
         </p>
 
-        <p v-if="realized?.needs_rebuild" class="text-sm text-zinc-500" data-testid="study-eqr-rebuild">
+        <p v-if="realizedFailure" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-realization-error">{{ realizedFailure }}</p>
+        <p v-else-if="realized?.needs_rebuild" class="text-sm text-zinc-500" data-testid="study-eqr-rebuild">
           What the field won from this situation cannot be measured on this database yet; it appears after the statistics are next rebuilt.
         </p>
         <div v-else-if="realized?.enough" class="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="study-realization">

@@ -6,14 +6,16 @@
  * its own prose ("on the flop from BTN facing raise") for the four dimensions it knew; that does
  * not extend to 79, and a half-worded builder reads worse than a uniformly worded one.
  *
- * Two registry conventions need translating for a reader: `5bet_plus` is written `5bet+`, and
- * `''` — which the registry uses for "not applicable / unknown" on nine dimensions — is written
- * "not applicable" rather than rendered as nothing at all.
+ * How a single value reads is not decided here. `stats/vocabulary.ts` owns that (ADR-057), because
+ * the same `5bet_plus` appears in a chip, in a report heading and in a select, and three copies of
+ * one rewrite drift apart — the `_plus` → `+` one did, and ran on `player_key` too, where a player
+ * named `a_plus_b` came out as `a+b`.
  */
 
 import { lineWords } from '@poker/ui';
 
 import type { Dimension } from '../stats/api';
+import { bucketWords, valueWords } from '../stats/vocabulary';
 import type { Clause } from './clause';
 import { BUCKET_OP } from './clause';
 
@@ -31,15 +33,15 @@ const OP_WORDS: Record<string, string> = {
   like: 'matches',
 };
 
-/** `5bet_plus` → `5bet+`; `''` → the words for "the column does not apply here". */
-export function valueLabel(value: string): string {
-  if (value === '') return 'not applicable';
-  return value.replace('_plus', '+');
-}
-
-/** A bucket name as a range a person reads: `75-125` → `75–125`, `200+` unchanged. */
-function bucketLabel(name: string): string {
-  return name.replace(/^(\d[\d.]*)-(\d[\d.]*)$/, '$1–$2');
+/**
+ * `5bet_plus` → `5bet+`; `''` → the words for "the column does not apply here".
+ *
+ * The dimension is optional only because a caller may have lost it (a saved report naming a column
+ * this server no longer serves); with none, the value comes back as it is, since `_plus` is a
+ * convention of the registry's enums and of nothing else.
+ */
+export function valueLabel(value: string, dim?: Dimension): string {
+  return valueWords(dim, value);
 }
 
 /**
@@ -49,7 +51,7 @@ function bucketLabel(name: string): string {
 export function clauseLabel(clause: Clause, dim: Dimension | undefined): string {
   const name = dim?.label ?? clause.dim;
   if (dim === undefined) return `${name} ${clause.op} ${clause.values.join(', ')}`;
-  if (clause.op === BUCKET_OP) return `${name} ${bucketLabel(clause.values[0] ?? '')}`;
+  if (clause.op === BUCKET_OP) return `${name} ${bucketWords(dim, clause.values[0] ?? '')}`;
   if (dim.type === 'bool') return `${name}: ${clause.values[0] === '1' ? 'yes' : 'no'}`;
   // On a line, '' is not "not applicable" — it is "my first decision on this street", which is
   // what `lineWords` says. Colon rather than a verb, because an action line reads as a phrase.
@@ -58,7 +60,9 @@ export function clauseLabel(clause: Clause, dim: Dimension | undefined): string 
 }
 
 function values(clause: Clause, dim: Dimension): string {
-  const shown = clause.values.map(dim.type === 'number' ? (v) => v : valueLabel);
+  // A number keeps the digits it was typed as: `valueWords` would read an emptied box as "not
+  // applicable", and an unfinished clause already has `clauseProblem` to say what is missing.
+  const shown = clause.values.map(dim.type === 'number' ? (v) => v : (v) => valueLabel(v, dim));
   if (clause.op === 'between') return `${shown[0]} and ${shown[1]}`;
   return shown.join(', ');
 }

@@ -7,17 +7,28 @@
  * correct −131.82 bb/100 that means nothing, and a column of rates invites reading down it, so
  * under the engine's own per-100 floor the rate is withheld and the row says why. The big
  * blinds beside it stay, because a sum is exact at any sample.
+ *
+ * **The three money headings are registry words** (ADR-057), which is why this table reads the
+ * definitions store at all: `bb`, `EV bb` and `bb/100` were bare abbreviations, and the middle
+ * one is the app's worst ambiguity — the EV here is the all-in adjusted total, not a solver's.
+ * The reason a rate is withheld moved off the cell's `title` onto the same affordance, because a
+ * `title` on a `<td>` reaches a mouse and nothing else.
  */
 import { computed } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { SessionsResult } from '~/hero/api';
-import { sessionRows, sessionTotals } from '~/hero/sessions';
+import { sessionHeaders, sessionRows, sessionTotals, thinRateTerm } from '~/hero/sessions';
+import { useDefinitionsStore } from '~/stores/definitions';
 
 const props = withDefaults(defineProps<{ result: SessionsResult; limit?: number }>(), { limit: 12 });
+
+const definitions = useDefinitionsStore();
 
 const all = computed(() => sessionRows(props.result.sessions));
 const rows = computed(() => all.value.slice(0, props.limit));
 const totals = computed(() => sessionTotals(props.result));
+const headers = computed(() => sessionHeaders(definitions.stats, definitions.byCode));
 </script>
 
 <template>
@@ -33,9 +44,9 @@ const totals = computed(() => sessionTotals(props.result));
             <th class="p-2">when</th>
             <th class="p-2">for</th>
             <th class="p-2 text-right">hands</th>
-            <th class="p-2 text-right">bb</th>
-            <th class="p-2 text-right">EV bb</th>
-            <th class="p-2 text-right">bb/100</th>
+            <th class="p-2 text-right"><RegistryTerm :entry="headers.net" label="bb" name="net_won_bb" /></th>
+            <th class="p-2 text-right"><RegistryTerm :entry="headers.ev" label="EV bb" name="ev_won_bb" /></th>
+            <th class="p-2 text-right"><RegistryTerm :entry="headers.rate" label="bb/100" name="bb_per_100" /></th>
             <th class="p-2">where</th>
           </tr>
         </thead>
@@ -51,9 +62,9 @@ const totals = computed(() => sessionTotals(props.result));
               {{ row.netText }}
             </td>
             <td class="p-2 text-right tabular-nums text-zinc-500">{{ row.evText }}</td>
-            <td class="p-2 text-right tabular-nums text-zinc-500" :title="row.note" :data-testid="`session-rate-${row.key}`">
+            <td class="p-2 text-right tabular-nums text-zinc-500" :data-testid="`session-rate-${row.key}`">
               <template v-if="row.rateText !== ''">{{ row.rateText }}</template>
-              <span v-else class="text-zinc-400 dark:text-zinc-600">too few hands</span>
+              <RegistryTerm v-else class="text-zinc-400 dark:text-zinc-600" :entry="thinRateTerm(row.note)" name="too-few-hands" />
             </td>
             <td class="p-2 whitespace-nowrap text-xs text-zinc-500">{{ row.where }}</td>
           </tr>

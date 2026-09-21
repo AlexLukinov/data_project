@@ -30,6 +30,8 @@ import type { Clause } from '../filter/clause';
 import { nodeToClauses } from '../filter/node';
 import { toQuery } from '../filter/url';
 import type { Dimension, Stat } from '../stats/api';
+import type { TermEntry } from '../stats/vocabulary';
+import { categoryWords, statEntry } from '../stats/vocabulary';
 import { unsearchableLabels } from '../hands/searchable';
 import type { Leak } from './api';
 
@@ -99,4 +101,45 @@ export function handsQuery(clauses: readonly Clause[], dates: DrillDates = {}): 
 /** Leaks worth showing, worst first. The server already sorts by score; this is the guard. */
 export function ranked(leaks: readonly Leak[]): Leak[] {
   return [...leaks].sort((a, b) => b.score - a.score);
+}
+
+/** One row of the leak table: the server's numbers, the two doors, and the words for both. */
+export interface LeakRow {
+  leak: Leak;
+  /** What the stat measures, from the registry entry `leak.code` names (ADR-057). */
+  term: TermEntry;
+  /** The category as a reader says it. `/v1/hero/leaks` sends the raw code, `preflop`. */
+  category: string;
+  drill: LeakDrill;
+  spotQuery: Record<string, string> | null;
+  takenQuery: Record<string, string> | null;
+}
+
+/**
+ * The table's rows, worst first.
+ *
+ * Built here rather than in the component because every branch in it is a decision about words or
+ * links — which registry entry explains a label, whether a leak can be opened at all — and a
+ * decision made inside a template is a decision no test ever reads. The response carries a label
+ * but no description, so the sentence has to be looked up against the registry this session loaded;
+ * a stat it does not hold still reads as its label, and says plainly that it is unknown.
+ */
+export function leakRows(
+  leaks: readonly Leak[],
+  stats: ReadonlyMap<string, Stat>,
+  dims: ReadonlyMap<string, Dimension>,
+  dates: DrillDates = {},
+): LeakRow[] {
+  return ranked(leaks).map((leak) => {
+    const stat = stats.get(leak.code);
+    const drill = leakDrill(leak, stat, dims);
+    return {
+      leak,
+      term: statEntry(stat, leak.code, leak.label),
+      category: categoryWords(leak.category),
+      drill,
+      spotQuery: drill.spot === null ? null : handsQuery(drill.spot, dates),
+      takenQuery: drill.taken === null ? null : handsQuery(drill.taken, dates),
+    };
+  });
 }

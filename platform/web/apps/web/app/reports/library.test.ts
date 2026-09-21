@@ -52,7 +52,14 @@ describe('the report library', () => {
     );
     await expect(library.load()).rejects.toThrow('boom');
     expect(library.status.value).toBe('error');
-    expect(library.error.value).toContain('standard reports could not be loaded');
+    /* The reason is part of the sentence (F.12c): without it "could not be read" reads exactly like
+       an empty library, which is how `library-empty` came to say "None yet" over a failed load. */
+    expect(library.error.value).toContain('could not be read');
+    expect(library.error.value).toContain('boom');
+    /* And the sentence points the right way: every screen that shows this alert renders it above
+       the list it is talking about (ReportWorkbench's `library-error`, then `PresetMenu`), so the
+       earlier "the list above" sent the reader looking past it. */
+    expect(library.error.value).toContain('the list below');
     fail = false;
     await library.load();
     expect(library.status.value).toBe('ready');

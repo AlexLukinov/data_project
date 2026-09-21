@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CohortPreset } from '../reports/api';
-import type { CohortSpec, FilterNode, Leaf } from '../stats/api';
+import type { CohortSpec, FilterNode, Leaf, Stat } from '../stats/api';
 import { PLAYER_LIMIT, cohortChoices, createPoolStatsApi, describeRules, playerReport, poolRequest, searchPlayers } from './stats';
 
 const REGS: CohortPreset = {
@@ -15,6 +15,18 @@ const REGS: CohortPreset = {
 };
 
 const SPEC: CohortSpec = { rules: [{ stat: 'vpip', op: 'gte', value: 35 }] };
+
+const FOUR_OPS: CohortSpec = {
+  rules: [
+    { stat: 'vpip', op: 'lt', value: 25 },
+    { stat: 'pfr', op: 'lte', value: 20 },
+    { stat: 'wtsd', op: 'gt', value: 1 },
+    { stat: 'hands', op: 'gte', value: 1000 },
+  ],
+};
+
+/** Only the two fields a sentence reads; the registry serves a dozen more. */
+const VPIP = { code: 'vpip', label: 'VPIP' } as Stat;
 
 describe('poolRequest', () => {
   it('sets the dataset and hero_only together, because either alone is a 422', () => {
@@ -64,21 +76,32 @@ describe('cohortChoices', () => {
 
   it('describes a saved cohort by its own rules', () => {
     const saved = [{ id: 'a', name: 'Mine', criteria: SPEC, created_at: '', updated_at: '' }];
-    expect(cohortChoices([], saved)[0]?.description).toBe('vpip ≥ 35');
+    expect(cohortChoices([], saved)[0]?.description).toBe('vpip is at least 35');
+  });
+
+  it('describes it in the registry’s labels when the registry is to hand', () => {
+    const saved = [{ id: 'a', name: 'Mine', criteria: SPEC, created_at: '', updated_at: '' }];
+    expect(cohortChoices([], saved, [VPIP])[0]?.description).toBe('VPIP is at least 35');
   });
 });
 
 describe('describeRules', () => {
-  it('words the four ops the engine allows', () => {
-    const spec: CohortSpec = {
-      rules: [
-        { stat: 'vpip', op: 'lt', value: 25 },
-        { stat: 'pfr', op: 'lte', value: 20 },
-        { stat: 'wtsd', op: 'gt', value: 1 },
-        { stat: 'hands', op: 'gte', value: 1000 },
-      ],
-    };
-    expect(describeRules(spec)).toBe('vpip < 25 and pfr ≤ 20 and wtsd > 1 and hands ≥ 1000');
+  it('words the four ops the engine allows, as the cohort form words them', () => {
+    expect(describeRules(FOUR_OPS)).toBe('vpip is below 25 and pfr is at most 20 and wtsd is above 1 and hands is at least 1,000');
+  });
+
+  it('prints the registry’s label rather than the stat code', () => {
+    expect(describeRules(SPEC, [VPIP])).toBe('VPIP is at least 35');
+  });
+
+  /* A saved cohort outlives a registry entry: the rule is still sent, so it must still read. */
+  it('falls back to the code for a stat this registry does not name', () => {
+    expect(describeRules(SPEC, [{ code: 'pfr', label: 'PFR' } as Stat])).toBe('vpip is at least 35');
+  });
+
+  it('keeps every digit of a threshold — it is a rule, not a reading', () => {
+    const spec: CohortSpec = { rules: [{ stat: 'bb_per_100', op: 'gte', value: 2.755 }] };
+    expect(describeRules(spec)).toBe('bb_per_100 is at least 2.755');
   });
 });
 

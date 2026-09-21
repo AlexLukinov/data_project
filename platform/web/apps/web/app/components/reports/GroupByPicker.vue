@@ -10,12 +10,20 @@
  * Adding a decision-only column here silently rules out every hand-grain stat — the same rule the
  * filter has, because `stats/router.py` checks the group-by exactly as it checks the filter. The
  * picker says which tables are left; `StatPicker` says which stats went.
+ *
+ * Each chosen column says what it means on hover, focus and tap (ADR-057), while the click it
+ * already had still opens the fuller `DefinitionPanel`: the tip says what the column is, the panel
+ * says what it splits by, and choosing to group by a word nobody has defined is how a grid ends up
+ * with thirty rows of `two_tone`.
  */
 import { computed, ref } from 'vue';
 
+import RegistryTerm from './RegistryTerm.vue';
 import { groupableDimensions } from '~/reports/columns';
 import type { Dimension } from '~/stats/api';
 import { MAX_GROUP_BY } from '~/stats/api';
+import type { TermEntry } from '~/stats/vocabulary';
+import { dimensionEntry } from '~/stats/vocabulary';
 
 const props = defineProps<{
   dimensions: readonly Dimension[];
@@ -32,6 +40,11 @@ const full = computed(() => props.selected.length >= MAX_GROUP_BY);
 
 function label(code: string): string {
   return props.byCode.get(code)?.label ?? code;
+}
+
+/** What a chosen column's tip says: the registry's sentence, and which tables hold it. */
+function entryOf(code: string): TermEntry {
+  return dimensionEntry(props.byCode.get(code), code);
 }
 
 function add(code: string): void {
@@ -71,7 +84,11 @@ function promote(index: number): void {
         >
           ←
         </button>
-        <button type="button" :aria-label="`what ${label(code)} means`" class="px-2 py-0.5" @click="emit('describe', code)">{{ label(code) }}</button>
+        <RegistryTerm :entry="entryOf(code)">
+          <template #default="{ describedby }">
+            <button type="button" :aria-label="`what ${label(code)} means`" :aria-describedby="describedby" class="px-2 py-0.5" @click="emit('describe', code)">{{ label(code) }}</button>
+          </template>
+        </RegistryTerm>
         <button type="button" :aria-label="`stop grouping by ${label(code)}`" :data-testid="`groupby-remove-${code}`" class="px-1.5 py-0.5 text-zinc-500" @click="remove(code)">×</button>
       </li>
     </ol>

@@ -20,12 +20,14 @@
  * description says to set `player_key` on the request instead. That is what `read` does, and it is
  * why this page carries no situation filter: the search and member routes take no filter either.
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
+import DefinitionPanel from '~/components/reports/DefinitionPanel.vue';
 import StatGrid from '~/components/reports/StatGrid.vue';
 import { describeApiError } from '~/auth/api';
 import { MIN_N } from '~/reports/cell';
 import { PLAYER_LIMIT, createPoolStatsApi, playerReport, searchPlayers } from '~/pool/stats';
+import { PLAYER_NO_ROWS, noPlayerWords, playerIntroWords } from '~/pool/words';
 import type { ReportResult } from '~/stats/api';
 import { useDefinitionsStore } from '~/stores/definitions';
 
@@ -33,24 +35,36 @@ const definitions = useDefinitionsStore();
 const pool = createPoolStatsApi(useApi());
 
 const typed = ref('');
+/** What the answer on screen is about. The box goes on being edited; the answer does not follow it. */
+const searched = ref('');
 const found = ref<ReportResult | null>(null);
 const report = ref<ReportResult | null>(null);
 const chosen = ref('');
 const failure = ref('');
 const busy = ref(false);
+const describing = ref('');
 
 await useAsyncData('definitions', () => definitions.load(), { server: false });
 
-/** The names containing what was typed. An empty box asks nothing at all. */
+const intro = computed(() => playerIntroWords(definitions.stats));
+const describedStat = computed(() => definitions.stats.find((stat) => stat.code === describing.value));
+const describedDim = computed(() => (describedStat.value === undefined ? definitions.byCode.get(describing.value) : undefined));
+
+/**
+ * The names containing what was typed. An empty box asks nothing at all.
+ *
+ * The old answer is cleared **before** the await, not after it: a second search used to leave the
+ * previous "no name contains …" on screen, rewritten live to quote text nothing had been asked
+ * about yet.
+ */
 async function search(): Promise<void> {
   const text = typed.value.trim();
   report.value = null;
   chosen.value = '';
   failure.value = '';
-  if (text === '') {
-    found.value = null;
-    return;
-  }
+  found.value = null;
+  searched.value = text;
+  if (text === '') return;
   busy.value = true;
   try {
     found.value = await pool.run(searchPlayers(text));
@@ -60,6 +74,14 @@ async function search(): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+/**
+ * Ask for the registry again. The store keeps the reason in `definitions.error`, which is the
+ * sentence already on screen, so there is nothing here to rethrow into an unhandled rejection.
+ */
+function retryDefinitions(): void {
+  void definitions.load().catch(() => undefined);
 }
 
 /** One player's game, scoped by `player_key` on the request rather than grouped by it. */
@@ -91,6 +113,13 @@ function nameOf(group: Record<string, string | number | null>): string {
       <NuxtLink to="/pool" class="text-sm underline underline-offset-2">The pool</NuxtLink>
     </div>
 
+    <p class="max-w-2xl text-sm text-zinc-500" data-testid="player-intro">{{ intro }}</p>
+
+    <div v-if="definitions.status === 'error'" role="alert" data-testid="definitions-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">
+      {{ definitions.error }}
+      <button type="button" class="ml-2 underline underline-offset-2" @click="retryDefinitions">Try again</button>
+    </div>
+
     <form class="flex flex-wrap items-center gap-2" @submit.prevent="search">
       <input
         v-model="typed"
@@ -109,8 +138,8 @@ function nameOf(group: Record<string, string | number | null>): string {
 
     <p v-if="failure" role="alert" data-testid="player-error" class="rounded border border-red-300 p-3 text-sm text-red-700 dark:border-red-800 dark:text-red-400">{{ failure }}</p>
 
-    <p v-if="found && found.rows.length === 0" class="text-sm text-zinc-500" data-testid="player-none">
-      No name in the pool contains “{{ typed.trim() }}”.
+    <p v-if="found && found.rows.length === 0" class="max-w-2xl text-sm text-zinc-500" data-testid="player-none">
+      {{ noPlayerWords(searched) }}
     </p>
 
     <ul v-if="found && found.rows.length > 0" class="flex flex-wrap gap-2" data-testid="player-results">
@@ -130,7 +159,11 @@ function nameOf(group: Record<string, string | number | null>): string {
 
     <section v-if="chosen" class="space-y-2">
       <h2 class="text-sm font-medium" data-testid="player-name">{{ chosen }}</h2>
-      <StatGrid :result="report" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="MIN_N" />
+      <p v-if="busy && report === null" role="status" class="text-sm text-zinc-500" data-testid="player-loading">Reading {{ chosen }}'s game…</p>
+      <StatGrid :result="report" :stats="definitions.stats" :dimensions="definitions.byCode" :min-n="MIN_N" @describe="describing = $event">
+        <template #empty>{{ PLAYER_NO_ROWS }}</template>
+      </StatGrid>
+      <DefinitionPanel v-if="describing" :stat="describedStat" :dimension="describedDim" :dimensions="definitions.byCode" @close="describing = ''" />
     </section>
   </section>
 </template>

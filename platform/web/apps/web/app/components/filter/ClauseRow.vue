@@ -3,10 +3,16 @@
  * One condition: what it is about, how it compares, what it compares to, and why it cannot be
  * sent yet (plan D.3). The op list is the server's `allowed_ops` — narrowed per dimension in the
  * registry, so the picker cannot offer `gt` on an enum or `prefix` on a number and earn a 400.
+ *
+ * What the column *means* is the registry's own sentence, and it hangs off the name through
+ * `RegistryTerm` rather than a `title` (ADR-057): a `title` is a mouse hover and nothing else, so
+ * on a phone, and on a keyboard, the explanation did not exist.
  */
 import { computed } from 'vue';
 
+import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { Dimension } from '~/stats/api';
+import { dimensionEntry } from '~/stats/vocabulary';
 import type { Clause, ClauseOp } from '~/filter/clause';
 import { BUCKET_OP, opsFor, withOp } from '~/filter/clause';
 import { clauseProblem } from '~/filter/label';
@@ -17,6 +23,7 @@ const emit = defineEmits<{ change: [clause: Clause]; remove: [] }>();
 
 const ops = computed(() => (props.dim === undefined ? [] : opsFor(props.dim)));
 const problem = computed(() => clauseProblem(props.clause, props.dim));
+const entry = computed(() => dimensionEntry(props.dim, props.clause.dim));
 
 const OP_TEXT: Record<string, string> = {
   bucket: 'in range',
@@ -41,7 +48,7 @@ function setOp(op: string): void {
 
 <template>
   <li class="flex flex-wrap items-center gap-2 border-t border-zinc-200 py-2 text-sm first:border-t-0 dark:border-zinc-800" :data-testid="`clause-${clause.dim}`">
-    <span class="min-w-40 font-medium" :title="dim?.description">{{ dim?.label ?? clause.dim }}</span>
+    <RegistryTerm class="min-w-40 font-medium" :entry="entry" :name="clause.dim" />
 
     <select v-if="dim" :value="clause.op" :aria-label="`how to compare ${dim.label}`" data-testid="clause-op" class="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" @change="setOp(($event.target as HTMLSelectElement).value)">
       <option v-for="op in ops" :key="op" :value="op">{{ OP_TEXT[op] ?? op }}</option>

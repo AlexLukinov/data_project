@@ -14,6 +14,8 @@ function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimen
 const SPR = dim({ code: 'spr', type: 'number', label: 'SPR', allowed_ops: ['between', 'gte', 'lte'] });
 const STAKE = dim({ code: 'stake_level', type: 'string', label: 'Stake', allowed_ops: ['eq', 'prefix'] });
 const BIG_BLIND = dim({ code: 'big_blind', type: 'number', label: 'Big blind', allowed_ops: ['in', 'not_in', 'eq'] });
+const SIZE = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37], mid: [0.37, 0.7] }, allowed_ops: ['gte', 'lte'] });
+const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['bet', '5bet_plus', ''], allowed_ops: ['eq', 'in'] });
 
 /** The component with its clause kept in step with what it emits, as `ClauseRow` does. */
 function render(clause: Clause, dimension: Dimension) {
@@ -83,6 +85,34 @@ describe('ClauseValue — a list of numbers', () => {
     expect(w.props('clause').values).toEqual(['0.05', '0.1', '0.25']);
     expect(box(w, 'clause-number-list').attributes('aria-invalid')).toBeUndefined();
     expect((box(w, 'clause-number-list').element as HTMLInputElement).value).toBe('0.05; 0.1; 0.25');
+  });
+});
+
+/**
+ * The registry's words on screen, the registry's codes on the wire (ADR-053, ADR-057). A reader
+ * choosing "small (under 0.37 of the pot)" must still send `small`, or the situation they built
+ * is not the situation the server measures.
+ */
+describe('ClauseValue — what a choice shows against what it sends', () => {
+  it('puts the numbers behind a bucket name in the option, and sends the name', async () => {
+    const w = render({ dim: 'size_pct', op: 'bucket', values: ['small'] }, SIZE);
+    const options = box(w, 'clause-bucket').findAll('option');
+    expect(options.map((o) => o.text())).toEqual(['small (under 0.37 of the pot)', 'mid (0.37–0.7 of the pot)']);
+    await box(w, 'clause-bucket').setValue('mid');
+    expect(w.emitted('update:values')!.at(-1)).toEqual([['mid']]);
+  });
+
+  it('writes an enum value as a player writes it, and sends the registry code', async () => {
+    const w = render({ dim: 'facing', op: 'eq', values: ['bet'] }, FACING);
+    const options = box(w, 'clause-enum').findAll('option');
+    expect(options.map((o) => o.text())).toEqual(['bet', '5bet+', 'not applicable']);
+    await box(w, 'clause-enum').setValue('5bet_plus');
+    expect(w.emitted('update:values')!.at(-1)).toEqual([['5bet_plus']]);
+  });
+
+  it('writes the same words on the many-value buttons', () => {
+    const w = render({ dim: 'facing', op: 'in', values: [] }, FACING);
+    expect(box(w, 'clause-enum-many').findAll('button').map((b) => b.text())).toEqual(['bet', '5bet+', 'not applicable']);
   });
 });
 

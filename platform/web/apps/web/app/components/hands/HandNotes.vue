@@ -82,6 +82,9 @@ async function addTag(): Promise<void> {
   try {
     tags.value = (await props.api.addTag(props.handUid, draft.value)).tags;
     draft.value = '';
+    // This catch stays silent on purpose (audit §2.13): the tag is already saved, and the
+    // vocabulary only feeds the suggestions below the box. A failed refresh leaves the list as it
+    // was rather than putting an error on a thing that worked.
     vocabulary.value = await props.api.vocabulary().catch(() => vocabulary.value);
   } catch (error) {
     tagProblem.value = describeApiError(error);
