@@ -8,9 +8,12 @@
  * alone. Nothing is written to ClickHouse, Postgres or IndexedDB, so the real-hands rule cannot
  * be broken and a first visit needs no account, no upload and no API.
  *
- * **It opens five of the nine steps**: the ones whose answer is poker-core arithmetic (3, 4, 5, 7,
- * 8). Steps 1, 2, 6 and 9 are scored against what the reader's pool does, and an example has no
- * pool; their inputs are filled in here instead (step 1's ranges, step 6's size).
+ * **It opens all nine steps** (ADR-061, amending ADR-050 decision 4). Five are answered by
+ * poker-core arithmetic (3, 4, 5, 7, 8); the other four are scored against what the reader's pool
+ * does, and an example has no pool — so their gates say that in a sentence instead of waiting for
+ * a number that is never coming. Their inputs are still filled in here, so a reader who works
+ * straight through never faces an empty board or an unpriced bet: step 1's two ranges and step 6's
+ * size are set up, and step 2's split and step 9's pot are theirs to work.
  *
  * **Every spot is the button against the big blind in a single-raised pot**, because `btn_rfi`
  * against `bb_call_vs_btn` is the only pair of reference charts in which the caller's chart is the
@@ -48,8 +51,22 @@ export interface Example {
   readonly sizePct: number;
 }
 
-/** The steps an example opens, in order: the ones answered by poker-core alone. */
-export const EXAMPLE_STEPS: readonly number[] = [3, 4, 5, 7, 8];
+/**
+ * The steps an example opens, in order: all nine (ADR-061). The four that read the pool are
+ * mounted with `poolMissing` set, so each says why it has no field number rather than waiting.
+ */
+export const EXAMPLE_STEPS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/**
+ * The step an example arrives on — 3, not 1, and deliberately so.
+ *
+ * Steps 1 and 2 are the set-up: an example's two ranges are already assigned and there is nothing
+ * to subtract, so landing there would open on the one screen where a reader can neither work
+ * anything out nor be shown an answer. Step 3 is the first with a board, a count and a reveal, and
+ * it is where `help/tour.ts` points its two analyzer stops. The other eight are one click away on
+ * the rail, and *previous* is live from the moment the page opens.
+ */
+export const EXAMPLE_OPENS_AT = 3;
 
 const SEED_STACK_BB = 108;
 const SEED_BET = 0.462;
@@ -117,7 +134,10 @@ export function exampleById(id: string): Example | null {
 
 /**
  * The analysis an example opens with, in the analyzer's own shape: step 1's two ranges, step 3's
- * board, step 5's hand and step 6's size filled in, and every step the reader works left empty.
+ * board, step 5's hand and step 6's size filled in, and every other step left empty for the
+ * reader. Step 1's and step 6's inputs are set up even though both steps are now mounted, because
+ * they are what the later steps read — an example whose ranges depended on the reader painting
+ * them would have nothing to count at step 3.
  *
  * The ranges carry no label: the analyzer's seat panel calls a labelled range "your chart", and a
  * reference chart is not the reader's — the example page names the charts and their provenance.

@@ -1,15 +1,20 @@
 <script setup lang="ts">
-// One example (ADR-050): a spot that ships with the app, worked in the analyzer's own step
-// components over a copy that lives in this tab. Only the steps answered by poker-core are offered,
-// so no gate here ever waits for a pool that does not exist.
+// One example (ADR-050, amended by ADR-061): a spot that ships with the app, worked in the
+// analyzer's own step components over a copy that lives in this tab. All nine steps are offered —
+// the four scored against the pool are handed the reason there is none, so no gate here waits for
+// an answer that is never coming.
 import { StepperNav } from '@poker/ui';
 import type { Component } from 'vue';
 
+import Step1Ranges from '~/components/analyze/Step1Ranges.vue';
+import Step2Subtract from '~/components/analyze/Step2Subtract.vue';
 import Step3Buckets from '~/components/analyze/Step3Buckets.vue';
 import Step4Nuts from '~/components/analyze/Step4Nuts.vue';
 import Step5Blockers from '~/components/analyze/Step5Blockers.vue';
+import Step6Decision from '~/components/analyze/Step6Decision.vue';
 import Step7Placement from '~/components/analyze/Step7Placement.vue';
 import Step8ValueBluffs from '~/components/analyze/Step8ValueBluffs.vue';
+import Step9Deviation from '~/components/analyze/Step9Deviation.vue';
 import { STEP_LABELS } from '~/analyze/steps';
 import ExampleSpot from '~/components/help/ExampleSpot.vue';
 import { createExampleSession } from '~/help/exampleSession';
@@ -20,11 +25,15 @@ import { EXAMPLES, EXAMPLE_STEPS, exampleById } from '~/help/examples';
 definePageMeta({ public: true, key: (route) => route.fullPath });
 
 const STEP_COMPONENTS: Readonly<Record<number, Component>> = {
+  1: Step1Ranges,
+  2: Step2Subtract,
   3: Step3Buckets,
   4: Step4Nuts,
   5: Step5Blockers,
+  6: Step6Decision,
   7: Step7Placement,
   8: Step8ValueBluffs,
+  9: Step9Deviation,
 };
 
 const LABELS = STEP_LABELS.filter((label) => EXAMPLE_STEPS.includes(label.step));
@@ -57,7 +66,13 @@ const session = example === null ? null : createExampleSession(example);
         </aside>
 
         <div class="space-y-4">
-          <component :is="STEP_COMPONENTS[session.current.value]" :key="session.current.value" :ctx="session.context" @patch="session.patch" />
+          <component
+            :is="STEP_COMPONENTS[session.current.value]"
+            :key="session.current.value"
+            :ctx="session.context"
+            @patch="session.patch"
+            @heuristic="session.setHeuristic($event)"
+          />
 
           <nav class="flex items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
             <button type="button" class="rounded border border-zinc-300 px-3 py-1 text-sm disabled:opacity-40 dark:border-zinc-700" :disabled="session.neighbour(-1) === null" data-testid="example-prev" @click="session.goTo(session.neighbour(-1) ?? 0)">← previous</button>

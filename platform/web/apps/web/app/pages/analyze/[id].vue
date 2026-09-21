@@ -2,7 +2,7 @@
 // The 9-step analyzer (spec §15). The rail on the left, one step at a time on the right, and an
 // autosave that keeps the work in the browser the moment it is typed and on the server shortly
 // after. Each step is its own component; this page owns the state they all read.
-import type { ReplayHand } from '@poker/core';
+import type { NodeKey } from '@poker/core';
 import { StepperNav } from '@poker/ui';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -10,10 +10,10 @@ import type { AnalysisStep } from '~/analyze/api';
 import type { StepContext } from '~/analyze/context';
 import { completedSteps, stepOf } from '~/analyze/session';
 import { facingNode } from '~/analyze/facing';
+import { NO_SITUATION, analyzeFacingProblem, analyzePoolProblem } from '~/analyze/problems';
 import { spotFrom } from '~/analyze/spot';
 import { FIRST_STEP, LAST_STEP, STEP_LABELS } from '~/analyze/steps';
 import { describeApiError } from '~/auth/api';
-import { toReplayHand } from '~/hands/replay';
 import Step1Ranges from '~/components/analyze/Step1Ranges.vue';
 import Step2Subtract from '~/components/analyze/Step2Subtract.vue';
 import Step3Buckets from '~/components/analyze/Step3Buckets.vue';
@@ -49,13 +49,14 @@ const SAVE_WORDS: Record<string, string> = {
 const route = useRoute();
 const store = useAnalysisStore();
 const poolApi = createPoolApi(useApi());
-const hands = useHands();
 
 const id = route.params.id as string;
 const failure = ref<unknown>(null);
 const pool = ref<NodeFrequencies | null>(null);
 const poolFacing = ref<NodeFrequencies | null>(null);
-const hand = ref<ReplayHand | null>(null);
+/** Why each of the two pool answers is not here — empty while its request is still in flight. */
+const poolMissing = ref('');
+const poolFacingMissing = ref('');
 
 /**
  * Not awaited, so the page — and its "Opening the analysis…" — renders while the request runs; an
@@ -95,49 +96,75 @@ const context: StepContext = {
   get spot() {
     return spot.value;
   },
-  get hand() {
-    return hand.value;
-  },
   get pool() {
     return pool.value;
   },
   get poolFacing() {
     return poolFacing.value;
   },
+  // With no situation there is no request to make, so nothing can fail and nothing can arrive:
+  // the reason has to come from the page rather than from a catch (ADR-061).
+  get poolMissing() {
+    return node.value === null ? NO_SITUATION : poolMissing.value;
+  },
+  get poolFacingMissing() {
+    return node.value === null ? NO_SITUATION : poolFacingMissing.value;
+  },
   get heuristic() {
     return analysis.value?.heuristic ?? '';
   },
 };
 
-/** The hand behind the analysis, when it came from one; a made-up situation has none. */
-async function toHand(): Promise<ReplayHand | null> {
-  const current = analysis.value;
-  if (current === null || current.hand_uid === '') return null;
-  const detail = await hands.get(current.hand_uid).catch(() => null);
-  return detail === null ? null : toReplayHand(detail);
-}
-
 /**
  * The field's answer at this node — fetched only once a prediction has been committed, so it
  * cannot be read off the page before the gate is closed.
+ *
+ * The two questions settle independently and each refusal becomes a sentence the gate shows
+ * instead of waiting for ever (ADR-061): one can be answered while the other is refused, and a
+ * refusal under load is the common case — this asks twice at once, and ClickHouse answers only a
+ * few of an account's queries at a time (plan E.3). An answer already held is not asked again;
+ * one that failed is, the next time the reader moves between committed steps.
  */
+/** One run at a time: two commits in quick succession would otherwise double the load that refuses. */
+let asking = false;
+
 async function loadPool(): Promise<void> {
   const key = node.value;
-  if (key === null || pool.value !== null) return;
-  pool.value = await poolApi.frequencies(key).catch(() => null);
-  const facing = facingNode(key);
-  if (facing !== null) poolFacing.value = await poolApi.frequencies(facing).catch(() => null);
+  if (key === null || asking) return;
+  asking = true;
+  try {
+    await askPool(key);
+  } finally {
+    asking = false;
+  }
 }
 
+async function askPool(key: NodeKey): Promise<void> {
+  if (pool.value === null) {
+    poolMissing.value = '';
+    pool.value = await poolApi.frequencies(key).catch((error: unknown) => {
+      poolMissing.value = analyzePoolProblem(error);
+      return null;
+    });
+  }
+  const facing = facingNode(key);
+  if (facing === null || poolFacing.value !== null) return;
+  poolFacingMissing.value = '';
+  poolFacing.value = await poolApi.frequencies(facing).catch((error: unknown) => {
+    poolFacingMissing.value = analyzeFacingProblem(error);
+    return null;
+  });
+}
+
+// The step number is watched as well as the commit, so a refused question is asked again when the
+// reader moves on — without it, `committed` stays true across steps and the watcher never fires.
 watch(
-  () => step.value.prediction !== null,
-  (committed) => {
+  () => [current.value, step.value.prediction !== null] as const,
+  ([, committed]) => {
     if (committed) void loadPool();
   },
   { immediate: true },
 );
-
-watch(analysis, () => void toHand().then((found) => (hand.value = found)), { immediate: true });
 
 function onPatch(patch: Partial<AnalysisStep>): void {
   store.patchStep(current.value, patch);

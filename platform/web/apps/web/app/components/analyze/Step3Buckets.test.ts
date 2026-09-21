@@ -28,7 +28,7 @@ const COMMITTED: Prediction = { question: 'q', answer_type: 'percent', answer: '
 function render(prediction: Prediction | null, seats: { villain?: WeightedRange | null; board?: Card[] } = {}) {
   const step: AnalysisStep = { ...emptyStep(3), prediction };
   const spot = { hero: HERO, villain: seats.villain === undefined ? VILLAIN : seats.villain, board: seats.board ?? BOARD, heroCards: [] };
-  const ctx: StepContext = { step, steps: [step], node: null, spot, hand: null, pool: null, poolFacing: null, heuristic: '' };
+  const ctx: StepContext = { step, steps: [step], node: null, spot, pool: null, poolFacing: null, heuristic: '' };
   return mount(Step3Buckets, { props: { ctx } });
 }
 

@@ -33,6 +33,14 @@ function toggle(card: Card): void {
 }
 
 const heroCombo = computed(() => (hole.value.length === HOLE_CARDS ? comboIndex(hole.value[0]!, hole.value[1]!) : null));
+/**
+ * The panel's per-hand line — "kills N of villain's calls" — is this step's graded answer on a
+ * rainbow board, where the question is how much the hand removed at all. It is handed the combo
+ * only once the prediction is committed, the same rule step 4 keeps (ADR-061); the heatmap and the
+ * table above it are the work and stay. On a two-tone board the question is about flush draws,
+ * which the panel does not count, but the line is gated either way rather than by board texture.
+ */
+const selectedCombo = computed(() => (props.ctx.step.prediction === null ? null : heroCombo.value));
 
 const actual = computed(() => {
   const villain = props.ctx.spot.villain;
@@ -58,7 +66,7 @@ const unavailable = computed(() =>
         :hero-range="ctx.spot.hero ?? ctx.spot.villain"
         :villain-call="ctx.spot.villain"
         :villain-fold="NOTHING"
-        :selected-combo="heroCombo"
+        :selected-combo="selectedCombo"
         :board="ctx.spot.board"
       />
     </template>

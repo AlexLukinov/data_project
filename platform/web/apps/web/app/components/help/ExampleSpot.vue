@@ -45,9 +45,9 @@ const size = computed(() => Math.round(props.example.sizePct * PERCENT));
     </details>
 
     <p class="text-zinc-500" data-testid="example-left-out">
-      Nothing here is saved: leave or reload and the example starts again. Steps 1, 2, 6 and 9 are not in an example — they
-      check your answer against what your pool does, and an example has no pool; the ranges and the bet size they would
-      have given are set up above. For all nine,
+      Nothing here is saved: leave or reload and the example starts again. All nine steps are here, but four of them —
+      1, 2, 6 and 9 — score your answer against what your own pool does, and an example has no pool: each says so where
+      its number would be. To see those four answered,
       <NuxtLink to="/hands" class="underline">open one of your own hands</NuxtLink> and press <em>Analyze this node</em>.
     </p>
   </div>

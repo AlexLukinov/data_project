@@ -58,7 +58,7 @@ const actual = computed(() => {
   return bets >= 1 - bets ? 'bet' : 'check';
 });
 
-const unavailable = computed(() => poolGap(props.ctx.pool));
+const unavailable = computed(() => poolGap(props.ctx.pool, props.ctx.poolMissing));
 
 const poolActions = computed(() => Object.entries(props.ctx.pool?.frequencies ?? {}).sort((a, b) => b[1] - a[1]));
 const committed = computed(() => props.ctx.step.prediction !== null);

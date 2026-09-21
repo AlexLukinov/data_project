@@ -13,8 +13,9 @@ definePageMeta({ public: true }); // an example needs no backend and no account 
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold">Examples</h1>
       <p class="text-sm text-zinc-500">
-        The same two ranges — the button opens, the big blind calls — on three flops. Each one opens the analyzer's steps on a
-        spot that is already set up: commit your answer, then see what is true. Nothing is uploaded, and nothing you do in an
+        The same two ranges — the button opens, the big blind calls — on three flops. Each one opens all nine of the
+        analyzer's steps on a spot that is already set up: commit your answer, then see what is true. The four steps that
+        read your pool say so instead, because an example has no pool. Nothing is uploaded, and nothing you do in an
         example is saved.
       </p>
     </div>

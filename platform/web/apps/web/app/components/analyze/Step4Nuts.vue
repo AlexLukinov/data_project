@@ -44,7 +44,23 @@ const actual = computed(() => {
  * for it — ADR-053), so a reopened analysis grades by the default again, and the sentence says so.
  */
 const LOCKED = `Fixed now that your answer is committed: this definition is the one it is graded by. It is not saved with the analysis, so reopening grades by the default (equity at or above ${asPercent(DEFAULT_NUT_CUTOFF)}%).`;
-const nutLockedReason = computed(() => (props.ctx.step.prediction === null ? '' : LOCKED));
+const committed = computed(() => props.ctx.step.prediction !== null);
+const nutLockedReason = computed(() => (committed.value ? LOCKED : ''));
+
+/**
+ * The nut split *is* this step's question, and the panel printed it beside the gate that asks for
+ * it (ADR-061). It is withheld until the answer is committed — the same rule `StepShell` keeps for
+ * `actual`, and the one steps 3, 6 and 9 already keep for their own reveals.
+ *
+ * The equity **bands** go with it: the top band is 80–100%, which is the nutted set at the default
+ * definition, and each side's band carries its weighted combos in a tooltip — so the two together
+ * are the graded number, one hover away. The equities, the range advantage and the distribution
+ * stay on screen: they are the work, not the answer. The Advanced fold stays open too, because the
+ * definition is chosen before the answer.
+ */
+const HIDDEN =
+  'This is what the step asks you for — and so are the equity bands, whose top band is the nutted set at the current definition. Commit your answer below and both appear here.';
+const nutHiddenReason = computed(() => (committed.value ? '' : HIDDEN));
 
 const unavailable = computed(() =>
   both.value.length < 2 ? 'Both seats need a range before the nuts can be counted — steps 1 and 2.' : '',
@@ -61,6 +77,7 @@ const unavailable = computed(() =>
       <RangeComparisonPanel
         v-model:nut-options="nut"
         :nut-locked-reason="nutLockedReason"
+        :nut-hidden-reason="nutHiddenReason"
         :hero="both[0]!"
         :villain="both[1]!"
         :hero-equities="result?.perComboEquity ?? null"

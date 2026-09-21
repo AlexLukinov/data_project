@@ -15,7 +15,10 @@ import { useRangesStore } from '~/stores/ranges';
 const store = useRangesStore();
 const id = useRoute().params.id as string;
 const { data, error, refresh } = await useAsyncData(`range-${id}`, () => store.open(id), { server: false, lazy: true });
-const { data: history, refresh: refreshHistory } = await useAsyncData(`range-${id}-versions`, () => store.versions(id).catch(() => []), { server: false, lazy: true });
+// The version list is the server's record; the offline copy holds none, so a failure here is a
+// failure. It used to be a `.catch(() => [])`, which emptied the history and hid the revert
+// buttons — a range that looked as if it had never been edited (ADR-061).
+const { data: history, error: historyError, refresh: refreshHistory } = await useAsyncData(`range-${id}-versions`, () => store.versions(id), { server: false, lazy: true });
 
 const name = ref('');
 const key = ref<NodeKey | null>(null);
@@ -154,8 +157,14 @@ function setRange(next: WeightedRange): void {
           </div>
           <div>
             <h2 class="mb-1 font-medium">History</h2>
-            <ol class="space-y-1" data-testid="range-history">
-              <li v-for="v in history ?? []" :key="v.version" class="flex items-center gap-2">
+            <p v-if="historyError" role="alert" class="text-red-600 dark:text-red-400" data-testid="range-history-error">
+              The earlier versions of this range could not be read, so there is nothing here to revert to — this range's own
+              body is the one above, unaffected. {{ describeLibraryError(historyError) }}
+              <button type="button" class="underline" data-testid="range-history-retry" @click="refreshHistory()">Try again</button>
+            </p>
+            <p v-else-if="!history" class="text-zinc-500" data-testid="range-history-loading">Reading the history…</p>
+            <ol v-else class="space-y-1" data-testid="range-history">
+              <li v-for="v in history" :key="v.version" class="flex items-center gap-2">
                 <span class="tabular-nums">v{{ v.version }}</span>
                 <span class="text-zinc-500">{{ v.created_at.slice(0, 16).replace('T', ' ') }}</span>
                 <span class="truncate text-zinc-500">{{ v.note }}</span>

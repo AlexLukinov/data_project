@@ -39,11 +39,17 @@ const actual = computed(() => (poolFold.value === null ? null : asPercent(poolFo
 /** Theory says defend `mdf`, so it folds `1 − mdf`; the pool's own fold rate sits beside it. */
 const deviation = computed(() => (poolFold.value === null ? null : poolFold.value - (1 - mdf.value)));
 
-const unavailable = computed(() =>
-  facingKey.value === null
-    ? 'Nobody is facing a bet at this node, so there is no fold frequency to compare against.'
-    : poolGap(facing.value),
-);
+/**
+ * "Nobody is facing a bet here" is only true when there *is* a node and nobody faces a bet at it.
+ * With no situation at all, `facingNode` also answers null, and the context's own reason is the
+ * one that fits (ADR-061).
+ */
+const unavailable = computed(() => {
+  if (props.ctx.node !== null && facingKey.value === null) {
+    return 'Nobody is facing a bet at this node, so there is no fold frequency to compare against.';
+  }
+  return poolGap(facing.value, props.ctx.poolFacingMissing);
+});
 
 const sentence = computed(() => {
   const gap = deviation.value;

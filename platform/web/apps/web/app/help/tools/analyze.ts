@@ -80,7 +80,7 @@ export const ANALYZE_TOOLS: readonly Tool[] = [
     what: 'Worked spots that need no account, no upload and no server.',
     how: [
       'Each example is a situation that ships with the app as data: the two reference charts, the flop, the hand and the bet. It opens in the analyzer’s own step components over a copy that lives in this tab only.',
-      'It opens the five steps whose answers are arithmetic. The four that are scored against your pool are filled in rather than asked, because an example has no pool.',
+      'It opens all nine steps. Five are answered by arithmetic in this browser; the four scored against your pool say, where the number would be, that an example has no pool.',
       'The three spots share one pair of ranges — the button opens, the big blind calls — so the same two ranges tell three different stories on three flops.',
     ],
     steps: [
@@ -93,7 +93,7 @@ export const ANALYZE_TOOLS: readonly Tool[] = [
     limits: [
       'Nothing you do in an example is saved, anywhere.',
       'The charts are references, not solver output, and not your own play.',
-      'Four of the nine steps are not offered here — they need a pool.',
+      'Four of the nine steps cannot be scored here — they need a pool of your own hands.',
     ],
     related: ['example', 'analyzer', 'train'],
     example: 'top-pair-dry-board',
@@ -120,7 +120,7 @@ export const ANALYZE_TOOLS: readonly Tool[] = [
     limits: [
       'Nothing is stored — reopening the example starts it fresh.',
       'The two ranges are reference charts, which is an assumption like any other.',
-      'No pool, so the steps that read the field are left out rather than faked.',
+      'No pool, so the steps that read the field say so rather than faking a number.',
     ],
     related: ['examples', 'analyzer', 'lab'],
     example: 'top-pair-dry-board',

@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 /** The page's part: a context read through getters, and every patch applied to the step. */
-function mountStep(node: NodeKey | null = KEY, ranges: RangeAssignment[] = []) {
+function mountStep(node: NodeKey | null = KEY, ranges: RangeAssignment[] = [], libraryMissing = '') {
   const state = reactive<{ step: AnalysisStep }>({ step: { ...emptyStep(1), work: { ...emptyWork(), ranges } } });
   const ctx: StepContext = {
     get step() {
@@ -66,9 +66,9 @@ function mountStep(node: NodeKey | null = KEY, ranges: RangeAssignment[] = []) {
     steps: [],
     node,
     spot: EMPTY_SPOT,
-    hand: null,
     pool: null,
     poolFacing: null,
+    libraryMissing,
     heuristic: '',
   };
   const onPatch = (patch: Partial<AnalysisStep>) => (state.step = { ...state.step, ...patch });
@@ -114,11 +114,24 @@ describe('Step1Ranges — loading my chart', () => {
     await button(wrapper).trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="step1-load-error"]').attributes('role')).toBe('alert');
-    expect(wrapper.find('[data-testid="step1-load-error"]').text()).toContain('could not be read');
+    const failed = wrapper.find('[data-testid="step1-load-error"]');
+    expect(failed.attributes('role')).toBe('alert');
+    expect(failed.text()).toContain('could not be read');
+    // Why, and the way to ask again — not a bare "no chart" (ADR-057 decision 8, ADR-061).
+    expect(failed.text()).toContain('IndexedDB is unavailable');
+    expect(failed.text()).toContain('Press the button again');
     expect(has(wrapper, 'step1-none')).toBe(false);
     expect(button(wrapper).element.disabled).toBe(false);
     expect(state.step.work.ranges).toEqual([]);
+  });
+
+  it('does not offer the button at all when the analysis has no library behind it', () => {
+    const { wrapper } = mountStep();
+    expect(has(wrapper, 'step1-load')).toBe(true);
+
+    const noLibrary = mountStep(KEY, [], 'An example has no range library behind it.');
+    expect(has(noLibrary.wrapper, 'step1-load')).toBe(false);
+    expect(noLibrary.wrapper.find('[data-testid="step1-no-library"]').text()).toBe('An example has no range library behind it.');
   });
 
   it('says no chart of yours is stored for this situation, and links to the import', async () => {

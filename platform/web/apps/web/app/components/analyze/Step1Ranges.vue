@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue';
 import type { AnalysisStep, RangeAssignment } from '~/analyze/api';
 import type { StepContext } from '~/analyze/context';
 import { poolGap, workPatch } from '~/analyze/context';
+import { libraryLookupProblem } from '~/analyze/problems';
 import { asPercent } from '~/analyze/reveals';
 import { stepDef } from '~/analyze/steps';
 import SeatRange from '~/components/analyze/SeatRange.vue';
@@ -87,18 +88,25 @@ const actual = computed(() => {
   return asPercent(pool.frequencies[action] ?? 0);
 });
 
-const unavailable = computed(() => poolGap(props.ctx.pool));
+const unavailable = computed(() => poolGap(props.ctx.pool, props.ctx.poolMissing));
 
 /** Where the last press of "Load my chart" got to, so the button never does nothing silently. */
 const lookup = ref<'idle' | 'looking' | 'none' | 'offline' | 'failed'>('idle');
+/** That failure in words — what could not be read, why, and how to try again (ADR-061). */
+const problem = ref('');
 
 async function loadMyChart(): Promise<void> {
   const key = props.ctx.node;
   if (key === null) return;
   lookup.value = 'looking';
+  problem.value = '';
   // `null` is a library that could not be read at all — the API and the offline copy both
-  // failed — which is not the same answer as an empty list.
-  const found = await library.lookup(key).catch(() => null);
+  // failed — which is not the same answer as an empty list. The rejection is kept, not dropped:
+  // a stopped API and a refusal under load are different things to tell the reader.
+  const found = await library.lookup(key).catch((error: unknown) => {
+    problem.value = libraryLookupProblem(error);
+    return null;
+  });
   // "My chart" is an own chart: a solver or pool range stored here is not the reader's to be told is theirs.
   const mine = found?.find((range) => range.source === 'own');
   // An API that did not answer leaves only the offline copy, whose "nothing here" is not the library's.
@@ -114,26 +122,27 @@ async function loadMyChart(): Promise<void> {
     <p v-else class="text-sm text-zinc-500">This analysis has no situation yet — set one on the hand it came from.</p>
 
     <div class="flex flex-wrap items-baseline gap-3">
-      <button
-        type="button"
-        :disabled="lookup === 'looking' || !ctx.node"
-        class="rounded border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-zinc-700"
-        data-testid="step1-load"
-        @click="loadMyChart"
-      >
-        Load my chart for this spot
-      </button>
-      <span v-if="lookup === 'looking'" role="status" class="text-sm text-zinc-500" data-testid="step1-loading">Looking in your range library…</span>
-      <span v-else-if="lookup === 'none' && ctx.node" role="status" class="text-sm text-zinc-500" data-testid="step1-none">
-        No chart of yours is stored for <NodeLabel :node="ctx.node" />.
-        <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink>, then press the button again.
-      </span>
-      <span v-else-if="lookup === 'offline' && ctx.node" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-offline">
-        {{ library.error }} This browser's offline copy has no chart of yours for <NodeLabel :node="ctx.node" />.
-      </span>
-      <span v-else-if="lookup === 'failed'" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-load-error">
-        Your range library could not be read — neither the API nor this browser's offline copy answered.
-      </span>
+      <span v-if="ctx.libraryMissing" class="text-sm text-zinc-500" data-testid="step1-no-library">{{ ctx.libraryMissing }}</span>
+      <template v-else>
+        <button
+          type="button"
+          :disabled="lookup === 'looking' || !ctx.node"
+          class="rounded border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-zinc-700"
+          data-testid="step1-load"
+          @click="loadMyChart"
+        >
+          Load my chart for this spot
+        </button>
+        <span v-if="lookup === 'looking'" role="status" class="text-sm text-zinc-500" data-testid="step1-loading">Looking in your range library…</span>
+        <span v-else-if="lookup === 'none' && ctx.node" role="status" class="text-sm text-zinc-500" data-testid="step1-none">
+          No chart of yours is stored for <NodeLabel :node="ctx.node" />.
+          <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink>, then press the button again.
+        </span>
+        <span v-else-if="lookup === 'offline' && ctx.node" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-offline">
+          {{ library.error }} This browser's offline copy has no chart of yours for <NodeLabel :node="ctx.node" />.
+        </span>
+        <span v-else-if="lookup === 'failed'" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="step1-load-error">{{ problem }}</span>
+      </template>
       <span class="ml-auto flex gap-2">
         <button type="button" :disabled="!history.canUndo.value" title="⌘Z" class="rounded border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-zinc-700" data-testid="step1-undo" @click="walk(history.undo)">Undo</button>
         <button type="button" :disabled="!history.canRedo.value" title="⌘⇧Z" class="rounded border border-zinc-300 px-2 py-1 text-sm disabled:opacity-40 dark:border-zinc-700" data-testid="step1-redo" @click="walk(history.redo)">Redo</button>

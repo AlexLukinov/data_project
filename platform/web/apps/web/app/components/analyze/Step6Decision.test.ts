@@ -16,7 +16,7 @@ import Step6Decision from './Step6Decision.vue';
 function render(work: Partial<StepWork> = {}) {
   const base = emptyStep(6);
   const step: AnalysisStep = { ...base, work: { ...base.work, ...work } };
-  const ctx: StepContext = { step, steps: [step], node: null, spot: EMPTY_SPOT, hand: null, pool: null, poolFacing: null, heuristic: '' };
+  const ctx: StepContext = { step, steps: [step], node: null, spot: EMPTY_SPOT, pool: null, poolFacing: null, heuristic: '' };
   const wrapper = mount(Step6Decision, {
     props: {
       ctx,
@@ -89,7 +89,7 @@ function equitiesOf(classes: Record<string, number>): Float32Array {
 /** Step 6 with both seats' ranges and the calculator stubbed, answered with these equities. */
 async function answered(villain: Record<string, number>) {
   const step = emptyStep(6);
-  const ctx: StepContext = { step, steps: [step], node: null, spot: { hero: HERO, villain: VILLAIN, board: [], heroCards: [] }, hand: null, pool: null, poolFacing: null, heuristic: '' };
+  const ctx: StepContext = { step, steps: [step], node: null, spot: { hero: HERO, villain: VILLAIN, board: [], heroCards: [] }, pool: null, poolFacing: null, heuristic: '' };
   const wrapper = mount(Step6Decision, { props: { ctx }, global: { stubs: { EquityCalculator: true } } });
   expect(wrapper.find('[data-testid="step6-advantage"]').exists()).toBe(false);
   const result = { perComboEquity: equitiesOf({ '77': 0.7, AKs: 0.6 }), perComboEquityVillain: equitiesOf(villain) } as unknown as EquityResult;

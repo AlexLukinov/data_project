@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The six training modes (spec §16), with what each one is owed a review on.
-import { computed, onMounted, shallowRef } from 'vue';
+import { computed, onMounted, ref, shallowRef } from 'vue';
 
 import { MODES } from '~/train/modes';
 import { createTrainingCache } from '~/train/cache';
@@ -13,16 +13,29 @@ definePageMeta({ public: true });
 
 const scores = shallowRef<ScoreRow[]>([]);
 const owed = shallowRef<Record<string, number>>({});
+/**
+ * Why there are no numbers on this page. Everything here is kept in this browser's own store, so
+ * a store that cannot be read is not an empty one: "Not started" and "0 owed" would say a reader's
+ * work is gone when it is only out of reach (a private window, storage the browser blocks). The
+ * two `.catch(() => [])`s that used to say it are this sentence now — the same rule ADR-057
+ * decision 8 sets for the API, applied to the one store the trainers have (ADR-061).
+ */
+const problem = ref('');
+/** Whether the scores themselves were read: what is owed can fail on its own, and often does not. */
+const scoresRead = ref(false);
 
 onMounted(async () => {
   const cache = createTrainingCache();
-  scores.value = await cache.scores().catch((): ScoreRow[] => []);
   const now = new Date();
   const counts: Record<string, number> = {};
-  for (const mode of MODES) {
-    counts[mode.mode] = dueFirst(await cache.reviews(mode.mode).catch(() => []), now).length;
+  try {
+    scores.value = await cache.scores();
+    scoresRead.value = true;
+    for (const mode of MODES) counts[mode.mode] = dueFirst(await cache.reviews(mode.mode), now).length;
+    owed.value = counts;
+  } catch (error) {
+    problem.value = `Your practice record could not be read from this browser, so the counts below are missing rather than zero. ${error instanceof Error ? error.message : String(error)}. It is kept in this browser alone — a private window or blocked site data has none of it.`;
   }
-  owed.value = counts;
 });
 
 function accuracyOf(mode: TrainMode): string {
@@ -54,8 +67,10 @@ const total = computed(() => scores.value.length);
       </NuxtLink>
     </div>
 
+    <p v-if="problem" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="train-store-error">{{ problem }}</p>
+
     <p
-      v-if="total === 0"
+      v-if="!problem && total === 0"
       class="rounded border border-dashed border-zinc-300 p-6 text-sm dark:border-zinc-700"
       data-testid="train-empty"
     >
@@ -87,7 +102,7 @@ const total = computed(() => scores.value.length);
           <p class="text-sm text-zinc-600 dark:text-zinc-400">{{ mode.purpose }}</p>
           <p class="text-xs text-zinc-500">{{ mode.blurb }}</p>
           <p class="text-xs text-zinc-500 tabular-nums">
-            {{ servedOf(mode.mode) === 0 ? 'Not started' : `${servedOf(mode.mode)} answered` }}
+            {{ !scoresRead ? 'not known' : servedOf(mode.mode) === 0 ? 'Not started' : `${servedOf(mode.mode)} answered` }}
           </p>
         </NuxtLink>
       </li>

@@ -73,7 +73,7 @@ const actual = computed(() => {
   return asPercent(1 - (pool.frequencies.fold ?? 0));
 });
 
-const unavailable = computed(() => poolGap(props.ctx.pool));
+const unavailable = computed(() => poolGap(props.ctx.pool, props.ctx.poolMissing));
 
 const sides = computed(() => [
   { label: 'dealt', range: dealt.value },

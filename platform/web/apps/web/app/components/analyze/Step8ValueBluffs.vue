@@ -59,6 +59,13 @@ function setBluffs(weights: string): void {
   emit('patch', workPatch(props.ctx.step, { bluff_weights: weights }));
 }
 const unavailable = computed(() => (ratio.value === null ? 'Mark the value half of your range above and the ratio can be counted.' : ''));
+
+/**
+ * The ratio the two matrices come to is exactly what the gate grades, so it appears only once an
+ * answer is committed — the same rule step 3 keeps for its comparison and step 4 for the nut split
+ * (ADR-061). Marking the halves is the work; putting a number on them before looking is the step.
+ */
+const reveal = computed(() => (props.ctx.step.prediction === null ? null : ratio.value));
 </script>
 
 <template>
@@ -68,8 +75,8 @@ const unavailable = computed(() => (ratio.value === null ? 'Mark the value half 
       <SeatRange label="bluffs" :weights="ctx.step.work.bluff_weights" :blocked-cards="ctx.spot.board" @update:weights="setBluffs" />
     </div>
 
-    <p v-if="ratio !== null" class="text-sm" data-testid="step8-ratio">
-      You are playing {{ ratio.toFixed(RATIO_PLACES) }} bluffs per value combo; a
+    <p v-if="reveal !== null" class="text-sm" data-testid="step8-ratio">
+      You are playing {{ reveal.toFixed(RATIO_PLACES) }} bluffs per value combo; a
       {{ (sizePct * 100).toFixed(0) }}% pot bet balances at {{ balanced.toFixed(RATIO_PLACES) }} — {{ verdict }}.
     </p>
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Every @poker/ui component in isolation with fixture props (ADR-024: reviewed on a fixture page).
-import type { Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
-import { equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, EstimatedRangePanel, HandReplayer, MDFPanel, MetricLabel, MetricValue, NodeKeyEditor, PokerTable, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, tableSeats } from '@poker/ui';
-import { ref, shallowRef } from 'vue';
+import type { Axis, Card, ComboIndex, EquityResult, HandClass, NodeKey, RakeConfig, WeightedRange } from '@poker/core';
+import { compareDistributions, distribute, equityBuckets, nodeKey, nodeKeyLabel, parseCards, parseCombo, parseRange, replayStates, step } from '@poker/core';
+import type { VocabularyName } from '@poker/ui';
+import { ActionLine, BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, DistributionNode, EQRPanel, EquityBucketBars, EquityCalculator, EquityDistributionChart, EstimatedRangePanel, GLOSSARY, HandActionLog, HandReplayer, MDFPanel, MetricLabel, MetricValue, NodeKeyEditor, NodeLabel, NumberInput, PokerTable, PoolDataBadge, PoolRealizationPanel, PositionPicker, PotOddsPanel, PredictionGate, RangeComparisonPanel, RangeDiffView, RangeDisagreementTable, RangeMatrix, RangeTextIO, StepperNav, TermLabel, VOCABULARY, VocabularyTable, tableSeats } from '@poker/ui';
+import { computed, ref, shallowRef } from 'vue';
 
 import { GG_HAND as SAMPLE_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
 import { STEP_LABELS } from '~/analyze/steps';
@@ -47,6 +48,20 @@ const replayStep = ref(0);
 // The gate is only handed the truth once an answer is committed — the page mimics the analyzer.
 const guess = ref<string | null>(null);
 const analysisStep = ref(3);
+
+// One tree of groups against the other, as `ComboDistributionPanel` builds it; `DistributionNode`
+// draws a single row of that tree, which is why it gets a mount of its own here.
+const GROUP_BY: readonly Axis[] = ['made', 'draw'];
+const ROWS_SHOWN = 3;
+const distributionRows = computed(() =>
+  compareDistributions(distribute(range.value, board.value, GROUP_BY), distribute(villain.value, board.value, GROUP_BY)).slice(0, ROWS_SHOWN),
+);
+// `''` and `UNKNOWN` are registry values the picker words differently, so the fixture carries both.
+const PICKER_SEATS: readonly string[] = [...Object.keys(VOCABULARY.positions), 'UNKNOWN', ''];
+const VOCABULARY_TABLES: readonly (VocabularyName | 'tiers')[] = [...(Object.keys(VOCABULARY) as VocabularyName[]), 'tiers'];
+const seats = ref<string[]>(['BTN', 'CO']);
+const actionLine = ref('rc/xb');
+const typed = ref<number | null>(2.5);
 </script>
 
 <template>
@@ -222,6 +237,57 @@ const analysisStep = ref(3);
         <MetricValue :value="-1.37" :low="-15.229" :high="12.489" :n="200" unit="bb/100" signed />
         <MetricValue :value="22.96" :low="22.38" :high="23.55" :n="19802" unit="%" />
         <MetricValue :value="0" :low="0" :high="56.15" :n="3" unit="%" />
+      </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">DistributionNode</h2>
+        <DistributionNode v-for="row in distributionRows" :key="row.key" :row="row" compare @group-click="(g) => (lastEvent = `node groupClick ${g.label}`)" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">HandActionLog</h2>
+        <HandActionLog :hand="SAMPLE_HAND" :states="sampleStates" :current="replayStep" @seek="replayStep = $event" />
+      </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">PositionPicker</h2>
+        <PositionPicker :seats="PICKER_SEATS" :selected="seats" multiple @update:selected="seats = $event" />
+        <PositionPicker :seats="PICKER_SEATS" :selected="seats.slice(0, 1)" label="hero seat" @update:selected="seats = $event" />
+        <p class="text-xs text-zinc-500">selected: {{ seats.join(', ') || '—' }}</p>
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">ActionLine</h2>
+        <ActionLine :line="actionLine" mode="edit" streets @update:line="actionLine = $event" />
+        <ActionLine :line="actionLine" label="read-only" />
+      </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <div class="space-y-2">
+        <h2 class="font-medium">NumberInput</h2>
+        <label class="flex items-baseline gap-2 text-sm">
+          bet, 0–100
+          <NumberInput :model-value="typed" :min="0" :max="100" :step="0.5" class="w-24 rounded border border-zinc-300 bg-transparent p-1 tabular-nums dark:border-zinc-700" @update:model-value="typed = $event" @clear="typed = null" />
+        </label>
+        <p class="text-xs text-zinc-500">value: {{ typed ?? 'empty' }} — 2.5 and 2,5 both read; anything else is refused.</p>
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-medium">TermLabel · NodeLabel</h2>
+        <p class="text-sm">
+          Hover, focus or tap: <TermLabel :entry="GLOSSARY.mdf" /> · <TermLabel :entry="VOCABULARY.positions.BTN" /> ·
+          <TermLabel :entry="GLOSSARY.eqr" label="realization" />
+        </p>
+        <p class="text-sm">A whole situation: <NodeLabel :node="situation" /></p>
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="font-medium">VocabularyTable</h2>
+      <div class="grid gap-6 lg:grid-cols-2">
+        <VocabularyTable v-for="name in VOCABULARY_TABLES" :key="name" :table="name" :caption="name" />
       </div>
     </section>
   </div>

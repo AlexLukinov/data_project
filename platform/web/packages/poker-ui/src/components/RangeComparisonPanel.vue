@@ -7,7 +7,9 @@
  * `v-model:nutOptions` shares that definition with a parent that grades a number against it (the
  * analyzer's step 4), so the Advanced fold changes the graded figure too; unbound, the panel
  * keeps its own copy. Units are core's: `cutoff` a fraction, `topPercent` a percent.
- * `nutLockedReason` shuts the definition once a number has been graded by it, and says why.
+ * `nutLockedReason` shuts the definition once a number has been graded by it, and says why;
+ * `nutHiddenReason` withholds the nut figures until then, for a parent whose whole question is
+ * what they are.
  */
 import type { NutMode, NutOptions, WeightedRange } from '@poker/core';
 import { DEFAULT_NUT_CUTOFF, DEFAULT_NUT_TOP_PERCENT, equityBuckets, nutAdvantage, rangeAdvantage } from '@poker/core';
@@ -31,8 +33,18 @@ const props = withDefaults(
     exact?: boolean | null;
     /** Why the nut definition cannot be changed right now (a number was graded by it); '' leaves it open. */
     nutLockedReason?: string;
+    /**
+     * Why the nut figures themselves are withheld — a reader is about to be asked for them
+     * (the analyzer's step 4, ADR-061). Hidden: the split, the two shares, the threshold and the
+     * sentence that names them — **and the equity bands**, whose top band is the nutted set at the
+     * default definition and whose per-side tooltip gives the weighted combos in it, so the two of
+     * them together are the split itself. The equities, the range advantage and the distribution
+     * stay. The Advanced fold stays open too, because the definition is chosen *before* the answer;
+     * `nutLockedReason` is what shuts it afterwards. '' shows everything.
+     */
+    nutHiddenReason?: string;
   }>(),
-  { heroEquities: null, villainEquities: null, exact: null, nutLockedReason: '' },
+  { heroEquities: null, villainEquities: null, exact: null, nutLockedReason: '', nutHiddenReason: '' },
 );
 const nutOptions = defineModel<Required<NutOptions>>('nutOptions', { default: () => ({ mode: 'cutoff', cutoff: DEFAULT_NUT_CUTOFF, topPercent: DEFAULT_NUT_TOP_PERCENT }) });
 
@@ -97,12 +109,15 @@ function signed(difference: number): string {
       </section>
       <section class="pk-block">
         <h4><MetricLabel term="nutAdvantage" /></h4>
-        <div class="pk-split" data-testid="compare-nut-split" role="img" :aria-label="`nut share split: ${heroLabel} ${percent(nut.split.hero, 0)}, ${villainLabel} ${percent(nut.split.villain, 0)}`">
-          <span class="pk-split-hero" :style="{ width: `${PERCENT * nut.split.hero}%` }">{{ heroLabel }} {{ percent(nut.split.hero, 0) }}</span>
-          <span class="pk-split-villain" :style="{ width: `${PERCENT * nut.split.villain}%` }">{{ villainLabel }} {{ percent(nut.split.villain, 0) }}</span>
-        </div>
-        <p class="pk-muted"><MetricLabel term="nutShare" />: {{ heroLabel }} {{ percent(nut.hero.share) }} · {{ villainLabel }} {{ percent(nut.villain.share) }} · <MetricLabel term="nutThreshold" /> <span data-testid="compare-nut-threshold">{{ percent(nut.threshold) }}</span></p>
-        <p class="pk-explain" data-testid="compare-nut-explain">{{ explainNutAdvantage(nut, heroLabel, villainLabel) }}</p>
+        <p v-if="nutHiddenReason" class="pk-muted" data-testid="compare-nut-hidden">{{ nutHiddenReason }}</p>
+        <template v-else>
+          <div class="pk-split" data-testid="compare-nut-split" role="img" :aria-label="`nut share split: ${heroLabel} ${percent(nut.split.hero, 0)}, ${villainLabel} ${percent(nut.split.villain, 0)}`">
+            <span class="pk-split-hero" :style="{ width: `${PERCENT * nut.split.hero}%` }">{{ heroLabel }} {{ percent(nut.split.hero, 0) }}</span>
+            <span class="pk-split-villain" :style="{ width: `${PERCENT * nut.split.villain}%` }">{{ villainLabel }} {{ percent(nut.split.villain, 0) }}</span>
+          </div>
+          <p class="pk-muted"><MetricLabel term="nutShare" />: {{ heroLabel }} {{ percent(nut.hero.share) }} · {{ villainLabel }} {{ percent(nut.villain.share) }} · <MetricLabel term="nutThreshold" /> <span data-testid="compare-nut-threshold">{{ percent(nut.threshold) }}</span></p>
+          <p class="pk-explain" data-testid="compare-nut-explain">{{ explainNutAdvantage(nut, heroLabel, villainLabel) }}</p>
+        </template>
         <details class="pk-advanced">
           <summary>Advanced: what counts as nutted</summary>
           <div class="pk-inputs">
@@ -112,7 +127,7 @@ function signed(difference: number): string {
           </div>
         </details>
       </section>
-      <section class="pk-block">
+      <section v-if="!nutHiddenReason" class="pk-block">
         <h4><MetricLabel term="equityBuckets" /></h4>
         <EquityBucketBars :hero-buckets="buckets.hero" :villain-buckets="buckets.villain" :hero-label="heroLabel" :villain-label="villainLabel" />
       </section>

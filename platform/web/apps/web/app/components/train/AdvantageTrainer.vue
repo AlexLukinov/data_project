@@ -7,8 +7,9 @@
 // and the seed, so asking again after the reveal costs nothing.
 import type { WeightedEquities } from '@poker/core';
 import { RangeComparisonPanel, RangeMatrix } from '@poker/ui';
-import { computed, shallowRef, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 
+import { describeApiError } from '~/auth/api';
 import { CHART_PROVENANCE } from '~/train/charts';
 import { sides } from '~/train/spot-advantage';
 import type { AdvantageSpot } from '~/train/types';
@@ -23,22 +24,35 @@ const villain = computed(() => rangeOf(props.spot.villainText, props.spot.villai
 const board = computed(() => boardOf(props.spot.boardText));
 
 const equities = shallowRef<{ hero: WeightedEquities; villain: WeightedEquities; exact: boolean } | null>(null);
+/** Why the comparison is not here. A failure used to leave "Working out…" on screen for good. */
+const problem = ref('');
+
+const LEAD = 'Both ranges’ equities could not be worked out, so there is no comparison to show.';
 
 /**
- * Only fetched once the answer has been revealed — before that there is nothing here to find,
- * which is the same rule the analyzer keeps (ADR-034).
+ * The reveal's own numbers. Only asked for once the answer has been revealed — before that there
+ * is nothing here to find, which is the same rule the analyzer keeps (ADR-034).
+ *
+ * The run is the one the answer already paid for, so it is normally free; when it throws, the
+ * panel says so and offers the run again rather than waiting (ADR-061). The trainer's own gate
+ * says the *answer* is missing; this says the *comparison* is, which is a different sentence.
  */
-watch(
-  () => [props.revealed, props.spot.hash] as const,
-  async ([revealed]) => {
-    equities.value = null;
-    if (!revealed) return;
-    const spot = props.spot;
-    const both = await sides(spot, service).catch(() => null);
+async function load(): Promise<void> {
+  const spot = props.spot;
+  equities.value = null;
+  problem.value = '';
+  if (!props.revealed) return;
+  try {
+    const both = await sides(spot, service);
     if (props.spot.hash === spot.hash) equities.value = both;
-  },
-  { immediate: true },
-);
+  } catch (error) {
+    // A browser-local failure rarely ends in a full stop, and Try again follows it on the line.
+    const detail = describeApiError(error, 'The calculation did not finish.');
+    if (props.spot.hash === spot.hash) problem.value = `${LEAD} ${/[.!?…]$/.test(detail) ? detail : `${detail}.`}`;
+  }
+}
+
+watch(() => [props.revealed, props.spot.hash] as const, () => void load(), { immediate: true });
 </script>
 
 <template>
@@ -68,6 +82,10 @@ watch(
         :villain-equities="equities.villain.equities"
         :exact="equities.exact"
       />
+      <p v-else-if="problem" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="advantage-error">
+        {{ problem }}
+        <button type="button" class="underline" data-testid="advantage-retry" @click="load">Try again</button>
+      </p>
       <p v-else class="text-sm text-zinc-500" data-testid="advantage-working">
         Working out both ranges' equities…
       </p>
