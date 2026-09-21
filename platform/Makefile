@@ -45,6 +45,23 @@ up: ## Start ClickHouse + Postgres + Kafka + Redis + MinIO, wait for health, the
 down: ## Stop the stack (volumes preserved)
 	$(COMPOSE) down
 
+# ── the whole platform in one command ────────────────────────────────────────
+# `up`/`down` are the containers alone. These three add the API, the parser worker and the Nuxt app,
+# which are foreground processes in this contract (`make api`, `make worker`, `make web`) and so
+# used to need three terminals. The scripts run them in the background with a pid file and a log
+# each in platform/.run/, and refuse to start against the TEST environment.
+.PHONY: start
+start: ## Start EVERYTHING: the stack + API + worker + app, in the background (logs in .run/logs)
+	./scripts/start.sh
+
+.PHONY: pause
+pause: ## Stop the API, worker and app, then stop the containers — memory freed, data and containers kept
+	./scripts/pause.sh
+
+.PHONY: stop
+stop: ## Stop the API, worker and app, then `compose down` — containers removed, data volumes kept
+	./scripts/stop.sh
+
 .PHONY: nuke
 nuke: ## DESTRUCTIVE: stop the stack and delete all local data volumes
 	@echo "!! This deletes ALL local poker-platform data (ClickHouse, Postgres, MinIO, Kafka)."

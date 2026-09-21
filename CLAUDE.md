@@ -187,7 +187,8 @@ Redis 6380 · MinIO 9010/9011**.
 
 | Target (run from `platform/`) | Does |
 |---|---|
-| `make up` / `make down` / `make ps` | start / stop (volumes kept) / status |
+| `make up` / `make down` / `make ps` | the containers alone: start / stop (volumes kept) / status |
+| `make start` / `make pause` / `make stop` | **the whole platform in one command** (`scripts/{start,pause,stop}.sh`): containers **plus** the API, a parser worker and the Nuxt app, backgrounded with a pid file and a log each in `platform/.run/` (gitignored) / stop the three processes and `compose stop` — memory freed, containers and data kept / stop them and `compose down` — containers removed, **data volumes kept**. `start` is idempotent, waits for `/health` and the app, refuses a port it did not open, and **refuses to run under the TEST environment**. `make nuke` remains the only target that deletes data |
 | `make migrate` | Alembic (Postgres) + `ch/migrations/*.sql` (ClickHouse) |
 | `make seed` | provision the **test** databases + load the 8-hand corpus there + build dbt there |
 | `make dbt-build` / `make dbt-test` | run the dbt models / tests against the real marts |

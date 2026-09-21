@@ -26,6 +26,9 @@ seeds/private/
 *.hh
 *.hhs
 
+# Pid files and logs of the locally started API / worker / app (scripts/start.sh)
+.run/
+
 # OS / editor
 .DS_Store
 .idea/
