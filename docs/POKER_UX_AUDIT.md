@@ -61,6 +61,40 @@ the session that implements them.
 | known 2 | `HandStudy` → `/ranges/compare?hero=…&street=…` | confirmed | The page reads only `?range`; and two parameters cannot name a node anyway — §4.2 |
 | known 3 | `2,5` in number inputs | confirmed, wider | Machine locale `ru_RU`; `<html lang="en">` is already set and does not help in Chrome; 28 numeric inputs, 17 of them fractional in normal use — §4.3 |
 
+## 1b. The same table after rounds 5–7 (2026-09-21)
+
+§1 above is the state on 2026-09-14 and stays as written. This is what F.12a–F.12d and the
+close-out changed, line by line, with the ADR that closed each. A line is "met" only where it was
+re-checked in a browser and reported — the reports are in the round-5, round-6 and round-7 lane
+notes.
+
+| # | §13 line | 2026-09-14 | 2026-09-21 | Closed by |
+|---|---|---|---|---|
+| 1 | Progressive disclosure | ⚠️ partial | ✅ met | ADR-053 (the panels on `/hands/[id]` and the trainers became editable, `useEditableOdds` — **§2.1's first "renders editable and does nothing" bullet is stale as written**), ADR-063 (the reading threshold folds on `/reports` and `/pool`; `ControlHelp` opens a fold before ringing what is inside it; the last inert controls, `ComboDistributionPanel`'s axes and export on the replayer, bound) |
+| 2 | No unexplained jargon | ⚠️ partial | ✅ met | ADR-056 (tiers, `n`, hand and draw classes, the ten seats, the node shorthand — Range Lab side), ADR-057 (the registry's 65 stats and 80 dimensions, through `RegistryTerm`; no description over 40 characters left behind a `title=`) |
+| 3 | Explain the number | ⚠️ partial | ✅ met | ADR-056 (the Lab's headline equity, the pool EQR, the realization panel, step 3's comparison; step 6's hand-written paragraph deleted), ADR-060 (the hero surfaces: KPI tiles, leak rows, the sittings table) |
+| 4 | Teaching empty states | ⚠️ partial | ✅ met | ADR-057 (`hero-empty`, `/hands`, `report-idle`, `pool-idle`, the compare columns, `/pool/cohorts`), ADR-050 ("Try an example" now exists to point at) |
+| 5 | Sensible defaults | ✅ met | ✅ met | unchanged |
+| 6 | Visible state | ⚠️ partial | ✅ met | ADR-056 (chart provenance in the trainers, the realization panel's tier badge), ADR-057 (the four pending lines on My game, `report-running`, `pool-running`, `player-loading`, `cohort-counting`) |
+| 7 | Undo/redo | ⚠️ partial | ✅ met | ADR-056 (`/ranges/[id]`, analyzer step 1 and the drawing trainer; ⌘Z / ⌘⇧Z / Ctrl+Y on the window; the trainer gained the Redo it never had) |
+| 8 | Keyboard, discoverable | ❌ missing | ✅ met | ADR-056 (a matrix cell is clickable from the keyboard in view mode too), ADR-050 (the `?` overlay, generated from `app/help/shortcuts.ts`, whose scan test fails when a file binding keys is unlisted) |
+| 9 | No modal traps | ✅ met | ✅ met | unchanged |
+| 10 | First-run tour + Examples | ❌ missing | ✅ met | ADR-050 (three examples in the bundle, opened in the analyzer's own step components over an in-tab session — no account, no upload, no API, nothing stored; a five-stop tour; a first-visit strip) |
+| 11 | Fast feedback | ⚠️ partial | ✅ met | ADR-057 (the pending lines above; the replayer's realization panel renders beside a refused pool call), ADR-063 (`compare.vue`'s non-lazy `store.load()` and `/pool`'s two non-lazy awaits — the whole app no longer waits behind any of them; `DefinitionPanel` scrolls into view and takes focus instead of answering off screen) |
+| 12 | Dark mode, laptop width | ⚠️ partial | ✅ met | ADR-053 (the header below ~1000 px), ADR-056 (`NodeKeyEditor`'s rows wrap at 1280 px); re-verified at 1280 and 700 px, light and dark, in every round since |
+| 13 | Errors actionable | ⚠️ partial | ✅ met | ADR-056 (a pot of zero reads as a sentence, not core's `RangeError`), ADR-057 (`describeApiError`'s 5xx branch was unreachable and printed a developer noun on every screen but one; eight of the audit's nine `.catch(() => null)` sites), ADR-063 (`ComboDistributionPanel`'s "the strategic axis needs per-combo equities" now says what to do, and offers no export for a tree it could not build) |
+| §18.12 | Import two components elsewhere | ⚠️ partial | ✅ met | ADR-056 (`package-entry.test.ts` mounts both through a bare `'@poker/ui'` import from outside `apps/web`) |
+| §18.13 | `npm run license-check` clean | ✅ met | ✅ met | unchanged |
+| known 1 | `size_pct` "(% of pot)" as a fraction | confirmed | fixed | ADR-053 (relabelled "(fraction of pot)"; `stats/vocabulary.ts#unitWords` reads the label) |
+| known 2 | `HandStudy` → `?hero=&street=` | confirmed | fixed | ADR-053 (the whole `NodeKey` travels as `?node=`, `ranges/situation.ts`) |
+| known 3 | `2,5` in number inputs | confirmed | fixed | ADR-053 (`NumberInput` reads both separators) |
+
+**Two findings in §2 above are stale and should be read with this block, not on their own.**
+§2.1's "Controls that render editable and do nothing" names `HandStudy.vue:168-169` (PotOdds and
+MDF with no `update:*` handler) — F.12a closed that with `composables/useEditableOdds.ts`, and
+the surviving instance on that screen was `ComboDistributionPanel`, which the close-out fixed.
+§2.11's `compare.vue` and §2.3's `KpiTile` `:title` are likewise closed above.
+
 ---
 
 ## 2. §13 as a checklist

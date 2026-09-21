@@ -6,7 +6,9 @@
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
 **Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; **CI real and green since 2026-09-15, F.1 ticked (ADR-054)****
-**Last updated:** 2026-09-21 (session 21, **the round-6 merge** — six lanes committed, **D.9c, F.12b, F.12c, F.12d and F.13 ticked**, D.9b left `[ ]` because its Done means is a green CI job and nothing is pushed. `make check` **1,714** · `make web-check` **1,549 / 146** · `make seed && make test-all` **1,821 passed, 6 skipped**. The app now explains itself: every screen says what it is, how it works and what to do first, and a test fails when a new one does not. A privacy guard runs before every push — and found a **fifteenth** real handle still in the public history.)
+**Last updated:** 2026-09-21 (session 22, **the round-7 merge** — three lanes committed (`5a4f6cd`, `7ac25e1`, `a6cb7e0`) plus the platform scripts (`7b63f5b`); **F.12 ticked** and **F.14 added**. `make check` **1,735** · `make web-check` **1,601 / 152** · `make seed && make test-all` **1,847 passed, 6 skipped** · `make privacy-check` clean. Still unpushed.)
+
+**Previously:** 2026-09-21 (session 21, **the round-6 merge** — six lanes committed, **D.9c, F.12b, F.12c, F.12d and F.13 ticked**, D.9b left `[ ]` because its Done means is a green CI job and nothing is pushed. `make check` **1,714** · `make web-check` **1,549 / 146** · `make seed && make test-all` **1,821 passed, 6 skipped**. The app now explains itself: every screen says what it is, how it works and what to do first, and a test fails when a new one does not. A privacy guard runs before every push — and found a **fifteenth** real handle still in the public history.)
 
 **Previously:** 2026-09-15 (session 20, **the round-5 merge** — D.9a `dd770bd`, D.8 `b1a535a`, F.12a `a60611e` committed, plus a heuristics clock fix `c36faa4` and a fixture scrub (later folded into the history rewrite); F.1 had committed and pushed itself. **D.9a ticked.** Gates green on the third run: `make check` 1,675 · `make web-check` 1,015 / 99 · `make seed && make test-all` **1,783 passed, 6 skipped**. **Found: fourteen real opponents' screen names in the public history** — the founder's decision, below.)
 
@@ -44,22 +46,104 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Next: **round 7** — three lanes together, then **B.5b** alone
+### ▶ Next: **B.5b** — `hand_uid` as `FixedString(16)` in `core.*`, **with the machine to itself**
 
-Phase D is closed (D.10 at the round-6 merge). D.9b is the one D step still `[ ]`, and only because its
-*Done means* is a green CI job: it is built, green locally and committed. Nothing has been pushed.
+Round 7 is merged (below). Every web lane is done; what is left in the plan is **B.5b**, the new
+**F.14** (ADR-062's client half, a web lane that can run beside anything) and **D.9b's tick**, which
+needs a push.
 
-| Lane | Owns | Work |
-|---|---|---|
-| **A · F.12's close-out** | `platform/web/**` (hero and reports surfaces) | The three §13 lines left: explain-the-number on the hero tables, fast feedback (`compare.vue`'s non-lazy `store.load()`, `DefinitionPanel` opening above the fold), progressive disclosure. Then bring [POKER_UX_AUDIT.md](POKER_UX_AUDIT.md) §1 up to the state after round 6, and tick **F.12**. |
-| **B · the analyzer's follow-ups** | `platform/web/**` (`components/analyze/**`, `pages/dev/**`, the trainers) | All nine steps in an example (ADR-050 follow-up 1 — four lines in `analyze/context.ts` and four call sites); `Step4Nuts` renders the nut split before the prediction is committed, so step 4's answer can be read off the page (follow-up 2); the five `.catch(() => null)` sites F.12c listed as not its own; `AdvantageTrainer`'s permanent "Working out…" when an equity call fails; `/dev/components` mounting the 28 components it does not (spec §12). |
-| **C · the pool's lookup and the registry's words** | `platform/analysis/pool/**`, `platform/stats/registry/**`, `platform/api/routers/pool.py` | `GET /v1/pool/players` matches only the **start** of a `player_key` and every key is namespaced `<site>:<name>`, so it answers "no such player" to every real opponent typed by name (found by F.13, which had to document the workaround instead of fixing it). Then the registry's own text: 40 v1-parity `notes` written for whoever ported the stat, per-value labels for enum dimensions, and the `EV bb/100` label that F.12c had to work around. Needs `make gen` and `make check`; ClickHouse **read-only**. |
+**B.5b runs alone.** No other lane, no `make seed`, no `make test-all` while it runs: it rebuilds
+every `core.*` table, exchanges them, recreates the mart chain empty and backfills it, so nothing
+else can read the real data through that, and the 4 GB ClickHouse cannot do two of these at once.
+The mart half is already done in C.2 — the marts carry `FixedString(16)` today and the staging
+boundary converts — so what remains is `core.*` itself.
 
-**Then B.5b, with the machine to itself.** It rebuilds every `core.*` table to `FixedString(16)` partition
-by partition, exchanges them, recreates the mart chain empty and backfills — so no other lane can read the
-real data while it runs, and `make seed`/`make test-all` would fight it for the 4 GB node.
+Read first: `docs/POKER_PLAN.md` step **B.5b** (it carries the design), **ADR-017** (a sort-key
+change is a rebuild, not a migration) and **ADR-019** (partition-at-a-time work on a 4 GB node).
+
+**The founder's rules bind hardest here.** The real `core.*` holds 9.1M hands that cannot be
+re-parsed cheaply. Write the backup step down in the note *and run it* before any `EXCHANGE TABLES`;
+keep the old tables until the parity fingerprint matches; never `DROP TABLE` before that; work
+partition by partition with bounded memory; stop at the first disagreement rather than continuing.
+
+**Done means** `system.columns` shows `FixedString(16)` on every core and mart table; the replayer
+and `/v1/hands` still resolve a hand by its hex id (the API converts at the boundary); the parity
+fingerprint is unchanged; `marts.player_hand_flags`' compressed size drops by ~0.5 GiB in
+`system.parts`; `make check` and `make test-all` green; and the old tables are dropped only after
+all of that, with the backup recorded. Then tick **B.5b**.
+
+**To bring the platform up:** `cd platform && make start` (the stack plus the API, a worker and the
+app, backgrounded; logs in `platform/.run/logs`). `make pause` frees the memory and keeps the data;
+`make stop` takes the containers down too. `make nuke` is still the only thing that deletes data.
 
 **Before any push, from `platform/`:** `make up && make privacy-check` (also a `pre-push` hook here).
+
+---
+### ✅ Round 7 is merged (2026-09-21) — three lanes, **F.12 ticked**
+
+**Committed:** lane A (F.12's close-out) `5a4f6cd` · lane B (the analyzer) `7ac25e1` · lane C (the
+pool's lookup and the registry) `a6cb7e0` · the platform scripts `7b63f5b`. **Nothing is pushed.**
+
+**Gates over the combined tree:** `make check` **1,735** · `make web-check` **1,601 tests / 152
+files** · `make seed && make test-all` **1,847 passed, 6 skipped** · `make privacy-check` clean.
+
+**The merge had real work of its own,** which is worth recording because it is the first round where
+one lane's change broke another's tests: lane C's registry rewrite turned two assertions in
+`stats/vocabulary.test.ts` red (both pinned strings lane C deliberately changed), and left three
+comments in `pool/stats.ts` and `pages/pool/players.vue` asserting that the lookup route *cannot*
+find a player by name — which stopped being true in the same commit. Both are fixed in lane C's
+commit. Lane B also left a scratch probe from its own adversarial pass (`app/zzprobe.test.ts`, red,
+asserting step 4's pre-fix behaviour); its manifest flagged it and the merge moved it out of the
+tree. Cross-check of the three manifests against `git status --porcelain -uall`: 69 claimed paths,
+**no path claimed by two lanes**, nothing dirty and unclaimed but the scripts and that probe.
+
+**ADR numbers collided.** Lane A wrote two ADRs and took 060 and 061; lane B was told 061 and cites
+it in twenty-four source files. Lane A's code cites no ADR number at all (it cites "plan F.12"), so
+**lane A's second ADR became 063** and the renumber cost only doc text.
+
+**What landed, one line each:**
+
+- **F.12 — closed** (round 7 lane A, **ADR-060** and **ADR-063**). A hero number now says what it
+  *means*, never what it is: a KPI tile is read against its own confidence band, a leak row says
+  which way the gap points and whether the number is unusual in itself, the sittings table says
+  whether one sitting swings wider than the whole result — generated from the values, withheld
+  wherever the sample does not carry the claim. `compare.vue` and `/pool` stop holding the whole app
+  behind an await; `DefinitionPanel` comes to the reader. Progressive disclosure decided screen by
+  screen: the reading threshold folds as the one control that *re-reads the answer* rather than
+  *re-asks the question*, and `ControlHelp` opens any fold before ringing what is inside it.
+  `POKER_UX_AUDIT.md` gained a dated **§1b**: the same thirteen lines after rounds 5–7, with the ADR
+  that closed each. 27/27 in a browser of its own.
+- **The analyzer's follow-ups** (lane B, **ADR-061**). One silence had been doing three jobs —
+  `poolGap(null)` returned `''`, which the gate reads as *still working*, so a committed prediction
+  with no pool behind it waited for ever. A missing pool answer now travels with its reason, so **an
+  example opens all nine steps** (amending ADR-050) with an honest sentence where the field's number
+  would be. **No step prints the number its own gate grades:** step 4 hides the nut split *and the
+  equity bands*, which are the same number one hover away; its own review found steps 5 and 8 doing
+  it too, and an analysis with no situation keeping the very forever-gate this round set out to end.
+  `/dev/components` covers all 36 components with a test that fails when a new export has no slot
+  (checked by mutation). The lane is **honest that its review mostly did not run**: 14 of 15
+  adversarial agents died on the session limit, so five findings were reported "refuted" having
+  never been checked.
+- **The pool's player lookup and the registry's words** (lane C, **ADR-062**). `GET /v1/pool/players`
+  answered "no such player" to every real opponent, because it matched the *start* of a `player_key`
+  and every key is `<site>:<name>` (re-measured: the busiest opponent's own full name as a prefix
+  returns **0 rows**). It is now a **POST** — a query string carrying a screen name is written into
+  every access log on the way — matching inside the name half with the site optional, refusing under
+  three characters (measured: the worst 3-gram is in 2,259 of 94,276 names; the shortest name is
+  four), ranking the exact name first and then by hands, and saying how many matched. The registry
+  then says what it means to a reader: 42 `notes` rewritten with the v1 arithmetic moved verbatim
+  into `v1_parity` (which `scripts/fingerprint.py` now reads — it always meant that), **171 enum
+  values labelled where they are declared**, `ev_bb_per_100` renamed **"All-in adjusted bb/100"**,
+  and seventeen descriptions that pointed at a file header rewritten to stand alone.
+- **`make start` / `make pause` / `make stop`** (`7b63f5b`) — the whole platform in one command
+  instead of four terminals, with a pid file and a log each in `platform/.run/`. They refuse to run
+  under the TEST environment, never take a port they did not open, and kill the whole process tree so
+  the worker leaves its consumer group. `stop.sh`'s `compose down` line is the one path not exercised
+  end to end — running it would have taken the stack down under the three lanes.
+
+**Still open after this merge:** **B.5b**, the new **F.14** (ADR-062's client half — the page still
+searches through the report path, and the client still rewrites enum values by hand), and D.9b's
+tick. Two things are the founder's, both about history that is already public — see below.
 
 ---
 ### ✅ Round 6 is merged (2026-09-21) — six lanes, five steps ticked

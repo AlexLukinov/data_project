@@ -69,6 +69,10 @@ not a change I've made.
 | [057](#adr-057--registry-words-reach-the-screen-through-one-app-side-component-from-the-registrys-own-descriptions-at-runtime-a-blank-area-says-what-it-is-for-and-offers-one-way-in-a-failure-is-a-sentence-that-cannot-be-mistaken-for-no-data) | Registry words reach the screen through one app-side component; a blank area teaches; a failure is a sentence that cannot be mistaken for "no data" | ✅ |
 | [058](#adr-058--the-privacy-guard-matches-a-name-where-its-context-proves-it-is-one-and-runs-before-every-push-never-in-ci) | The privacy guard matches a name where its context proves it is one, and runs before every push, never in CI | ✅ |
 | [059](#adr-059--one-sentence-one-home-the-tool-catalogue-the-page-explainer-and-control-help) | One sentence, one home: the tool catalogue, the page explainer and control help | ✅ |
+| [060](#adr-060--a-number-on-a-hero-screen-says-what-it-means-not-what-it-is) | A hero number says what it means, not what it is | ✅ |
+| [061](#adr-061--a-gate-handed-a-reason-prints-it-an-example-therefore-opens-all-nine-steps-and-step-4-stops-printing-the-answer-it-is-about-to-ask-for) | A gate handed a reason prints it; an example opens all nine steps | ✅ |
+| [062](#adr-062--a-player-is-found-by-the-name-a-person-types-not-by-the-key-the-pipeline-stores-and-the-registry-says-what-it-means-to-a-reader-with-the-porting-record-kept-out-of-their-way) | A player is found by the name a person types; the registry says what it means | ✅ |
+| [063](#adr-063--the-reading-threshold-is-the-one-control-on-a-report-screen-that-folds) | The reading threshold is the one control on a report screen that folds | ✅ |
 
 ---
 
@@ -4127,3 +4131,426 @@ chooser means explaining it or writing down why it needs none, or the suite fail
 the catalogue's "how it works" sentences are written by hand from the modules that compute the
 answers and can age; the guard against that is the rule in decision 1 plus the code comment above
 each entry naming the module it was read from.
+
+
+---
+
+## ADR-060 — A number on a hero screen says what it means, not what it is
+
+**Status:** accepted · **Date:** 2026-09-21 · **Plan step:** F.12 (close-out)
+
+**Context.** Spec §13 asks for "a plain-language sentence next to key outputs, generated from
+templates driven by the computed values". F.12b did that for the Range Lab (ADR-056,
+`poker-ui/src/explain.ts`); the hero surfaces still printed bare numbers. But the obvious reading
+of the line — put the numbers into a sentence — produces nothing: the KPI tile already prints its
+value, its band and its `n`, and the leak row already prints four figures. A sentence that
+restates them is decoration, and one more thing to keep in sync.
+
+**Decision.** A hero reading says what the figures **mean**, never what they are, and only what
+they support. Three rules, all of them branches on a value rather than prose someone believed when
+they wrote it:
+
+1. **A tile is read against its band, not against its point estimate.** The question a KPI tile
+   poses and does not answer is whether this many hands can tell the number apart from the field's.
+   Comparing the *baseline* with the *bounds* answers it from figures the server already sent, and
+   it is the only clause on the tile that is not already on the tile.
+2. **A stat the registry gives no better end to is a difference, never a fault.**
+   `higher_is_better` is `null` for most frequency stats on purpose (`reports/cell.ts#sense`), and
+   a red `+14.0` invites exactly the conclusion the platform refuses to make.
+3. **A claim is withdrawn the moment the sample stops supporting it.** Under `MIN_N` the reading
+   says so and says nothing else. And — the case the browser found, not the code review — when the
+   band *contains* the field, the sentence must not then name a side: the founder's own bb/100 on
+   2026-09-21 is −1.37 ± 9.52 against a field of −7.54, and the first draft read "this many hands
+   cannot tell the two apart. This stat has a better end, and you are on it." Both halves in one
+   sentence, the second withdrawing the first.
+
+The sentences live in `apps/web/app/hero/readings.ts`, beside `words.ts` rather than inside it:
+`words.ts` is what the **page** says (the luck sentence, the chart caption, the empty states), this
+is what a **figure** says. They are tested as text (`readings.test.ts`, 24 cases), each case a rule
+the wording may not break rather than a sample of the wording.
+
+**Consequences.** Eight KPI tiles, every leak row and the sittings table carry one. A count carries
+none — `reports/cell.ts` withholds its delta as arithmetic, so there is nothing to read. The tile
+needed one new field, `KpiTileView.baseline`: `CellView` carries only `baselineText`, and a
+formatted string cannot be compared with a bound.
+
+**What was rejected.** Rendering the sentence only on hover or focus, the way the registry's own
+description reaches the screen (ADR-057). That is the affordance the audit §2.3 criticised in the
+first place ("sentences that exist only as a hover"), and a verdict about *this* measurement is
+not a definition of the stat.
+
+---
+
+## ADR-061 — A gate handed a reason prints it; an example therefore opens all nine steps, and step 4 stops printing the answer it is about to ask for
+
+**Status:** accepted · 2026-09-21 · plan round 7, lane B (the analyzer's follow-ups) ·
+**Amends** [ADR-050](#adr-050) decision 4 (an example offers five of nine steps) ·
+**Constrained by** [ADR-034](#adr-034) (a step's truth is fetched only after the commit),
+[ADR-053](#adr-053) (the definition a number is graded by), [ADR-057](#adr-057) decision 8
+(a failure is a sentence that cannot be mistaken for "no data").
+
+**Context.** ADR-050 closed F.12d with two follow-ups against the analyzer's own files, and F.12c
+listed five `.catch(() => null)` sites as not its own. All of them are one defect in two shapes:
+**the analyzer has one way of saying "there is no number here" — silence — and it uses it for three
+different facts.** `poolGap(null)` returned `''`, and `PredictionGate` reads `''` as *still
+working*, so a committed prediction with no pool behind it waited on "Working out what actually
+happens here…" for ever. A pool request that was *refused* produced exactly the same silence as a
+pool that had simply not arrived yet, and as an example that has no pool at all. Alongside it,
+`Step4Nuts` mounted `RangeComparisonPanel` unconditionally — printing the nut split, the two nut
+shares and a sentence naming them, directly above the gate that asks *"What share of the nutted
+combos here is yours?"*. Step 3 gates its comparison on the commit and step 6 fetches the pool only
+after it; step 4 was the odd one out, and it was found on the example page, where it is the first
+thing a first-time reader meets.
+
+**Decisions.**
+
+1. **A missing pool answer travels with its reason.** `StepContext` gains three optional readonly
+   strings — `poolMissing`, `poolFacingMissing`, `libraryMissing` — and `poolGap(pool, missing = '')`
+   returns `missing` when there is no pool at all. Empty stays the one honest silence: *a request is
+   in flight*. The pool and the facing node get separate fields because they are separate requests
+   that fail separately; step 9 reads the second, steps 1, 2 and 6 the first.
+   *Rejected:* one field for both (a node answered and a facing node refused would have left step 9
+   waiting again, which is the bug); folding the reason into `NodeFrequencies` (it is the absence of
+   a frequencies object that has to be explained, so the reason cannot live inside one).
+
+2. **`RangeComparisonPanel` gains `nutHiddenReason`, beside the `nutLockedReason` it already had.**
+   When set, the nut split bar, the two shares with the threshold, `explainNutAdvantage`'s sentence
+   **and the equity bands** are replaced by that one line. **The Advanced fold stays open**, because
+   the definition the answer is graded by is chosen *before* the answer — `nutLockedReason` is what
+   shuts it afterwards, and the two are deliberately independent. Step 4 passes a reason while
+   `step.prediction === null`: the same rule `StepShell` already keeps for `actual`.
+   *Rejected:* passing `heroEquities: null` until the commit (blanks the whole panel and prints
+   "Set two ranges and a board", which is false); mounting the panel only after the commit (takes
+   the definition control away before it is needed, and its test proves the cutoff must be
+   changeable first); hiding the section with CSS from the app side (the numbers stay in the DOM).
+   **This is the one file outside the lane's paths.** It is additive, defaults to `''`, and no
+   existing caller changes.
+
+3. **The equity bands go with the split, because they are it.** `DEFAULT_EQUITY_EDGES`' top band is
+   **80–100%**, and `DEFAULT_NUT_CUTOFF` is **0.8** — the same set. `EquityBucketBars` puts each
+   side's weighted combos in that band in a `title`, so hero's over hero's plus villain's *is* the
+   graded number, one hover from the gate that asks for it. Hiding only the split bar would have
+   left the answer on the page and the ADR claiming otherwise. What stays is the work: the
+   equities, the range-advantage table and its sentence, and the distribution chart with its
+   threshold line — from which the split can be *estimated*, which is the point of being asked.
+
+   The same measure is not taken at step 5, where `BlockerPanel`'s per-combo table lets a reader
+   who finds their own hand in it read a percentage off that row. There the table is the step's
+   entire subject ("see exactly which of their combos your own two cards make impossible"), and
+   removing it would leave nothing to work with. The line that does the arithmetic for them is
+   gated instead. The rule this draws: **withhold the figure the gate grades and any summary that
+   is arithmetically equal to it; keep the material it is derived from.**
+
+4. **An example opens all nine steps** (amending ADR-050 decision 4). With decision 1 in place its
+   four pool-scored steps have something true to say — "An example has no pool: what the field does
+   is counted from hands you have uploaded, and this spot ships with the app. Open one of your own
+   hands and press *Analyze this node* for the field's own number here." — so ADR-050 fact 3, the
+   reason for offering five, no longer holds. Step 1's *Load my chart for this spot* is not offered
+   at all rather than offered and broken (`libraryMissing`): a reader with no account has no
+   library, and both seats already hold the reference chart the page names. Step 1's ranges and step
+   6's size are **still filled in**, because the later steps read them; step 2's split and step 9's
+   pot are the reader's to work. Step 9's heuristic is kept in the tab like everything else.
+   *Verified:* `/examples/top-pair-dry-board`, signed out, **with the API stopped** — all nine
+   committed, nine reveals or honest sentences, no gate waiting, and `indexedDB.databases()` empty,
+   so mounting step 1 does not open the range cache and ADR-050 decision 1 still holds.
+
+   **It still arrives on step 3** (`EXAMPLE_OPENS_AT`), not on step 1, and that is not an oversight.
+   Steps 1 and 2 are an example's set-up — both ranges are already assigned and there is nothing to
+   subtract — so landing there would open on the one screen with nothing to work out and no answer
+   to show. Step 3 is the first with a board, a count and a reveal. It is also where `help/tour.ts`
+   points its two analyzer stops, whose cards are built from `stepDef(3)`'s own title, question and
+   hint: **opening anywhere else silently makes both tour cards describe a step the reader is not
+   looking at.** `tour.test.ts` could not catch that — it checks that a stop's words exist verbatim
+   in `STEPS` and that its anchor is a real testid, not that the words match the step on screen — so
+   `example.test.ts` now pins the two together. `example-prev` is live from the moment the page
+   opens, which is how a reader reaches 1 and 2.
+
+5. **Each swallowed failure becomes a sentence that says what could not be asked and how to ask
+   again** (`analyze/problems.ts`). It does not repeat `hands/study.ts`'s classifier:
+   `describeApiError` already words an unclassified 5xx as the refusal under load it usually is, and
+   the replayer's own copy exists only because its wording names *stepping through a hand*. The five
+   sites F.12c listed:
+   - `analyze/[id].vue`, the pool at this node → `analyzePoolProblem`, shown by the gate;
+   - `analyze/[id].vue`, the facing node → `analyzeFacingProblem`, shown by step 9's gate;
+   - `analyze/[id].vue`, **the hand → deleted, not worded.** `ctx.hand` is read by no step
+     component; the page fetched a hand, converted it, and handed it to nine components that never
+     look at it. It is one request per analysis open against an account's ClickHouse budget, for
+     nothing. `hand` is gone from `StepContext` too.
+   - `Step1Ranges.vue` → `libraryLookupProblem`, which keeps the existing lead verbatim (it now
+     imports `LIBRARY_UNREADABLE`, so the two screens that claim to say the same words finally do)
+     and appends the reason and "Press the button again to try once more.";
+   - `ranges/[id].vue`'s versions → the `.catch(() => [])` is gone, `useAsyncData`'s error is
+     rendered with a **Try again**, and "Reading the history…" separates *loading* from *empty*. An
+     emptied history had silently removed every revert button.
+
+6. **A refused pool question is asked again.** The watcher now tracks the step number as well as the
+   commit: `committed` stays `true` across steps, so it never fired again and a refusal was
+   permanent. An answer already held is not re-asked, and one run at a time is allowed — two commits
+   in quick succession would otherwise double the very load that causes the refusal.
+
+7. **A trainer that cannot work out its reveal says so** (`AdvantageTrainer.vue`). Its
+   `.catch(() => null)` left "Working out both ranges' equities…" on screen for good. It now carries
+   the failure and a **Try again** that re-runs it. The trainer's *gate* already said the answer was
+   missing (`train/session.ts`); this says the *comparison* is, which is a different sentence.
+
+8. **Step 4 was not the only step printing its own answer.** Reviewing the lane's own diff found
+   two siblings, and an example now puts both in front of a first-time reader: **step 5** mounted
+   `BlockerPanel` with hero's combo selected, whose "AhKd kills 86 of villain's 630 calling combos"
+   is exactly the graded count on a rainbow board (seen: step 5's reveal for that spot is "86
+   combos"); **step 8** printed "You are playing 1.00 bluffs per value combo" the moment both halves
+   were marked, which is exactly what its gate grades. Both are now handed their input only once
+   the prediction is in — step 5 by passing `selectedCombo` as `null` until then, step 8 by gating
+   its own sentence, the way step 3 already gated its comparison. `gates.test.ts` states the rule
+   once for the two of them rather than leaving it implicit in a test about something else.
+
+9. **An analysis with no situation had the forever-gate all of its own.** With `node_key === null`
+   no pool request is made, so no `catch` can fire and no answer can arrive: `poolMissing` stayed
+   empty and all four gates waited on "Working out…" indefinitely — the exact bug this round set out
+   to end, surviving on the analyzer itself. It is reachable: the API refuses a `manual` analysis
+   without a situation but accepts a **`pasted`** one, which is what `/hands/paste` creates. The
+   page now answers `NO_SITUATION` for both pool fields when there is no node, and step 9 no longer
+   says "Nobody is facing a bet at this node" when there is no node to face one at.
+
+10. **`/dev/components` is the whole of `@poker/ui`, and a test says so.** It mounted 28 of the
+   package's 36; `DistributionNode`, `HandActionLog`, `PositionPicker`, `ActionLine`, `NumberInput`,
+   `TermLabel`, `NodeLabel` and `VocabularyTable` had README examples and no slot (spec §12 asks for
+   every one with fixtures; ADR-024 reviews components on this page). All eight are mounted with
+   real fixtures — the distribution tree is built from the page's own two ranges, the action log
+   from the replay fixture, and the vocabulary tables are generated from `VOCABULARY` itself, so a
+   new table appears without an edit. `pages/dev/components.test.ts` reads `poker-ui/src/index.ts`
+   and fails when an exported component has no mount, the same shape as `shortcuts.test.ts`.
+   **Checked by mutation:** removing one mount turns it red, naming the component. It is a static
+   check on the source and says so: it proves every exported component has a tag and an import on
+   the page, not that the tag renders (two sections are behind a `v-if` on the equity result, as
+   they must be). That they all draw is what opening the page shows, and it was opened.
+
+**How this lane was reviewed.** Five adversarial lenses over its own diff, each finding then given
+to two skeptics told to refute it. **It is honest to say the review mostly did not run:** 14 of its
+15 agents died on the session's rate limit, including every skeptic, so the workflow reported five
+findings as "refuted" when in truth none had been checked. The one lens that finished was the one
+asking whether a step still prints its own answer, and **three of its five findings were real** —
+the equity bands (decision 3), steps 5 and 8 (decision 8) and the no-situation gate (decision 9);
+all three were then confirmed by hand and in a browser rather than taken on the agent's word. Of
+the other two, one was the gallery test claiming more than it checks (its name and doc now say what
+it does) and one was a duplicate of the bands. The lesson is the one already in this repo's notes:
+a five-lens adversarial pass does not fit in one session, and a review whose verifiers all failed
+must be read as *unverified*, never as *refuted*.
+
+**Also found, and fixed because it is the same defect in this lane's own files.** `/train`'s two
+`.catch(() => [])`s on the training store made a store that cannot be read (a private window,
+blocked site data) read as *nothing practised yet* — "Not started", "0 owed" — for a reader with a
+record. It now says the counts are missing rather than zero, and the per-mode line reads "not known"
+only when the scores themselves were not read (what is owed can fail on its own), with
+`pages/train/index.test.ts` covering all three cases.
+
+**Found and not taken.** `train/session.ts` puts a browser-local exception in the gate verbatim
+("DataCloneError: the equity worker could not be reached") through `describeApiError`'s non-fetch
+branch. It is pre-existing, it is not one of the five, and wording it well needs a decision about
+what a *local* failure should say that this lane did not have to make.
+
+**Verification.** `nuxt typecheck` clean · `eslint .` clean · licences unchanged · Vitest **1,599
+passing**; the only failures in the combined tree are lane C's `stats/vocabulary.test.ts` ×2, which
+are their own round-7 task (the `EV bb/100` → `All-in adjusted bb/100` rename). `make
+privacy-check` green against the real pool's keys.
+
+A browser pass of its own — app :3082, API :8882, a scratch Postgres `poker_laneb` created,
+migrated and **dropped**, the real ClickHouse read only — covered, in order:
+
+| What | Seen |
+|---|---|
+| An example, **signed out, API stopped** | opens on "3. Bucket both ranges on the board" with *previous* live; rail `stepper-1…9`; "0 of 9" → "9 of 9 predictions committed"; steps 1, 2, 6, 9 each printed the no-pool sentence, none waiting; 3, 5, 7 graded; 0 requests to `:8882` (the only one any run made was the app-wide session refresh, which every page makes); `indexedDB.databases()` empty |
+| Step 4 before the commit | equities 51.4 / 48.6 and the range-advantage sentence on screen; `compare-nut-split`, `compare-nut-threshold`, `compare-nut-explain` absent; **no equity band on the page and the string "weighted combos" nowhere in its HTML**; the cutoff control still enabled |
+| Step 4 after the commit | split "BTN 54%, BB 46%", five bands with "80–100%" at the top, "You said 55%, it is 53.6% — close enough", definition locked |
+| Step 5 before / after | no `hand-removal` line; then "AhKd kills 86 of villain's 630 calling combos…" — 86 being exactly what its gate grades |
+| Step 8 before / after | both halves painted and no ratio on screen; then "You are playing 1.00 bluffs per value combo… — you are bluffing more often than the size supports", with the verdict |
+| An analysis with **no situation** (a saved `pasted` one) | steps 1, 2, 6 and 9 all read "This analysis has no situation yet, so there is nothing to ask the pool about — set one on the hand it came from."; none waiting; **0 requests to `/v1/pool/`** |
+| The pool refused (CDP-injected sanitized 500) | step 1: "What the field does in this situation could not be asked. The API could not answer this — often because several questions were asked at once… Moving to another step asks again."; step 9 the same for the fold frequency; neither waiting |
+| The retry | the sentence changed on the next step change, then a clean reload answered from the real pool: step 1 58.6%, step 9 46.8% with "Theory folds 39.8%; your pool folds 7.0 points more — bluff here more often." |
+| The range library refused (500 + IndexedDB blocked) | "Your range library could not be read — neither the API nor this browser's offline copy answered. DatabaseClosedError: SecurityError site data is blocked in this browser. Press the button again to try once more." |
+| The version history refused | "The earlier versions of this range could not be read, so there is nothing here to revert to — this range's own body is the one above, unaffected. …" + **Try again**, which recovered the real v2/v1 list and its revert button |
+| The equity worker refused | "Both ranges' equities could not be worked out, so there is no comparison to show. DataCloneError: the equity worker could not be reached." + **Try again**, instead of "Working out…" |
+| `/train` store blocked | "Your practice record could not be read from this browser, so the counts below are missing rather than zero. …"; the per-mode line "not known" |
+| `/dev/components` | all 36 render; the eight new sections screenshotted with real data |
+
+**Consequences and follow-ups.**
+
+- **Merge:** `RangeComparisonPanel` is this lane's only file outside its paths. One added prop,
+  defaulted, plus a `<template v-else>` around three existing elements.
+- `hands/study.ts` and `analyze/problems.ts` are two homes for one idea (what a failed call means,
+  in words, per screen). Neither duplicates the classifier, but a third would be one too many —
+  ADR-057's own follow-up about one wording module now covers three files.
+- `train/session.ts` shows a browser-local exception verbatim in the gate
+  ("DataCloneError: …") through `describeApiError`'s non-fetch branch. Pre-existing and left.
+- ADR-050 follow-ups 3 ("Try an example" in the empty states), 4 (`apps/web/README.md`'s route
+  table has no `/examples` row), 5 (a fourth example needs a chart the set does not have) and 6
+  (`VocabularyTable` has no home outside `/dev/components` — it now has one there) are untouched:
+  they belong to pages this lane does not own.
+- The nut-split hiding is step 4's only. Step 3's two distribution panels still let a careful reader
+  read off villain's top-pair-or-better share before answering; that is the same trade as decision 3
+  and was not this lane's to settle.
+
+---
+
+## ADR-062 — A player is found by the name a person types, not by the key the pipeline stores; and the registry says what it means to a reader, with the porting record kept out of their way
+
+**Status:** accepted · 2026-09-21 · round 7, lane C · **Constrained by** ADR-021 (the registry is the one
+vocabulary), ADR-026 (hero and pool are separate modules), ADR-053 (a number typed and a number sent agree),
+ADR-057 (registry words reach the screen through one component), ADR-058 (a real screen name is personal data).
+
+**Context.** Two findings of F.13, which had to document them instead of fixing them.
+
+1. **`GET /v1/pool/players` could not find anybody.** It compiled to `startsWith(player_key, …)`, and a
+   `player_key` is namespaced: `core.ids.player_key` builds `f"{site}:{screen_name.strip().lower()}"`. Every
+   one of the pool's 94,276 keys therefore begins `ggpoker:`, and no screen name begins any key. Measured
+   again here, on the real pool: the busiest opponent's own full name, used as a key prefix, returns **0
+   rows**. The route answered "no such player" to every real opponent the founder typed — an assertion of
+   absence that was never true, §17's failure in its least obvious disguise. `/pool/players` worked around
+   it from the client, through the ordinary report path with a `like '%…%'` on `player_key`, and wrote the
+   measurement into `pool/stats.ts` as a comment.
+2. **The registry was written for whoever ported it.** 42 of the 65 stats carried a `notes` string, and
+   almost all of it is v1-parity arithmetic — "v1 counted a seat's first decision only (+0.6%
+   opportunities…)". ADR-057 put `notes` on `DefinitionPanel`'s "Caveat" line, where a reader who has never
+   heard of v1 meets it. Enum dimensions declared 171 values and named none of them, so the client rewrote
+   `5bet_plus` → `5bet+` and `''` → "not applicable" by hand — and `''` means six different things across
+   the ten dimensions that declare it, while the `_plus` rewrite once turned a pool player called `a_plus_b`
+   into `a+b`. `ev_bb_per_100` was labelled "EV bb/100", colliding with the glossary's solver EV, which
+   ADR-057 §5 had to work around on every hero surface. `facing`'s description read "(see the header of
+   this file)" — a file no reader is served.
+
+**Decisions.**
+
+1. **A lookup matches the name half of the key, and the site is optional.** `POST /v1/pool/players`
+   takes part of a screen name, or a whole key pasted back out of an answer (`<site>:<part of a name>`).
+   With no site the pattern is `%:%<fragment>%` — a separator, then anything, then the fragment; every key
+   holds a separator and the site half lies to the left of it, so typing the site's own name finds
+   **nobody** rather than everybody. **A colon separates only when what precedes it is a site this product
+   parses** (`core.enums.Site`): people paste "Villain: someone", and a screen name may hold a colon of its
+   own, and reading every left half as a site would turn those into searches for a site that does not
+   exist — 0 rows, 200 OK, the same false absence one layer up. `%`, `_` and `\` typed by a person are
+   escaped, so a wildcard is a character (verified on the real pool: `<name>%` matches 0 where `<name>`
+   matches 859). The text is lower-cased because the pipeline stores keys lowered and `LIKE` is
+   case-sensitive; were that to change, the search would stop matching rather than match the wrong player.
+   **It is a POST, as the pool's other reads are**, and for a reason this lane had to take seriously: a screen
+   name is personal data (ADR-058) and a query string is written into every access log the request passes
+   through — `make api` runs uvicorn with its access log on. The old route's `?prefix=` was the same shape
+   but inert, because it matched nothing; making it work is what would have made it leak.
+2. **Three characters, measured, not guessed.** Over the pool's 94,276 distinct keys the worst
+   three-character fragment is inside **2,259** names; the worst two-character one inside **11,829** and the
+   worst single character inside **50,726**. The engine's `MAX_LIMIT` is 10,000, so at three characters
+   every match is seen — which makes `matched` a count and the ranking a ranking of all of them — and at two
+   it would not be. The minimum costs nobody a player: **the shortest screen name in the pool is four
+   characters**. It is checked on the *name half*, so `gg:ab` is refused too, and the refusal is a 400 with
+   a sentence, not a 422 quoting a pattern.
+3. **What happens to a name that is a substring of many: the exact name first, then the busiest.** The sort
+   key is `(name != typed, -hands, name)`. The player meant is either the one whose name was typed in full
+   or one there are hands on — never the alphabetically first of two thousand, which is what a bare
+   `ORDER BY player_key` and a cap would have shown. Verified on the real pool: a name with **269** hands
+   ranks above a name containing it with **56,761**.
+4. **The answer says how many matched, and whether that is a count.** The response is `PlayerMatches`, a
+   `ReportResult` with `matched` (how many players the name matched in all; `rows` holds the busiest
+   `limit` ≤ 200 of them) and `matched_capped` (true when more matched than the search counts, making
+   `matched` a floor). `hands` stays the total over *everyone* who matched, so a shortened list never reads
+   as the whole of it. `matched_capped` is unreachable at three characters on today's corpus; it exists so
+   that stays checkable as the corpus grows, because this whole ADR is about a route that lied about
+   absence.
+5. **The lookup is not cached, alone among the reports here.** What makes the ranking exact is that the
+   query is as wide as the match set, and a three-character search on the real pool measures 1,966 rows
+   and **1.6 MiB of JSON** (2,259 rows ≈ 1.9 MiB at the worst fragment). Storing that under one typed
+   string, to save 580 ms on retyping it, would push out of an LRU cache the report blocks a screen really
+   does read twice. `players()` therefore takes no `cache` and the route passes none.
+6. **`notes` is the reader's caveat; `v1_parity` is the porting record and no screen renders it.** All 42
+   `notes` were rewritten for whoever is reading the number — what it counts, and what it deliberately
+   leaves out — and a test fails if one mentions v1 again. The v1 arithmetic moved to a new `v1_parity`
+   field with **every measured figure preserved exactly**; nothing was rounded, invented or dropped. The
+   field is not decoration: `scripts/fingerprint.py` treats a stat that says how it departs from v1 as
+   allowed to disagree with v1's fingerprint, and that predicate now reads `v1_parity` rather than `notes`,
+   which is what it always meant. **The change is behaviour-neutral today and correct tomorrow**: of the 54
+   stats shared with v1, the same **41** are excused either way (checked), but a stat given a reader caveat
+   with no v1 departure would have been excused by the old predicate and is not by the new one. The seed
+   `stat_definitions.csv` keeps `notes` — now reader text, which is what a definitions table should hold —
+   and does not carry `v1_parity`. The field is `exclude=True`, so it reaches no serialization either:
+   `GET /v1/definitions` would otherwise ship the founder's own hero volumes ("2.4% of 5,019") to every
+   browser that asks the registry for its labels.
+7. **Every enum value is named where it is declared, completely.** `Dimension.value_labels` is a map from
+   value to the word a reader sees, and the loader **refuses a registry** where an enum declares a value it
+   does not label, or labels one it does not declare. Complete on purpose: a client that had to fall back
+   would have to guess, and guessing is what put the `_plus` rewrite and one shared word for ten different
+   blanks into the client. 171 labels over 19 enums. The **value is unchanged** — what is sent stays the
+   registry's code (ADR-053) — and `''` now says "No flop", "Before the turn", "Nobody raised", "No bet or
+   raise yet", "Not shown" or "Preflop or not shown", each in its own dimension.
+8. **One name per number, and a description a reader can act on.** `ev_bb_per_100` is labelled **"All-in
+   adjusted bb/100"**: "EV" in this product already means a solver's expected value for a line, and one
+   name per number is cheaper than an app-side workaround on every surface. Seventeen descriptions that
+   pointed at what a reader cannot see were rewritten to stand alone — `facing` and the four action-line
+   dimensions now carry their own vocabulary instead of the file's header, `flop_pairing` stops omitting one
+   of its three values, `flop_connectedness` says which span is which, and `player_key` stops claiming to
+   be "the screen name as the site shows it", which is the same wrong belief the broken route was built on.
+
+**Alternatives.** *Prefix on the name half* — simpler and index-friendlier, but the page already promises
+"any part of a name" and a poker screen name is as often remembered by its middle as its start. *Ordering by
+hands in SQL* — the right answer, and it needs an `order_by` on `ReportRequest`, which is `stats/`, outside
+this lane; at three characters the whole match set is in hand anyway, so sorting in Python is exact rather
+than approximate. *Rewriting `notes` in place and dropping the v1 text* — it would have silently flipped
+every one of those 42 stats from "expected mismatch" to "regression" in the parity report. *Labels only
+where a value is awkward* — leaves the client a fallback, which is the bug.
+
+**Consequences.** The client's `like` workaround and its `valueWords` rewrites are now unnecessary; the
+web lane's changes are listed in §D. `api/routers/pool.py` is at **299 lines**, one under its ceiling: the
+next line added there should come with the node routes moving to their own router, which is a split the
+client already draws (`pool/api.ts` vs `pool/stats.ts`). A registry entry that adds an enum value now fails
+to load until it is given a word, which is the point.
+
+---
+
+## ADR-063 — The reading threshold is the one control on a report screen that folds
+
+**Status:** accepted · **Date:** 2026-09-21 · **Plan step:** F.12 (close-out)
+
+**Context.** §13's progressive-disclosure line names four advanced controls — nut threshold, MC
+iteration count, rake config, bucket boundaries — all of them Range Lab controls. On `/reports`,
+`/pool` and `/hands/[id]` the line had never been answered, and it was not obvious what it even
+asked for: `/reports` runs six stacked blocks before the grid, but five of them are the screen's
+advertised job ("Any stat, for any situation, grouped any way", `help/tools/myGame.ts`).
+
+**Decision.** Fold the control that **re-reads the answer** rather than **re-asking the question**,
+and only that one. The reading threshold (`minn-select`) is the single control on either screen
+that qualifies, provably:
+
+- it never reaches the server — `reports/model.ts#request` sends `stats`, `group_by`, the situation
+  and `compare_to`, and no `min_n`; the threshold is applied in the browser by `cell.ts#cellView`;
+- its default works untouched (`MIN_N` = 100, the same hundred the leak finder and the pool's node
+  query use);
+- the catalogue already classifies it as post-run — step 4 of 5 on `/pool` is "Run it, **then**
+  raise the reading threshold" (`help/tools/pool.ts`).
+
+The compare toggle beside it on `/reports` stays visible: it sets `compare_to`, so it changes the
+question. The stat picker and the group-by stay visible: folding the control that delivers the
+screen's one job is hiding the job, not disclosing it progressively.
+
+The threshold in use is printed on the `<summary>` — "Advanced: cells under 100 observations are
+dimmed" — so the fold can stay closed without hiding what it is doing. That is the rule
+`PotOddsPanel` already follows for the rake it folds.
+
+**And the fold is made safe in one place, not per fold.** A closed `<details>` keeps its children in
+the DOM, so ControlHelp's scan still attaches the tip and PageHelp still lists the control — and
+"point at this control" would then ring a control nobody can see. Measured in Chrome 141 on this
+very control: closed, the `<select>` reports `checkVisibility() === false` and a laid-out 220×29
+box **380 px below** where it appears once the fold is open, because a closed `<details>` hides its
+content with `content-visibility` rather than `display: none`. So `ControlHelp.highlightControl`
+now opens every `<details>` ancestor before measuring. Fixed there rather than in each fold so that
+adding a fold anywhere cannot quietly break ADR-059's promise that every control can be pointed at.
+
+**Consequences.** `/pool` stops keeping a second copy of the control — it rendered its own bare
+`<label>` under no heading at all, which is how the two screens drifted into two spellings of one
+thing. The `min-n` help entry follows the control to its new file and loses a name no screen ever
+rendered: it was "Hide comparisons under", describing a difference from the field that a pool
+report never draws (there is no hero seat, so `reports/model.ts` leaves `compare_to` off it).
+
+**`/hands/[id]` was deliberately not folded**, and it is already met on the spec's own terms: of
+§13's four advanced controls, rake config is folded there already (`PotOddsPanel`) and now reaches
+`MDFPanel` through the shared ref, the nut threshold belongs to `RangeComparisonPanel`, which that
+screen does not mount, and the MC iteration count and the bucket boundaries are props no caller on
+it sets. What was *not* met there was §2.1's other bullet — controls that render editable and do
+nothing — and folding the panel would have hidden that rather than fixed it: `ComboDistributionPanel`
+was mounted with a literal `:group-by` and neither listener, so its four axis checkboxes emitted into
+nothing and Export CSV did nothing at all. That is what was fixed instead.
