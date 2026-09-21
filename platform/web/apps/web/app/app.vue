@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
+import ControlHelp from '~/components/help/ControlHelp.vue';
+import HelpMenu from '~/components/help/HelpMenu.vue';
+import PageHelp from '~/components/help/PageHelp.vue';
+import ShortcutsOverlay from '~/components/help/ShortcutsOverlay.vue';
+import TourCard from '~/components/help/TourCard.vue';
+import WelcomeOffer from '~/components/help/WelcomeOffer.vue';
+import { EXAMPLES } from '~/help/examples';
+import { TOUR_STOPS } from '~/help/tour';
+import { useHelp } from '~/help/useHelp';
 import { useAuthStore } from '~/stores/auth';
 
 const links = [
@@ -12,10 +21,12 @@ const links = [
   { to: '/reports', label: 'Reports' },
   { to: '/pool', label: 'The pool' },
   { to: '/analyze', label: 'Analyze' },
+  { to: '/examples', label: 'Examples' },
   { to: '/train', label: 'Train' },
   { to: '/progress', label: 'Progress' },
   { to: '/dev/components', label: 'Components' },
   { to: '/upload', label: 'Upload' },
+  { to: '/help', label: 'Help' },
 ];
 
 const auth = useAuthStore();
@@ -29,6 +40,12 @@ async function signOut(): Promise<void> {
   await auth.logout();
   await navigateTo('/');
 }
+
+// Help (spec §13, ADR-050): a first visit is offered the tour and the Examples until it answers;
+// the tour card and the `?` overlay mount once, here, and the help menu reopens either.
+const help = useHelp();
+const offered = computed(() => !help.state.value.welcomed && help.state.value.tour !== 'running');
+const shortcutsOpen = ref(false);
 </script>
 
 <template>
@@ -40,6 +57,7 @@ async function signOut(): Promise<void> {
           {{ link.label }}
         </NuxtLink>
         <span class="ml-auto flex items-center gap-4 text-sm">
+          <HelpMenu :stops="TOUR_STOPS" @shortcuts="shortcutsOpen = true" />
           <template v-if="auth.status === 'authenticated'">
             <NuxtLink to="/account" data-testid="nav-account" class="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">{{ auth.user?.email ?? 'Account' }}</NuxtLink>
             <button type="button" data-testid="nav-signout" class="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100" @click="signOut">Sign out</button>
@@ -48,8 +66,13 @@ async function signOut(): Promise<void> {
         </span>
       </nav>
     </header>
+    <WelcomeOffer v-if="offered" :stops="TOUR_STOPS" :examples="EXAMPLES" />
     <main class="mx-auto max-w-7xl px-4 py-6">
+      <PageHelp />
       <NuxtPage />
     </main>
+    <TourCard :stops="TOUR_STOPS" />
+    <ControlHelp />
+    <ShortcutsOverlay v-model:open="shortcutsOpen" />
   </div>
 </template>
