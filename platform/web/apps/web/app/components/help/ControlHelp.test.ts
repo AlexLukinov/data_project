@@ -3,9 +3,15 @@ import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
 
+import { controlById } from '~/help/controls';
 import { attachedControls, clearHighlight, highlightControl, setAttachedControls } from '~/help/explainer';
 
 import ControlHelp from './ControlHelp.vue';
+
+/* Read back from the catalogue rather than quoted: what this file is testing is that the
+   component renders the entry, and a copy edit in `help/controls/` should fail `controls.test.ts`,
+   which guards the words, not a component test that only ever borrowed one of them. */
+const MIN_N = controlById('min-n')!;
 
 const route = reactive({ fullPath: '/reports' });
 
@@ -97,7 +103,7 @@ describe('ControlHelp', () => {
     select.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     await w.vm.$nextTick();
     expect(shown(w, 'min-n')).toBe(true);
-    expect(tip(w, 'min-n').text()).toContain('before its difference from the field is shown');
+    expect(tip(w, 'min-n').text()).toContain(MIN_N.does);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await w.vm.$nextTick();

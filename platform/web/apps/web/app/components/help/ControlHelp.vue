@@ -54,6 +54,28 @@ function boxOf(element: Element): Box {
   return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
 }
 
+/**
+ * Open every fold the control is inside, before anything measures it (plan F.12).
+ *
+ * A closed `<details>` keeps its children in the DOM, so `scan()` still attaches the tip and
+ * `PageHelp` still lists the control — and "point at this control" would then ring a control
+ * nobody can see. Measured on the reading threshold in Chrome 141: closed, the `<select>` reports
+ * `checkVisibility() === false` and a laid-out 220×29 box 380 px below where it actually appears
+ * once the fold is open, because a closed `<details>` hides its content with `content-visibility`
+ * rather than `display: none`. So the ring lands on empty page, not on the control and not
+ * (as one might expect from a zero rect) in the corner.
+ *
+ * Reading the rect after setting `open` is enough to get the real one: the read forces the layout
+ * the write invalidated. Every ancestor, not just the nearest, because one fold may sit inside
+ * another. Fixed here rather than in each `<details>` so that adding a fold anywhere cannot
+ * quietly break ADR-059's promise that every control can be pointed at.
+ */
+function reveal(host: HTMLElement): void {
+  for (let fold = host.closest('details'); fold !== null; fold = fold.parentElement?.closest('details') ?? null) {
+    fold.open = true;
+  }
+}
+
 /** What a Tab lands on. A control that has one of these inside it is already reachable. */
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]';
 
@@ -190,6 +212,7 @@ watch(highlightedControl, (id) => {
   }
   const host = document.querySelector<HTMLElement>(`[data-help="${CSS.escape(id)}"]`);
   if (host === null) return;
+  reveal(host);
   host.scrollIntoView({ block: 'center' });
   ring.value = boxOf(host);
   show(host);

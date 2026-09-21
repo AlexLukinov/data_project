@@ -69,9 +69,27 @@ describe('ComboDistributionPanel', () => {
     wrapper.unmount();
   });
 
-  it('explains a missing input instead of failing', () => {
+  it('explains a missing input instead of failing, and says what to do about it', () => {
     const wrapper = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['strategic'] } });
-    expect(wrapper.find('[role="alert"]').text()).toContain('needs per-combo equities');
+    const said = wrapper.find('[role="alert"]').text();
+    expect(said).toContain('needs per-combo equities');
+    expect(said).toContain('Untick that axis');
+  });
+
+  /*
+   * Both export handlers call `distribute` a second time, so with an axis missing its input they
+   * throw out of a click — uncaught, while the panel already says why on screen. Unreachable until
+   * F.12 bound these axes on the hand replayer, where the equity calculation only runs once both
+   * seats have a chart.
+   */
+  it('refuses to offer an export of a tree it could not build', async () => {
+    const wrapper = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['strategic'] } });
+    const buttons = wrapper.findAll('.pk-actions button');
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) expect(button.attributes('disabled')).toBeDefined();
+
+    await wrapper.setProps({ groupBy: ['made'] });
+    for (const button of wrapper.findAll('.pk-actions button')) expect(button.attributes('disabled')).toBeUndefined();
   });
 });
 

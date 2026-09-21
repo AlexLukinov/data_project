@@ -2,7 +2,7 @@
 // One hand, stepped through, with every panel bound to the node the hand is currently at
 // (spec §9.3). The panels ask the range library what is written down for this situation and for
 // what the other seat just did, so stepping forward walks both the hand and my own charts.
-import type { EquityResult, HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
+import type { Axis, EquityResult, HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
 import { NO_RAKE, canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/core';
 import { ComboDistributionPanel, EQRPanel, EquityCalculator, HandReplayer, MDFPanel, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, RangeMatrix, poolEqr } from '@poker/ui';
 import { computed, reactive, ref } from 'vue';
@@ -41,6 +41,17 @@ const equity = ref<EquityResult | null>(null);
 const poolFailure = ref('');
 const realizedFailure = ref('');
 
+/**
+ * The distribution panel's own state (plan F.12, audit §2.1 "controls that render editable and do
+ * nothing"). It was mounted with a literal `:group-by="['made', 'draw']"` and no listeners, so its
+ * four axis checkboxes emitted `update:groupBy` into nothing — the box stayed ticked, the prop
+ * never moved and the tree below went on grouping the old way — and Export CSV did nothing at all.
+ * The equities go in with them, because two of the axes (`equity`, `nut`) need them and the
+ * calculator below has already worked them out for this very range.
+ */
+const axes = ref<Axis[]>(['made', 'draw']);
+const exported = ref('');
+
 /** The situation every answer on screen is for: a marker each late answer is checked against. */
 let asked = '';
 
@@ -52,6 +63,9 @@ async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
   equity.value = null;
   poolFailure.value = '';
   realizedFailure.value = '';
+  // The axes are the reader's choice and survive the step; the exported text is about the range
+  // at the step it was taken from, so it must not sit under the next one's heading.
+  exported.value = '';
   // The charts are marked with the same `asked` situation as the pool's answers, and for the same
   // reason: stepping quickly, an earlier step's lookup can settle last, and its charts — or its
   // `failed` flag, which prints "your range library could not be read" — would land under the
@@ -215,7 +229,21 @@ async function analyzeThisNode(): Promise<void> {
         </div>
         <p v-else class="text-sm text-zinc-500" data-testid="study-nothing-faced">{{ noOdds }}</p>
 
-        <ComboDistributionPanel v-if="mine" :range="mine" :board="board" :group-by="['made', 'draw']" />
+        <ComboDistributionPanel
+          v-if="mine"
+          :range="mine"
+          :board="board"
+          :group-by="axes"
+          :equities="equity?.perComboEquity ?? null"
+          @update:group-by="axes = $event"
+          @export="exported = $event"
+        />
+        <!-- The Export button hands the text back rather than downloading it: a download in this
+             app's sandbox is inert, and the Lab already answers the same button the same way. -->
+        <details v-if="exported" class="text-sm" data-testid="study-dist-export">
+          <summary class="cursor-pointer text-zinc-500">Exported text</summary>
+          <pre class="mt-2 overflow-x-auto rounded bg-zinc-100 p-2 text-xs dark:bg-zinc-900">{{ exported }}</pre>
+        </details>
         <EquityCalculator v-if="both.length === 2" :ranges="both" :board="board" :service="service" @result="equity = $event" />
         <p v-else-if="mine && ranges.villainNode" class="text-sm text-zinc-500" data-testid="study-no-villain-range">
           No stored range for {{ nodeKeyLabel(ranges.villainNode) }}, so there is nothing to run the equity against yet.

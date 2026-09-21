@@ -24,10 +24,10 @@ import DefinitionPanel from '~/components/reports/DefinitionPanel.vue';
 import EmptyState from '~/components/reports/EmptyState.vue';
 import GroupByPicker from '~/components/reports/GroupByPicker.vue';
 import PresetButton from '~/components/reports/PresetButton.vue';
+import ReadingThreshold from '~/components/reports/ReadingThreshold.vue';
 import StatPicker from '~/components/reports/StatPicker.vue';
 import { describeApiError } from '~/auth/api';
 import { createReportsApi } from '~/reports/api';
-import { MIN_N_CHOICES } from '~/reports/cell';
 import type { EmptyStateView } from '~/reports/emptyState';
 import { poolEmptyView, poolIdleView } from '~/reports/emptyState';
 import { createColumnsModel } from '~/reports/model';
@@ -85,10 +85,28 @@ function single(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-await useAsyncData('definitions', () => definitions.load(), { server: false });
-await useAsyncData('pool-scope', () => scope.load(), { server: false });
+/*
+ * `lazy: true` on both (plan F.12, spec §13 "fast feedback"): awaited without it, `<Suspense>`
+ * holds the whole app — nav included — until the registry *and* the pool's cohorts have answered,
+ * so a slow or stopped API gives a blank screen with nothing to read and nothing to do. This is
+ * the trap F.12a documented for `pages/ranges/compare.vue`; /pool was holding it twice.
+ */
+await useAsyncData('definitions', () => definitions.load(), { server: false, lazy: true });
+await useAsyncData('pool-scope', () => scope.load(), { server: false, lazy: true });
 
-if (columns.stats.value.length === 0 && scope.presets.value[0] !== undefined) scope.apply(scope.presets.value[0]);
+/*
+ * Which makes opening the first standard report a *reaction* to the cohorts arriving rather than
+ * a line that runs after an await. `immediate` covers the warm store on a second visit, and the
+ * guard is the same one the awaited version carried: a question already in the URL wins, and a
+ * reader who has started choosing stats is never overwritten.
+ */
+watch(
+  scope.presets,
+  (presets) => {
+    if (columns.stats.value.length === 0 && presets[0] !== undefined) scope.apply(presets[0]);
+  },
+  { immediate: true },
+);
 
 const describedStat = computed(() => definitions.stats.find((stat) => stat.code === describing.value));
 const describedDim = computed(() => (describedStat.value === undefined ? definitions.byCode.get(describing.value) : undefined));
@@ -200,7 +218,10 @@ watch(
   <section class="space-y-4">
     <div class="flex flex-wrap items-baseline gap-3">
       <h1 class="text-2xl font-semibold">The pool</h1>
-      <p class="text-sm text-zinc-500" data-testid="pool-scope">the population — {{ scope.choices.value.length }} cohorts available</p>
+      <!-- The page now paints before the cohorts land, so the count line has to say which of the
+           two it is: still being read, or read and this many. -->
+      <p v-if="scope.loading.value" role="status" class="text-sm text-zinc-500" data-testid="pool-scope-loading">the population — reading the cohorts on offer…</p>
+      <p v-else class="text-sm text-zinc-500" data-testid="pool-scope">the population — {{ scope.choices.value.length }} cohorts available</p>
       <NuxtLink to="/pool/players" class="text-sm underline underline-offset-2">Find a player</NuxtLink>
       <NuxtLink to="/pool/cohorts" class="text-sm underline underline-offset-2">Cohorts</NuxtLink>
       <NuxtLink to="/ranges/compare" class="text-sm underline underline-offset-2">Pool ranges</NuxtLink>
@@ -251,12 +272,8 @@ watch(
       <CohortPicker :choices="scope.choices.value" :primary="primary" :against="against" :busy="busy" @update:primary="primary = $event" @update:against="against = $event" />
     </div>
 
-    <label class="flex items-center gap-2 text-sm">
-      <span class="text-zinc-500">grey a cell under</span>
-      <select v-model.number="columns.minN.value" data-testid="minn-select" class="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700">
-        <option v-for="choice in MIN_N_CHOICES" :key="choice" :value="choice">{{ choice === 0 ? 'never — show every number' : `${choice} observations` }}</option>
-      </select>
-    </label>
+    <!-- F.12: the same folded control /reports has, instead of this page's own bare copy of it. -->
+    <ReadingThreshold v-model="columns.minN.value" />
 
     <p v-if="storedRule && columns.cohort.value" class="text-xs text-zinc-500" data-testid="cohort-note">
       This standard report carries a rule of its own, so it is not measuring the whole field: only

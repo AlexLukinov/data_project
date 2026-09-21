@@ -34,6 +34,7 @@ import type { TermEntry } from '../stats/vocabulary';
 import { categoryWords, statEntry } from '../stats/vocabulary';
 import { unsearchableLabels } from '../hands/searchable';
 import type { Leak } from './api';
+import { leakReading } from './readings';
 
 export interface LeakDrill {
   /** The spot itself — every decision the stat counted. `null` when it cannot be opened. */
@@ -108,6 +109,13 @@ export interface LeakRow {
   leak: Leak;
   /** What the stat measures, from the registry entry `leak.code` names (ADR-057). */
   term: TermEntry;
+  /**
+   * What this row's own four numbers mean — which way the gap points, whether the value is
+   * unusual in itself, and what it rests on (plan F.12, `readings.ts`). The term above says what
+   * the stat is; this says what *this* measurement of it says, and is generated from the values
+   * so the two can never disagree.
+   */
+  reading: string;
   /** The category as a reader says it. `/v1/hero/leaks` sends the raw code, `preflop`. */
   category: string;
   drill: LeakDrill;
@@ -136,6 +144,7 @@ export function leakRows(
     return {
       leak,
       term: statEntry(stat, leak.code, leak.label),
+      reading: leakReading(leak),
       category: categoryWords(leak.category),
       drill,
       spotQuery: drill.spot === null ? null : handsQuery(drill.spot, dates),

@@ -81,10 +81,16 @@ export const READING_CONTROLS: readonly ControlHelp[] = [
   {
     id: 'min-n',
     anchor: '[data-testid="minn-select"]',
-    source: `${APP}/components/reports/ReadingOptions.vue`,
-    control: 'Hide comparisons under',
-    does: 'Sets how many observations a cell needs before its difference from the field is shown at all. Below it the value still appears, dimmed and uncompared.',
-    where: 'How to read it, on Reports and the Pool.',
+    // Moved out of `ReadingOptions` in F.12 so the Pool stops keeping a second copy of it, and
+    // folded: it is the one control on either screen that re-reads the answer instead of
+    // re-asking the question, which is what spec §13 puts behind "Advanced".
+    source: `${APP}/components/reports/ReadingThreshold.vue`,
+    // Was "Hide comparisons under", which named a comparison the Pool never draws (a pool report
+    // has no hero seat, so `reports/model.ts` leaves `compare_to` off it) — and no screen spells
+    // the control that way. This is the label both screens actually render.
+    control: 'grey a cell under',
+    does: 'Sets how many observations a cell needs before it counts as read rather than as a handful. Under it the value is still shown, dimmed, and — where a screen draws one at all — its difference from the field is withheld. Nothing is re-asked: the threshold is applied to the answer already on screen.',
+    where: 'Behind “Advanced” under the pickers, on Reports and the Pool.',
   },
   {
     id: 'compare-toggle',

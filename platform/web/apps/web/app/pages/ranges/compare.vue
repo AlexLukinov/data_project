@@ -31,7 +31,14 @@ const highlight = ref<ComboIndex[] | null>(null);
 // `store.load()` answers from this browser's own copy whenever the API is away, so the one failure
 // that reaches here is that copy refusing as well — and it leaves the picker below empty with the
 // store still on 'loading', which says nothing at all unless this error is read.
-const { error: libraryError } = await useAsyncData('ranges-for-compare', () => store.load(), { server: false });
+//
+// **`lazy: true` is the whole of F.12's "fast feedback" on this page** (audit §2.11). Awaited
+// without it, `<Suspense>` holds the *entire* page — heading, situation editor, all three columns —
+// until the library answers, so a slow or absent API renders a blank screen with nothing to read
+// and nothing to do. Lazy, the page paints at once and each part says what it is waiting for: the
+// picker below, and the three columns through `view()`, which already has a `'loading'` branch.
+// This is the trap F.12a documented and this page was the one left holding it.
+const { error: libraryError } = await useAsyncData('ranges-for-compare', () => store.load(), { server: false, lazy: true });
 // A link names the situation (`?node=`, the replayer's) or a stored range whose situation it is
 // (`?range=`, the editor's). One that cannot be read opens the default and says why on the page.
 const linked = await openLinkedSituation(route.query, (id) => store.open(id));
@@ -181,7 +188,10 @@ const COLUMNS = [
             <option v-for="r in store.items" :key="r.id" :value="r.id">{{ nodeKeyLabel(r.node_key) }} · {{ r.name }}</option>
           </select>
         </label>
-        <EmptyState v-if="store.status === 'ready' && store.items.length === 0" :view="LIBRARY_EMPTY" testid="compare-library-empty" class="rounded border border-dashed border-zinc-300 p-3 dark:border-zinc-700" />
+        <!-- The picker is empty both while the library is being read and when there is none of it;
+             the two must not look alike, which is what the non-lazy await used to hide. -->
+        <p v-if="store.status === 'idle' || store.status === 'loading'" role="status" class="text-xs text-zinc-500" data-testid="compare-library-loading">Reading your range library…</p>
+        <EmptyState v-else-if="store.status === 'ready' && store.items.length === 0" :view="LIBRARY_EMPTY" testid="compare-library-empty" class="rounded border border-dashed border-zinc-300 p-3 dark:border-zinc-700" />
       </div>
     </div>
 

@@ -48,6 +48,19 @@ const outcome = computed<{ rows: GroupComparison[]; error: string | null }>(() =
 const rows = computed(() => outcome.value.rows);
 const error = computed(() => outcome.value.error);
 
+/**
+ * Core's reason, with the one thing the reader can always do about it.
+ *
+ * `distribute` refuses an axis whose input is missing, in its own words — "the strategic axis
+ * needs per-combo equities" — which names a thing the reader never asked for and no way out of
+ * it. The axes are checkboxes, so unticking is always available and always works; where the
+ * equities would have come from is the page's business, not this panel's, and it does not
+ * pretend to know.
+ */
+const errorWords = computed(() =>
+  error.value === null ? '' : `This grouping cannot be drawn: ${error.value}. Untick that axis to read the rest of the tree.`,
+);
+
 function dropB(row: GroupComparison): GroupComparison {
   return { ...row, b: null, deltaShare: 0, deltaWeight: 0, children: row.children.map(dropB) };
 }
@@ -86,13 +99,17 @@ async function copyText(): Promise<void> {
           </template>
         </TermLabel>
       </span>
+      <!-- Disabled while there is no tree: both handlers call `distribute` again, and with an axis
+           missing its input that throws — uncaught, out of a click, with the panel already saying
+           why on screen. Reachable since F.12 bound these axes on the hand replayer, where the
+           equity calculator only runs with a chart for both seats. -->
       <span class="pk-actions">
-        <button type="button" class="pk-btn" @click="exportCsv">Export CSV</button>
-        <button type="button" class="pk-btn" @click="copyText">Copy as text</button>
+        <button type="button" class="pk-btn" :disabled="error !== null" @click="exportCsv">Export CSV</button>
+        <button type="button" class="pk-btn" :disabled="error !== null" @click="copyText">Copy as text</button>
       </span>
     </div>
     <p v-if="groupBy.some((a) => a === 'strategic' || a === 'nut')" class="pk-muted">Thresholds: {{ thresholdNote }}</p>
-    <p v-if="error" class="pk-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="pk-error" role="alert">{{ errorWords }}</p>
     <div v-else class="pk-tree">
       <div class="pk-head">
         <span>group</span>

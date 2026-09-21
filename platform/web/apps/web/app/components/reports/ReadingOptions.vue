@@ -13,8 +13,8 @@
  * three kinds of code at once. `describeRules` reads the registry's labels and the cohort form's
  * own comparison words (ADR-057), so the note reads in the words the rule was built with.
  */
+import ReadingThreshold from './ReadingThreshold.vue';
 import { describeRules } from '~/pool/stats';
-import { MIN_N_CHOICES } from '~/reports/cell';
 import type { CohortSpec, Stat } from '~/stats/api';
 
 const compare = defineModel<boolean>('compare', { required: true });
@@ -41,12 +41,8 @@ const props = defineProps<{
         remembered, but not in effect on a pool report — there is no hero seat to compare
       </span>
     </label>
-    <label class="flex items-center gap-2 text-sm">
-      <span class="text-zinc-500">grey a cell under</span>
-      <select v-model.number="minN" data-testid="minn-select" class="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700">
-        <option v-for="choice in MIN_N_CHOICES" :key="choice" :value="choice">{{ choice === 0 ? 'never — show every number' : `${choice} observations` }}</option>
-      </select>
-    </label>
+    <!-- Folded (F.12): the one control here that re-reads the answer instead of re-asking it. -->
+    <ReadingThreshold v-model="minN" />
     <p v-if="props.cohortOn && props.cohort" class="text-xs text-zinc-500" data-testid="cohort-note">
       Scoped to players whose {{ describeRules(props.cohort, props.stats) }}.
     </p>

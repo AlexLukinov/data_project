@@ -43,6 +43,12 @@ export interface PoolScope {
   /** The preset that is set up, so the state before a run can name what Run report would run. */
   readonly openPreset: Ref<Preset | null>;
   readonly choices: Ref<CohortChoice[]>;
+  /**
+   * Whether a load is in flight (plan F.12). The page reads it because it no longer *waits* for
+   * this call: with the load lazy, "no cohorts yet" and "no cohorts at all" reach the screen at
+   * the same time and look identical, and only this tells them apart.
+   */
+  readonly loading: Ref<boolean>;
   /** The presets call's failure, in words; empty when it answered. */
   readonly problem: Ref<string>;
   /** The saved cohorts' failure, in words; empty when they answered. */
@@ -61,22 +67,29 @@ export function createPoolScope(deps: ScopeDeps): PoolScope {
   const choices = ref<CohortChoice[]>([]);
   const problem = ref('');
   const savedProblem = ref('');
+  const loading = ref(false);
 
   async function load(): Promise<void> {
     problem.value = '';
     savedProblem.value = '';
-    const [shipped, saved] = await Promise.allSettled([deps.reports.poolPresets(), deps.pool.cohorts()]);
-    if (shipped.status === 'rejected') problem.value = scopeErrorWords(describeApiError(shipped.reason));
-    if (saved.status === 'rejected') savedProblem.value = savedCohortsErrorWords(describeApiError(saved.reason));
-    presets.value = shipped.status === 'fulfilled' ? shipped.value.reports : [];
-    const cohorts = shipped.status === 'fulfilled' ? shipped.value.cohorts : [];
-    choices.value = cohortChoices(cohorts, saved.status === 'fulfilled' ? saved.value : [], deps.stats.value);
+    loading.value = true;
+    try {
+      const [shipped, saved] = await Promise.allSettled([deps.reports.poolPresets(), deps.pool.cohorts()]);
+      if (shipped.status === 'rejected') problem.value = scopeErrorWords(describeApiError(shipped.reason));
+      if (saved.status === 'rejected') savedProblem.value = savedCohortsErrorWords(describeApiError(saved.reason));
+      presets.value = shipped.status === 'fulfilled' ? shipped.value.reports : [];
+      const cohorts = shipped.status === 'fulfilled' ? shipped.value.cohorts : [];
+      choices.value = cohortChoices(cohorts, saved.status === 'fulfilled' ? saved.value : [], deps.stats.value);
+    } finally {
+      loading.value = false;
+    }
   }
 
   return {
     presets,
     openPreset,
     choices,
+    loading,
     problem,
     savedProblem,
     load,

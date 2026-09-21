@@ -18,6 +18,7 @@ import { computed } from 'vue';
 
 import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { SessionsResult } from '~/hero/api';
+import { sessionsReading } from '~/hero/readings';
 import { sessionHeaders, sessionRows, sessionTotals, thinRateTerm } from '~/hero/sessions';
 import { useDefinitionsStore } from '~/stores/definitions';
 
@@ -29,6 +30,12 @@ const all = computed(() => sessionRows(props.result.sessions));
 const rows = computed(() => all.value.slice(0, props.limit));
 const totals = computed(() => sessionTotals(props.result));
 const headers = computed(() => sessionHeaders(definitions.stats, definitions.byCode));
+/**
+ * What the sittings mean rather than what they add up to (plan F.12, `hero/readings.ts`): the
+ * widest swing either way, and whether it is wider than the whole run. The totals line above is
+ * arithmetic; only twelve rows are on screen, and the spread is read off every one of them.
+ */
+const reading = computed(() => sessionsReading(props.result));
 </script>
 
 <template>
@@ -78,5 +85,7 @@ const headers = computed(() => sessionHeaders(definitions.stats, definitions.byC
       {{ totals.handsText }} hands · {{ totals.netText }} bb · {{ totals.winningText }} finished up ·
       {{ totals.gapText }}
     </p>
+
+    <p v-if="reading !== ''" class="max-w-prose text-sm text-zinc-600 dark:text-zinc-400" data-testid="sessions-reading">{{ reading }}</p>
   </div>
 </template>

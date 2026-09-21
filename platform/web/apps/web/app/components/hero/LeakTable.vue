@@ -11,6 +11,11 @@
 // meant. `leakRows` pairs each leak with its registry entry and `RegistryTerm` shows it; the four
 // headings that are the app's own words — you, the field, gap, spots — come from `APP_TERMS`,
 // because "gap" is in percentage points and "spots" is a sample, and neither is guessable.
+//
+// F.12 adds the line under the label: the row's own numbers **read** rather than restated
+// (`hero/readings.ts`). Four figures and a colour do not say whether the gap is the wrong way,
+// whether the number is unusual in itself, or how much it rests on — and a red `+14.0` on a stat
+// the registry gives no better end to invites exactly the conclusion the platform refuses to make.
 import { computed } from 'vue';
 
 import RegistryTerm from '~/components/reports/RegistryTerm.vue';
@@ -77,6 +82,7 @@ function worse(leak: Leak): boolean | null {
             <RegistryTerm class="font-medium" :entry="row.term" :label="row.leak.label" :name="row.leak.code" />
             <span class="ml-2 text-xs text-zinc-500">{{ row.category }}</span>
             <span v-if="row.leak.typical" class="ml-2 text-xs text-zinc-400">usually {{ row.leak.typical[0] }}–{{ row.leak.typical[1] }}%</span>
+            <p class="mt-1 max-w-prose text-xs text-zinc-500" :data-testid="`leak-reading-${row.leak.code}`">{{ row.reading }}</p>
           </td>
           <td class="p-2 text-right tabular-nums font-medium">{{ pct(row.leak.value) }}</td>
           <td class="p-2 text-right tabular-nums text-zinc-500">{{ pct(row.leak.baseline) }}</td>

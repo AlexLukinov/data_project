@@ -29,6 +29,7 @@ import { computed } from 'vue';
 import RegistryTerm from '~/components/reports/RegistryTerm.vue';
 import type { KpiTileView } from '~/hero/kpis';
 import { thinTerm } from '~/hero/kpis';
+import { tileReading } from '~/hero/readings';
 import { APP_TERMS } from '~/stats/vocabulary';
 
 const props = defineProps<{ tile: KpiTileView }>();
@@ -37,6 +38,12 @@ const props = defineProps<{ tile: KpiTileView }>();
 const FIELD = APP_TERMS.field;
 
 const thin = computed(() => thinTerm(props.tile.view));
+/**
+ * The one question the tile poses and does not answer: does the field's number fall inside this
+ * number's own band? Generated from the figures (`hero/readings.ts`), so it cannot drift from
+ * them, and empty wherever nothing may be claimed — a count, or no observations at all.
+ */
+const reading = computed(() => tileReading(props.tile));
 /** Too few hands to read: the numbers are faded, the words that explain them are not. */
 const dimmed = computed(() => (props.tile.view.thin ? 'opacity-60' : ''));
 </script>
@@ -75,5 +82,8 @@ const dimmed = computed(() => (props.tile.view.thin ? 'opacity-60' : ''));
         :data-testid="`kpi-delta-${props.tile.code}`"
       >{{ props.tile.view.deltaText }}</span>
     </p>
+
+    <!-- Never dimmed: what a thin number may be read as is exactly what a thin tile has to say. -->
+    <p v-if="reading !== ''" class="mt-1 text-xs text-zinc-500" :data-testid="`kpi-reading-${props.tile.code}`">{{ reading }}</p>
   </div>
 </template>

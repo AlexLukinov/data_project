@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, reactive } from 'vue';
 
+import { controlById } from '~/help/controls';
 import { openExplainer, setAttachedControls } from '~/help/explainer';
 import type { HelpSession } from '~/help/state';
 import { createHelpSession } from '~/help/state';
@@ -81,7 +82,8 @@ describe('PageHelp', () => {
     expect(w.find('[data-testid="page-help-controls"]').exists()).toBe(false);
     setAttachedControls(['min-n', 'stat-picker']);
     await w.vm.$nextTick();
-    expect(w.find('[data-testid="page-help-control-min-n"]').text()).toContain('Hide comparisons under');
+    // The catalogue's own name, not a quote of it: `controls.test.ts` guards the words.
+    expect(w.find('[data-testid="page-help-control-min-n"]').text()).toContain(controlById('min-n')!.control);
     expect(w.findAll('[data-testid^="page-help-control-"]')).toHaveLength(2);
     w.unmount();
   });

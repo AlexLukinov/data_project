@@ -8,11 +8,12 @@
  */
 import type { HandState, NodeKey } from '@poker/core';
 import { nodeKey, nodeKeyEquals, step } from '@poker/core';
-import { HandReplayer } from '@poker/ui';
+import { ComboDistributionPanel, HandReplayer } from '@poker/ui';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 
+import type { StoredRange } from '~/ranges/api';
 import { situationFromQuery } from '~/ranges/situation';
 
 import { GG_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
@@ -38,6 +39,24 @@ const NODE: NodeKey = nodeKey('BB', {
   stake: 'NL10',
   action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call'), step('CO', 'bet', { size_pct: 0.33 })],
 });
+
+/** A chart of mine at this node, so the panels that need one mount at all. */
+function storedRange(): StoredRange {
+  return {
+    id: 'r1',
+    name: 'BB defence vs CO',
+    node_key: NODE,
+    source: 'own',
+    source_tool: '',
+    format: 'combo',
+    tags: [],
+    version: 1,
+    created_at: '2026-09-21T00:00:00',
+    updated_at: '2026-09-21T00:00:00',
+    weights: 'AA,KK,AKs,QQ',
+    note: '',
+  };
+}
 
 /** A `NuxtLink` that keeps its `to`, so the test can read the query the page built. */
 const NuxtLink = defineComponent({
@@ -185,6 +204,51 @@ describe('HandStudy — a question that came back refused', () => {
     const message = said(wrapper, 'study-no-range');
     expect(message).toContain('The API did not answer; showing the cached copy.');
     expect(message).toContain('This browser’s offline copy has no chart of yours for this situation.');
+  });
+
+  /*
+   * Audit §2.1's "controls that render editable and do nothing", the last live one on this screen
+   * (plan F.12). The panel was mounted with a literal `:group-by="['made', 'draw']"` and neither
+   * listener, so ticking an axis emitted into nothing — the checkbox stayed as it was, the tree
+   * went on grouping the old way — and Export CSV did nothing whatsoever.
+   */
+  it('lets the distribution panel change its own axes, and hands its export back', async () => {
+    library.lookup.mockResolvedValue([storedRange()]);
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(13, 4));
+
+    const panel = wrapper.findComponent(ComboDistributionPanel);
+    expect(panel.exists()).toBe(true);
+    expect(panel.props('groupBy')).toEqual(['made', 'draw']);
+
+    panel.vm.$emit('update:groupBy', ['made', 'draw', 'strategic']);
+    await flushPromises();
+    expect(wrapper.findComponent(ComboDistributionPanel).props('groupBy')).toEqual(['made', 'draw', 'strategic']);
+
+    expect(has(wrapper, 'study-dist-export')).toBe(false);
+    panel.vm.$emit('export', 'group,combos\nTop pair,12');
+    await flushPromises();
+    expect(said(wrapper, 'study-dist-export')).toContain('Top pair,12');
+  });
+
+  it('gives the distribution the equities the calculator beside it already worked out', async () => {
+    library.lookup.mockResolvedValue([storedRange()]);
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(13, 4));
+    // Null until the calculator answers — but bound, which is what the `equity` and `nut` axes need.
+    expect(wrapper.findComponent(ComboDistributionPanel).props('equities')).toBeNull();
+  });
+
+  it('drops an export taken at the previous step rather than showing it under the next one', async () => {
+    library.lookup.mockResolvedValue([storedRange()]);
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(13, 4));
+    wrapper.findComponent(ComboDistributionPanel).vm.$emit('export', 'group,combos\nTop pair,12');
+    await flushPromises();
+    expect(has(wrapper, 'study-dist-export')).toBe(true);
+
+    await reach(wrapper, NODE, at(21, 8));
+    expect(has(wrapper, 'study-dist-export')).toBe(false);
   });
 
   it('answers a failed "Analyze this node" on the page, not in the console', async () => {

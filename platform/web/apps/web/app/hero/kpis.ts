@@ -117,6 +117,13 @@ export interface KpiTileView {
   value: number | null;
   low: number | null;
   high: number | null;
+  /**
+   * The field's own value, raw. `CellView` carries only `baselineText`, which is what the tile
+   * *prints*; the reading beneath it has to ask whether that number falls inside the band, and
+   * a formatted string cannot be compared with a bound. It is read off the same cell the view is
+   * built from rather than parsed back out of the text (F.12, `readings.ts`).
+   */
+  baseline: number | null;
   level: number;
   /** `null` rather than `0` when there is no sample: `MetricValue` prints a literal `n = 0`. */
   n: number | null;
@@ -150,6 +157,9 @@ export function kpiTiles(
         value: view.empty ? null : (row?.cells[code]?.value ?? null),
         low: view.low,
         high: view.high,
+        // Mirrors `baselineText`: withheld for a count, whose delta is arithmetic rather than
+        // information (`reports/cell.ts`), so no reading can grow a comparison the tile withholds.
+        baseline: view.baselineText === '' ? null : (row?.cells[code]?.baseline ?? null),
         level: view.level ?? KPI_CONFIDENCE,
         // A count carries no `n`: the value *is* the sample, and `19,802` with `n = 19,802`
         // under it is the same number printed twice.
