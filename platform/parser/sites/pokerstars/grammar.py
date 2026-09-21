@@ -48,9 +48,9 @@ SEAT_SUMMARY = re.compile(
     r"(?:\s+\((?:button|small\s+blind|big\s+blind)\))?"
     r"\s+(?P<verb>showed|mucked)\s+\[(?P<cards>[^\[\]]+)\]"
 )
-# `.+` (greedy) and an end anchor, not `.+?`: screen names may contain brackets -- there is a
+# `.+` (greedy) and an end anchor, not `.+?`: screen names may contain brackets -- real players
 # in the corpus have names shaped like "Zorb[7]q", and a lazy match reads one as "Zorb" with
-# with hole cards "4". GG also prints `Dealt to <name>` with NO cards for every seat.
+# hole cards "7". GG also prints `Dealt to <name>` with NO cards for every seat.
 DEALT = re.compile(r"^Dealt\s+to\s+(?P<name>.+?)(?:\s+\[(?P<cards>[^\[\]]+)\])?\s*$")
 UNCALLED = re.compile(
     r"^Uncalled\s+bet\s+\((?:[^\d]*)(?P<amt>[\d,.]+)\)\s+returned\s+to\s+(?P<name>.+?)\s*$"

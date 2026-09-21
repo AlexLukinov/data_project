@@ -219,3 +219,15 @@ e2e: ## Browser test on the TEST env: sign in, add a screen name, upload a seed 
 	    exit 1; \
 	  fi
 	cd $(WEB_DIR) && $(TEST_ENV) npm run e2e
+
+# ── privacy guard (ADR-058) ──────────────────────────────────────────────────
+# No real player's screen name in anything committed or pushed. Reads every real opponent's key
+# from the REAL ClickHouse, read-only, so it needs `make up` and cannot run in CI, which has no
+# real data by design. The step before every push; `make install-hooks` makes git run it.
+.PHONY: privacy-check
+privacy-check: ## Fail on a real player's screen name in a tracked or staged file (real ClickHouse, read-only; local only)
+	$(UV) python -m scripts.privacy_check $(PRIVACY_ARGS)
+
+.PHONY: install-hooks
+install-hooks: ## Install the local pre-push hook: the privacy check over what a push would send
+	$(UV) python -m scripts.privacy_check --install-hook

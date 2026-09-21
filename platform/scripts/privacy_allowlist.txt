@@ -1,0 +1,32 @@
+# Ordinary words that are also real players' screen names (docs/POKER_DECISIONS.md ADR-058).
+#
+# Read by scripts/privacy_check.py. A word here is excused in prose and code only -- never in a
+# hand-history line and never in a player key, where a collision is a name to change. Add a word
+# only when this repository uses it in its ordinary sense; a handle mentioned as a handle is
+# fixed, not listed. One per line, lower case, sorted.
+8-game
+a-high
+abstraction
+advantage
+boundary
+complicate
+controls
+dependent
+dominant
+donk-bet
+giveupall
+guarantee
+monotone
+nutadvantage
+obviously
+oddsratio
+overhead
+part-time job
+realization
+reporting
+sequence
+straight flush
+telegram
+the first day
+unavailable
+upstream
