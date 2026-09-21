@@ -9,9 +9,12 @@
  * raised yet". A picker that hard-coded either list would make some real hands unfilterable.
  *
  * A row of seats rather than a `<select>`: position is the one filter a player reads spatially,
- * and multi-select from a dropdown needs a modifier key nobody discovers.
+ * and multi-select from a dropdown needs a modifier key nobody discovers. Each real seat's hover
+ * says what its abbreviation means, from the same table the rest of the app explains seats with.
  */
 import { computed } from 'vue';
+
+import { POSITION_WORDS, isPosition } from '../vocabulary';
 
 const props = withDefaults(
   defineProps<{
@@ -40,7 +43,7 @@ function seatLabel(seat: string): string {
 function seatTitle(seat: string): string {
   if (seat === '') return 'Not applicable — nobody in that role';
   if (seat === 'UNKNOWN') return 'An anonymised seat the export does not name';
-  return seat;
+  return isPosition(seat) ? POSITION_WORDS[seat].definition : seat;
 }
 
 function toggle(seat: string): void {

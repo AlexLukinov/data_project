@@ -1,9 +1,16 @@
 <script setup lang="ts">
-/** One row of the distribution tree, recursive; a click on the label emits the group. */
+/**
+ * One row of the distribution tree, recursive; a click on the label emits the group. A class or
+ * category label ("Top pair", "Gutshot", "Bluff-catcher") is also the trigger of its vocabulary
+ * tooltip, so the rule that put a combo there is one hover away (ADR-056); equity and nut bands
+ * carry their numbers in the label and stay plain.
+ */
 import type { DistributionGroup, GroupComparison } from '@poker/core';
 import { computed } from 'vue';
 
 import { num, percent } from '../format';
+import { groupWord } from '../vocabulary';
+import TermLabel from './TermLabel.vue';
 
 const props = withDefaults(defineProps<{ row: GroupComparison; depth?: number; compare?: boolean }>(), { depth: 0, compare: false });
 const emit = defineEmits<{ groupClick: [group: DistributionGroup] }>();
@@ -11,6 +18,7 @@ const emit = defineEmits<{ groupClick: [group: DistributionGroup] }>();
 const a = computed(() => props.row.a);
 const b = computed(() => props.row.b);
 const open = computed(() => props.depth === 0);
+const word = computed(() => groupWord(props.row.axis, props.row.key));
 
 function click(): void {
   const group = a.value ?? b.value;
@@ -21,7 +29,12 @@ function click(): void {
 <template>
   <details :open="open" class="pk-node" :style="{ '--depth': depth }">
     <summary class="pk-summary">
-      <button type="button" class="pk-name" @click.stop="click">{{ row.label }}</button>
+      <TermLabel v-if="word" :entry="word">
+        <template #default="{ describedby }">
+          <button type="button" class="pk-name" :aria-describedby="describedby" :data-term="row.key" @click.stop="click">{{ row.label }}</button>
+        </template>
+      </TermLabel>
+      <button v-else type="button" class="pk-name" @click.stop="click">{{ row.label }}</button>
       <span class="pk-cells">
         <span class="pk-cell" :title="a ? `${a.combos} combos, ${num(a.weight)} weighted` : 'none'">
           <template v-if="a">{{ a.combos }} · {{ num(a.weight) }} · {{ percent(a.share) }}</template>

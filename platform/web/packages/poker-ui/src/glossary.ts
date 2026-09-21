@@ -2,13 +2,24 @@
  * The glossary (spec §13): one plain-language sentence and the formula for every metric the
  * components label, kept in one place so a tooltip reads the same everywhere. `MetricLabel`
  * takes a `GlossaryKey`, so a label without an entry does not typecheck.
+ *
+ * The rule for what goes here (ADR-056): a word that names HOW A NUMBER WAS OBTAINED is an entry
+ * with a formula. A word that names a category — a set of hands, a seat, a piece of the situation
+ * shorthand — is a row in `vocabulary.ts` instead, keyed by `@poker/core`'s own type. Both reach
+ * the screen through the same `TermLabel` affordance.
  */
 
-export interface GlossaryEntry {
-  /** The label as it appears in a panel. */
+/** A word and what it means: what every tooltip and every reference-table row is made of. */
+export interface TermEntry {
+  /** The word as it appears on screen. */
   readonly term: string;
   /** One sentence in plain language. */
   readonly definition: string;
+  /** The formula, or for a category the rule that places something in it. */
+  readonly formula?: string;
+}
+
+export interface GlossaryEntry extends TermEntry {
   /** The formula, or how the number is obtained when there is no formula. */
   readonly formula: string;
 }
@@ -36,6 +47,10 @@ export const GLOSSARY = {
   defendingSet: { term: 'Defending set', definition: 'The strongest combos of a range that add up to its MDF, assuming it defends its best equity first.', formula: 'top combos by equity until weight ≥ MDF × range weight' },
   blockerScore: { term: 'Blocker score', definition: 'How much of the opponent calling range a hand removes minus how much of the folding range, so a high score makes a better bluff.', formula: 'removed calls − removed folds' },
   valueScore: { term: 'Value score', definition: 'How much of the opponent folding range a hand removes minus how much of the calling range, so a high score makes a better thin value bet.', formula: 'removed folds − removed calls' },
+  observedFrequencies: { term: 'Observed frequencies', definition: 'Tier 1: how often the field took each action at this node, counted over every decision made here, so nothing in it is estimated.', formula: 'decisions taking the action / every decision at the node' },
+  showdownRange: { term: 'Showdown range', definition: 'Tier 2: the hands the field turned over at this node, counted by hand class; a decision counts only when its cards were shown, so the picture leans towards hands that reach a showdown.', formula: 'decisions here with the cards shown, per hand class / all decisions here with the cards shown' },
+  sampleSize: { term: 'Sample size', definition: 'n: how many decisions a pool number is counted from; under the minimum a pool figure shows only its count and never a number.', formula: 'n = decisions matching the node (for a showdown range, those with the cards shown); a figure needs n ≥ the minimum' },
+  showdownCoverage: { term: 'Showdown coverage', definition: 'The share of the decisions at this node whose cards were shown, which is all a showdown range can ever see.', formula: 'decisions with the cards shown / every decision at the node' },
   reconstructedRange: { term: 'Reconstructed range', definition: 'A range you supplied, reweighted by what the field does with each class of hand here; the only pool figure that is estimated rather than counted, so it is always shown against what tier 1 observed.', formula: 'P(hand | action) ∝ P(action | hand) × P(hand)' },
   likelihoodRatio: { term: 'How much a hand moves', definition: 'How over-represented a class is among the hands that took this action, against how often it appears here at all; 1 means it does exactly what the node does on average.', formula: 'share of the action’s shown hands / share of all shown hands' },
   poolRealization: { term: 'Realized (pool)', definition: 'What the field actually took away from this point on, as a share of the pot it was playing for; measured rather than solved, and divided by equity it gives EQR.', formula: '(net won + already invested) / pot' },
@@ -50,3 +65,9 @@ export const GLOSSARY_KEYS = Object.keys(GLOSSARY) as GlossaryKey[];
 
 /** The terms spec §13 names outright; a test asserts each has an entry. */
 export const REQUIRED_TERMS: readonly GlossaryKey[] = ['mdf', 'alpha', 'eqr', 'nutAdvantage', 'blockerScore', 'rangeAdvantage'];
+
+/** The entry that explains each pool tier (spec §10.3): what `PoolDataBadge`'s chip points at. */
+export const TIER_TERMS = { 1: 'observedFrequencies', 2: 'showdownRange', 3: 'reconstructedRange' } as const satisfies Record<1 | 2 | 3, GlossaryKey>;
+
+/** The pool's own words, in reading order: the three tiers, then the count and the coverage beside them. */
+export const POOL_TERMS: readonly GlossaryKey[] = [TIER_TERMS[1], TIER_TERMS[2], TIER_TERMS[3], 'sampleSize', 'showdownCoverage'];

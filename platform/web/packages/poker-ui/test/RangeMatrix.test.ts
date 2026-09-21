@@ -19,16 +19,20 @@ describe('RangeMatrix', () => {
     expect(cell(wrapper, 'AKs').attributes('title')).toContain('4 of 4 combos');
   });
 
-  it('paints a cell with the brush on pointer down, erases with shift', async () => {
+  // A stroke is one edit and it lands when the pointer lifts, so undo walks back whole strokes
+  // rather than single cells; the cell itself is painted under the pointer as it goes.
+  it('paints a cell with the brush, erases with shift, one edit per stroke', async () => {
     const wrapper = mount(RangeMatrix, { props: { range, brush: 0.75 } });
     await cell(wrapper, 'KK').trigger('pointerdown');
+    expect(wrapper.emitted('cellClick')![0]).toEqual([handClassOfName('KK')]);
+    window.dispatchEvent(new Event('pointerup'));
     const painted = wrapper.emitted('update:range')![0]![0] as WeightedRange;
     for (const combo of HAND_CLASS_COMBOS[handClassOfName('KK')]!) expect(painted.weights[combo]).toBe(0.75);
     expect(painted.weights[parseCombo('AsAh')]).toBe(1); // untouched
     await cell(wrapper, 'AA').trigger('pointerdown', { shiftKey: true });
+    window.dispatchEvent(new Event('pointerup'));
     const erased = wrapper.emitted('update:range')![1]![0] as WeightedRange;
     expect(erased.weights[parseCombo('AsAh')]).toBe(0);
-    expect(wrapper.emitted('cellClick')![0]).toEqual([handClassOfName('KK')]);
   });
 
   it('does not paint in view mode', async () => {

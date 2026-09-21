@@ -2,12 +2,17 @@
 /**
  * Edit a situation (spec §10.1 `NodeKey`): seats, street, stack, stake, texture and the action
  * sequence step by step. The label above the form is what the library shows, so the reader sees
- * what the key means while changing it. `v-model` of a `NodeKey`; every change emits a new key.
+ * what the key means while changing it — and, on hover, what each word of it means (ADR-056),
+ * with the seat names spelled out one click away. `v-model` of a `NodeKey`; every change emits a
+ * new key.
  */
 import type { ActionStep, NodeAction, NodeKey, Position, Street } from '@poker/core';
-import { NODE_ACTIONS, POSITIONS, STREETS, nodeKeyLabel, step } from '@poker/core';
+import { NODE_ACTIONS, POSITIONS, STREETS, step } from '@poker/core';
 
+import { POSITION_NAMING } from '../vocabulary';
+import NodeLabel from './NodeLabel.vue';
 import NumberInput from './NumberInput.vue';
+import VocabularyTable from './VocabularyTable.vue';
 
 const model = defineModel<NodeKey>({ required: true });
 
@@ -51,7 +56,11 @@ function addStep(): void {
 
 <template>
   <div class="pk-node">
-    <p class="pk-node-label" data-testid="node-label">{{ nodeKeyLabel(model) }}</p>
+    <p class="pk-node-label" data-testid="node-label"><NodeLabel :node="model" /></p>
+    <details class="pk-legend" data-testid="node-positions">
+      <summary>What UTG, HJ, CO … mean</summary>
+      <VocabularyTable table="positions" :caption="POSITION_NAMING" />
+    </details>
     <div class="pk-node-grid">
       <label>hero
         <select :value="model.hero_position" data-testid="node-hero" @change="patch({ hero_position: text($event) as Position })">
@@ -114,6 +123,14 @@ function addStep(): void {
   font-weight: 600;
   font-size: 1rem;
 }
+.pk-legend summary {
+  cursor: pointer;
+  color: var(--pk-muted, #71717a);
+  font-size: 0.75rem;
+}
+.pk-legend[open] summary {
+  margin-bottom: 0.4rem;
+}
 .pk-node-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
@@ -139,10 +156,23 @@ function addStep(): void {
   display: grid;
   gap: 0.3rem;
 }
+/*
+ * A step's five controls need about 350px side by side, and the card they sit in is 326px wide in
+ * the right-hand column of a stored range at 1280px — so they wrap instead of pushing the page
+ * sideways. The two size boxes keep a readable width but may shrink.
+ */
 .pk-steps li {
-  grid-template-columns: auto auto 5rem 5rem auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+}
+.pk-steps li input {
+  flex: 0 1 5rem;
+  min-width: 3.5rem;
+}
+.pk-steps li select {
+  min-width: 0;
 }
 select,
 input {

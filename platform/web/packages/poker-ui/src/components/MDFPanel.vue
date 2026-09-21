@@ -8,7 +8,7 @@ import type { ComboIndex, DefendingSet, PotOddsFigures, RakeConfig, WeightedRang
 import { NO_RAKE, defendingSet, potOdds } from '@poker/core';
 import { computed } from 'vue';
 
-import { explainMdf } from '../explain';
+import { explainMdf, explainOddsFailure, explainOddsInputs } from '../explain';
 import { num, percent } from '../format';
 import MetricLabel from './MetricLabel.vue';
 import NumberInput from './NumberInput.vue';
@@ -27,11 +27,14 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ 'update:pot': [pot: number]; 'update:bet': [bet: number]; defendClick: [combos: ComboIndex[]] }>();
 
+/** The figures, or a sentence saying what to type: core's own error wording never reaches the reader. */
 const outcome = computed<{ figures: { raw: PotOddsFigures; rakeAdjusted: PotOddsFigures } | null; error: string | null }>(() => {
+  const refused = explainOddsInputs(props.pot, props.bet);
+  if (refused !== null) return { figures: null, error: refused };
   try {
     return { figures: potOdds(props.pot, props.bet, props.bet, props.rakeConfig), error: null };
   } catch (e) {
-    return { figures: null, error: e instanceof Error ? e.message : String(e) };
+    return { figures: null, error: explainOddsFailure(e) };
   }
 });
 

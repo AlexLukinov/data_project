@@ -3,12 +3,16 @@
  * "What is actually in this range?" (spec §7): the grouped distribution as a collapsible
  * tree with raw, weighted and share counts at every level, an optional second range side by
  * side with a delta column, group click → the app highlights the combos, CSV and text export.
+ * Each axis checkbox's label explains its axis on hover or when the checkbox has focus (ADR-056);
+ * the label stays the tooltip's trigger, so a click on the word still ticks the box.
  */
 import type { Axis, Card, DistributionGroup, GroupComparison, Thresholds, WeightedRange } from '@poker/core';
-import { AXES, compareDistributions, distribute, toCsv, toText } from '@poker/core';
+import { AXES, DEFAULT_THRESHOLDS, compareDistributions, distribute, toCsv, toText } from '@poker/core';
 import { computed } from 'vue';
 
+import { AXIS_WORDS } from '../vocabulary';
 import DistributionNode from './DistributionNode.vue';
+import TermLabel from './TermLabel.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -24,7 +28,7 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ groupClick: [group: DistributionGroup]; export: [csv: string]; 'update:groupBy': [axes: Axis[]] }>();
 
-const AXIS_LABELS: Record<Axis, string> = { made: 'Made hand', draw: 'Draw', strategic: 'Category', equity: 'Equity bucket', structure: 'Structure', nut: 'Nut bucket' };
+const PERCENT = 100;
 
 function options(equities: Float32Array | null) {
   return { thresholds: props.thresholds, ...(equities === null ? {} : { equities }) };
@@ -49,8 +53,8 @@ function dropB(row: GroupComparison): GroupComparison {
 }
 
 const thresholdNote = computed(() => {
-  const t = { value: 0.6, bluffCatcher: 0.35, ...props.thresholds };
-  return `value ≥ ${Math.round(100 * t.value)}% equity · bluff-catcher ≥ ${Math.round(100 * t.bluffCatcher)}%${t.nut === undefined ? '' : ` · nut ≥ ${Math.round(100 * t.nut)}%`}`;
+  const t: Thresholds = { ...DEFAULT_THRESHOLDS, ...props.thresholds };
+  return `value ≥ ${Math.round(PERCENT * t.value)}% equity · bluff-catcher ≥ ${Math.round(PERCENT * t.bluffCatcher)}%${t.nut === undefined ? '' : ` · nut ≥ ${Math.round(PERCENT * t.nut)}%`}`;
 });
 
 function toggleAxis(axis: Axis): void {
@@ -76,7 +80,11 @@ async function copyText(): Promise<void> {
   <div class="pk-dist">
     <div class="pk-toolbar">
       <span class="pk-axes">
-        <label v-for="axis in AXES" :key="axis"><input type="checkbox" :checked="groupBy.includes(axis)" @change="toggleAxis(axis)" /> {{ AXIS_LABELS[axis] }}</label>
+        <TermLabel v-for="axis in AXES" :key="axis" :entry="AXIS_WORDS[axis]">
+          <template #default="{ describedby }">
+            <label class="pk-axis"><input type="checkbox" :checked="groupBy.includes(axis)" :aria-describedby="describedby" :data-axis="axis" @change="toggleAxis(axis)" /> <span class="pk-axis-word">{{ AXIS_WORDS[axis].term }}</span></label>
+          </template>
+        </TermLabel>
       </span>
       <span class="pk-actions">
         <button type="button" class="pk-btn" @click="exportCsv">Export CSV</button>
@@ -117,6 +125,13 @@ async function copyText(): Promise<void> {
 .pk-actions {
   display: flex;
   gap: 0.5rem;
+}
+/* The word is explained on hover but is still the checkbox's label, so it keeps a pointer, not `help`. */
+.pk-axis {
+  cursor: pointer;
+}
+.pk-axis-word {
+  border-bottom: 1px dotted currentColor;
 }
 .pk-btn {
   font: inherit;

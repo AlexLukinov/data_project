@@ -59,7 +59,7 @@ const verdict = computed(() => {
         <dd data-testid="tier3-implied">{{ implied === null ? '—' : pct(implied) }}</dd>
       </div>
       <div>
-        <dt>observed (tier 1)</dt>
+        <dt><MetricLabel term="observedFrequencies" label="observed (tier 1)" /></dt>
         <dd data-testid="tier3-observed">{{ observed === null ? '—' : pct(observed) }}</dd>
       </div>
       <div>

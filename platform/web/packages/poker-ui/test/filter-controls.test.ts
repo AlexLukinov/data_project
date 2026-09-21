@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import ActionLine from '../src/components/ActionLine.vue';
 import PositionPicker from '../src/components/PositionPicker.vue';
 import { formatLine, isActionLine, lineWords, parseLine } from '../src/line';
+import { POSITION_WORDS } from '../src/vocabulary';
 
 const SEATS = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB', 'UNKNOWN'];
 
@@ -23,6 +24,12 @@ describe('PositionPicker', () => {
     expect(wrapper.find('[data-testid="seat-none"]').attributes('title')).toContain('Not applicable');
     const unknown = mount(PositionPicker, { props: { seats: SEATS, selected: [] } });
     expect(unknown.find('[data-testid="seat-UNKNOWN"]').attributes('title')).toContain('anonymised');
+  });
+
+  it('says what a real seat abbreviation means, from the shared seat table', () => {
+    const wrapper = mount(PositionPicker, { props: { seats: SEATS, selected: [] } });
+    expect(wrapper.find('[data-testid="seat-UTG"]').attributes('title')).toBe(POSITION_WORDS.UTG.definition);
+    expect(wrapper.find('[data-testid="seat-CO"]').attributes('title')).toContain('Cutoff');
   });
 
   it('marks what is selected for a screen reader as well as for the eye', () => {

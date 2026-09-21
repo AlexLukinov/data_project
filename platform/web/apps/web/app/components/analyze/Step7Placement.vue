@@ -2,8 +2,10 @@
 // Step 7 — the same hand is a bet, a check or a give-up depending on what is around it
 // (spec §15.7). The matrix rings your combo inside your own range; the reveal says where it
 // actually sits by made-hand class and what that makes it — a rule of thumb, and labelled as one.
+// The class is printed with the classifier's own word and its rule on hover (ADR-056), and "a real
+// draw" is explained by the draws that count, so nothing in the sentence is left undefined.
 import { cardToString, classifyHand, comboIndex } from '@poker/core';
-import { RangeMatrix } from '@poker/ui';
+import { AXIS_WORDS, MADE_HAND_WORDS, REAL_DRAW, RangeMatrix, TermLabel } from '@poker/ui';
 import { computed } from 'vue';
 
 import type { AnalysisStep } from '~/analyze/api';
@@ -60,9 +62,10 @@ const unavailable = computed(() => {
     <template v-else-if="ctx.spot.hero">
       <RangeMatrix :range="ctx.spot.hero" mode="view" :blocked-cards="ctx.spot.board" :highlight-combos="highlight" />
       <p v-if="committed && percentile !== null && classification" class="text-sm" data-testid="step7-placement">
-        Your hand is <strong>{{ classification.made.replace('_', ' ') }}</strong>, stronger than {{ asPercent(percentile) }}% of your own
-        range by made-hand class. By the rule of thumb — the top of the range is value, a real draw below it is a semi-bluff — that
-        makes it <strong>{{ actual }}</strong>. No solver was asked.
+        Your hand is <strong><TermLabel :entry="MADE_HAND_WORDS[classification.made]" :label="MADE_HAND_WORDS[classification.made].term.toLowerCase()" :name="classification.made" /></strong>,
+        stronger than {{ asPercent(percentile) }}% of your own range by <TermLabel :entry="AXIS_WORDS.made" label="made-hand class" />.
+        By the rule of thumb — the top of the range is value, a <TermLabel :entry="REAL_DRAW" label="real draw" /> below it is a
+        semi-bluff — that makes it <strong>{{ actual }}</strong>. No solver was asked.
       </p>
     </template>
     <p v-else class="text-sm text-zinc-500" data-testid="step7-no-range">No range of your own yet — step 1.</p>

@@ -11,7 +11,9 @@ describe('NodeKeyEditor', () => {
   it('shows the label and emits a new key for every change', async () => {
     const key = nodeKey('BB', { villain_position: 'CO', action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call')] });
     const wrapper = mount(NodeKeyEditor, { props: { modelValue: key } });
-    expect(wrapper.find('[data-testid="node-label"]').text()).toBe('BB call vs CO 2.5bb · 100bb');
+    // The visible label is the tooltip's trigger; the tooltip beside it takes the label apart.
+    expect(wrapper.find('[data-testid="node-label"] .pk-term-text').text()).toBe('BB call vs CO 2.5bb · 100bb');
+    expect(wrapper.find('[data-testid="node-label"] [role="tooltip"]').text()).toContain('CO — Cutoff');
 
     await wrapper.find('[data-testid="node-hero"]').setValue('SB');
     const emitted = wrapper.emitted('update:modelValue')!;
@@ -31,7 +33,7 @@ describe('NodeKeyEditor', () => {
     const wrapper = mount(NodeKeyEditor, { props: { modelValue: nodeKey('BTN'), 'onUpdate:modelValue': (k: NodeKey) => wrapper.setProps({ modelValue: k }) } });
     await wrapper.find('[data-testid="node-add-step"]').trigger('click');
     expect(wrapper.props('modelValue').action_sequence).toEqual([step('BTN', 'raise')]);
-    expect(wrapper.find('[data-testid="node-label"]').text()).toBe('BTN RFI · 100bb');
+    expect(wrapper.find('[data-testid="node-label"] .pk-term-text').text()).toBe('BTN RFI · 100bb');
 
     const row = wrapper.find('[data-testid="node-step-0"]');
     await row.find('input[aria-label="raise to, bb"]').setValue('2.5');
@@ -43,6 +45,17 @@ describe('NodeKeyEditor', () => {
 
     await row.find('button[aria-label="remove step"]').trigger('click');
     expect(wrapper.props('modelValue').action_sequence).toEqual([]);
+  });
+
+  it('keeps what the seat names mean one click away, closed until asked', () => {
+    const wrapper = mount(NodeKeyEditor, { props: { modelValue: nodeKey('BTN') } });
+    const legend = wrapper.find('[data-testid="node-positions"]');
+    expect(legend.attributes('open')).toBeUndefined();
+    expect(legend.find('summary').text()).toBe('What UTG, HJ, CO … mean');
+    expect(legend.findAll('[data-testid="vocabulary-positions"] tbody tr')).toHaveLength(10);
+    // The caption is the rule `core/positions.py` keeps: the names follow the number of players.
+    expect(legend.find('caption').text()).toContain('six-handed UTG, HJ, CO');
+    expect(legend.find('caption').text()).toContain('nine-handed UTG, UTG1, MP, MP1, HJ, CO');
   });
 
   it('refuses a stack below 1 and a table outside 2..10, and rounds what it takes', async () => {

@@ -7,7 +7,7 @@
 import { equityRealization } from '@poker/core';
 import { computed } from 'vue';
 
-import { explainEqr } from '../explain';
+import { explainEqr, explainPoolEqr } from '../explain';
 import { num, percent } from '../format';
 import MetricLabel from './MetricLabel.vue';
 import NumberInput from './NumberInput.vue';
@@ -52,11 +52,12 @@ const eqr = computed(() => (props.ev === null || !valid.value ? null : equityRea
       </div>
       <div v-if="poolEqr">
         <dt><MetricLabel term="eqr" label="EQR, pool" /></dt>
-        <dd data-testid="eqr-pool">{{ num(poolEqr.eqr) }} <span class="pk-muted">empirical, n = {{ poolEqr.sampleSize }}</span></dd>
+        <dd data-testid="eqr-pool">{{ num(poolEqr.eqr) }} <span class="pk-muted">empirical, n = {{ poolEqr.sampleSize.toLocaleString('en-US') }}</span></dd>
       </div>
     </dl>
     <p v-if="!valid" class="pk-error" role="alert">EQR needs a positive pot and an equity above 0.</p>
     <p v-else class="pk-explain" data-testid="eqr-explain">{{ explainEqr(equity, pot, ev, 'entered') }}</p>
+    <p v-if="poolEqr" class="pk-explain" data-testid="eqr-pool-explain">{{ explainPoolEqr(poolEqr, eqr) }}</p>
   </div>
 </template>
 

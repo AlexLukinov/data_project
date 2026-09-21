@@ -8,6 +8,7 @@ import EQRPanel from '../src/components/EQRPanel.vue';
 import MDFPanel from '../src/components/MDFPanel.vue';
 import MetricLabel from '../src/components/MetricLabel.vue';
 import PotOddsPanel from '../src/components/PotOddsPanel.vue';
+import { explainOddsInputs, explainPoolEqr } from '../src/explain';
 
 /** GG-style rake: 5% of the pot, capped at 3. */
 const GG_RAKE: RakeConfig = { rakePct: 0.05, rakeCapBB: 3 };
@@ -46,9 +47,20 @@ describe('PotOddsPanel', () => {
     expect(wrapper.emitted('update:rakeConfig')![1]).toEqual([{ rakePct: 0, rakeCapBB: 2 }]);
   });
 
-  it('explains a pot of zero instead of failing', () => {
-    const wrapper = mount(PotOddsPanel, { props: { pot: 0, bet: 50 } });
-    expect(wrapper.find('[role="alert"]').text()).toContain('pot must be positive');
+  it('says what to type for a pot of zero, never core wording, and shows no figures', () => {
+    const wrapper = mount(PotOddsPanel, { props: { pot: 0, bet: 2 } });
+    const alert = wrapper.find('[role="alert"]').text();
+    expect(alert).toBe(explainOddsInputs(0, 2));
+    expect(alert).toContain('type the pot that was in the middle before the bet');
+    expect(alert).not.toContain('must be positive');
+    expect(wrapper.find('[data-testid="odds-explain"]').exists()).toBe(false);
+  });
+
+  it('says what to type for a negative bet or call handed in by a parent', () => {
+    expect(mount(PotOddsPanel, { props: { pot: 100, bet: -5 } }).find('[role="alert"]').text()).toContain('A bet cannot be less than zero');
+    const call = mount(PotOddsPanel, { props: { pot: 100, bet: 50, call: -1 } }).find('[role="alert"]').text();
+    expect(call).toContain('The amount to call cannot be less than zero');
+    expect(call).not.toContain('must be zero or more');
   });
 
   it('emits nothing for a negative amount or a rake above 100%', async () => {
@@ -93,6 +105,14 @@ describe('PotOddsPanel', () => {
 });
 
 describe('MDFPanel', () => {
+  it('says what to type for a pot of zero, never core wording, and shows no figures', () => {
+    const wrapper = mount(MDFPanel, { props: { pot: 0, bet: 2 } });
+    const alert = wrapper.find('[role="alert"]').text();
+    expect(alert).toContain('pot odds and MDF need a pot above zero');
+    expect(alert).not.toContain('must be positive');
+    expect(wrapper.find('[data-testid="mdf-value"]').exists()).toBe(false);
+  });
+
   it('shows MDF and alpha and names the defending set by equity', async () => {
     const range = parseRange('AA,KK,QQ').range;
     const wrapper = mount(MDFPanel, { props: { pot: 100, bet: 50, range, equities: equitiesOf({ AA: 0.9, KK: 0.6, QQ: 0.3 }) } });
@@ -150,6 +170,19 @@ describe('EQRPanel', () => {
     await wrapper.setProps({ ev: null });
     await input.setValue('-2,5');
     expect(wrapper.emitted('update:ev')![1]).toEqual([-2.5]);
+  });
+
+  it('explains the pool EQR only when there is one, against the entered solution when there is one', async () => {
+    expect(mount(EQRPanel, { props: { equity: 0.45, pot: 100, ev: 38 } }).find('[data-testid="eqr-pool-explain"]').exists()).toBe(false);
+
+    const wrapper = mount(EQRPanel, { props: { equity: 0.45, pot: 100, poolEqr: { eqr: 0.91, sampleSize: 1200 } } });
+    const sentence = () => wrapper.find('[data-testid="eqr-pool-explain"]').text();
+    expect(sentence()).toBe(explainPoolEqr({ eqr: 0.91, sampleSize: 1200 }, null));
+    expect(sentence()).toContain('Over 1,200 decisions the field turns 91% of what its equity is worth');
+    expect(sentence()).not.toContain('solution');
+
+    await wrapper.setProps({ ev: 38 });
+    expect(sentence()).toContain('The solver EV you entered keeps 84%, so the field realizes 6.6 points more than that solution.');
   });
 
   it('refuses an equity of zero', () => {

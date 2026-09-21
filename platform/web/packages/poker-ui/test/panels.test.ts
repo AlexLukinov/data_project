@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { DistributionGroup, WeightedRange } from '@poker/core';
-import { parseCard, parseCards, parseCombo, parseRange } from '@poker/core';
+import { COMBO_COUNT, parseCard, parseCards, parseCombo, parseRange } from '@poker/core';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
@@ -8,6 +8,7 @@ import BlockerPanel from '../src/components/BlockerPanel.vue';
 import CardBlockerHeatmap from '../src/components/CardBlockerHeatmap.vue';
 import ComboDistributionPanel from '../src/components/ComboDistributionPanel.vue';
 import ComboDrilldown from '../src/components/ComboDrilldown.vue';
+import { AXIS_WORDS, CATEGORY_WORDS, MADE_HAND_WORDS } from '../src/vocabulary';
 
 const board = parseCards('Kd 9h 4h');
 const range = parseRange('AA,KK,AK,76s').range;
@@ -36,6 +37,36 @@ describe('ComboDistributionPanel', () => {
     expect((wrapper.emitted('export')![0]![0] as string).split('\n')[0]).toBe('axis,level,group,combos,weighted_combos,share');
     await wrapper.find('input[type="checkbox"]:not(:checked)').trigger('change');
     expect(wrapper.emitted('update:groupBy')![0]![0]).toEqual(['made', 'draw']);
+  });
+
+  it('explains a class on its group button, which still emits the group', async () => {
+    const wrapper = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['made'] } });
+    const topPair = wrapper.findAll('button.pk-name').find((b) => b.text() === 'Top pair')!;
+    const tip = wrapper.get(`[id="${topPair.attributes('aria-describedby')}"]`);
+    expect(tip.text()).toContain(MADE_HAND_WORDS.top_pair.definition);
+    expect(tip.text()).toContain(MADE_HAND_WORDS.top_pair.formula);
+    await topPair.trigger('click');
+    expect((wrapper.emitted('groupClick')![0]![0] as DistributionGroup).key).toBe('top_pair');
+  });
+
+  it('explains a category on its group button, and leaves self-describing groups plain', () => {
+    const equities = new Float32Array(COMBO_COUNT).fill(0.7);
+    const strategic = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['strategic'], equities } });
+    const value = strategic.findAll('button.pk-name').find((b) => b.text() === 'Value')!;
+    expect(strategic.get(`[id="${value.attributes('aria-describedby')}"]`).text()).toContain(CATEGORY_WORDS.value.definition);
+    const structure = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['structure'] } });
+    for (const button of structure.findAll('button.pk-name')) expect(button.attributes('aria-describedby')).toBeUndefined();
+  });
+
+  it('explains each axis on its checkbox label, and a click on the word still ticks the box', async () => {
+    const wrapper = mount(ComboDistributionPanel, { props: { range, board, groupBy: ['made'] }, attachTo: document.body });
+    const draw = wrapper.get('input[data-axis="draw"]');
+    expect(wrapper.get(`[id="${draw.attributes('aria-describedby')}"]`).text()).toContain(AXIS_WORDS.draw.definition);
+    const label = wrapper.findAll('label.pk-axis').find((l) => l.text() === 'Draw')!;
+    expect(label.find('[tabindex]').exists()).toBe(false); // one tab stop per axis: the checkbox
+    await label.get('.pk-axis-word').trigger('click');
+    expect(wrapper.emitted('update:groupBy')![0]![0]).toEqual(['made', 'draw']);
+    wrapper.unmount();
   });
 
   it('explains a missing input instead of failing', () => {

@@ -10,6 +10,7 @@ import type { Card, EquityRequest, EquityResult, WeightedRange } from '@poker/co
 import { EquityCancelled, equityKey, isExactlySolvable } from '@poker/core';
 import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue';
 
+import { explainEquity } from '../explain';
 import { percent } from '../format';
 import type { EquityServiceLike } from '../service';
 import MetricLabel from './MetricLabel.vue';
@@ -59,6 +60,14 @@ const work = computed(() => {
   if (result.value.exact) return `${result.value.work.toLocaleString('en-US')} runouts`;
   return `${result.value.iterations?.toLocaleString('en-US')} samples · ±${result.value.confidence95?.toFixed(2)} pp`;
 });
+
+function nameOf(player: number): string {
+  return props.ranges[player]?.label ?? (player === 0 ? 'Hero' : player === 1 ? 'Villain' : `Player ${player + 1}`);
+}
+/** The names above the numbers, which the sentence under them uses too. */
+const names = computed(() => (result.value?.equities ?? []).map((_, player) => nameOf(player)));
+/** Built from the result on screen, so it moves from the Monte Carlo pass to the exact one with the numbers. */
+const explanation = computed(() => (result.value === null ? '' : explainEquity(result.value, names.value)));
 
 function cancelAll(): void {
   for (const id of jobs.splice(0)) void props.service.cancel(id);
@@ -117,7 +126,7 @@ onBeforeUnmount(() => {
   <div class="pk-equity" aria-live="polite">
     <div class="pk-numbers">
       <div v-for="(eq, i) in result?.equities ?? []" :key="i" class="pk-player">
-        <span class="pk-name">{{ ranges[i]?.label ?? (i === 0 ? 'Hero' : i === 1 ? 'Villain' : `Player ${i + 1}`) }}</span>
+        <span class="pk-name">{{ names[i] }}</span>
         <span class="pk-value" :data-testid="`equity-${i}`">{{ percent(eq) }}</span>
       </div>
       <p v-if="result === null && status === 'running'" class="pk-muted">Computing…</p>
@@ -126,6 +135,7 @@ onBeforeUnmount(() => {
       <span v-if="status === 'error'" class="pk-error" role="alert">{{ error }}</span>
       <span v-else-if="result" data-testid="equity-label"><MetricLabel :term="result.exact ? 'exact' : 'monteCarlo'" :label="result.exact ? 'exact' : 'Monte Carlo'" /> · <span data-testid="equity-work">{{ work }}</span><span v-if="status === 'running' && !result.exact && exactPossible"> · exact on the way</span></span>
     </p>
+    <p v-if="result" class="pk-explain" data-testid="equity-explain">{{ explanation }}</p>
     <progress v-if="status === 'running'" class="pk-progress" :value="progress" max="1" />
   </div>
 </template>
@@ -161,6 +171,10 @@ onBeforeUnmount(() => {
 }
 .pk-error {
   color: var(--pk-heart, #dc2626);
+}
+.pk-explain {
+  margin: 0;
+  font-size: 0.9rem;
 }
 .pk-progress {
   width: 100%;

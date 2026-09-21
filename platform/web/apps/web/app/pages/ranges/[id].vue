@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // One stored range: edit the matrix and the situation, save (a body change makes a new version),
 // browse the history and revert, delete. Spec §11.1: "editing a range creates a new version;
-// keep history and allow revert".
+// keep history and allow revert". The body's edits also undo and redo (spec §13) — in the
+// browser, before a save; the version history is the server's record after one.
 import type { NodeKey, WeightedRange } from '@poker/core';
-import { nodeKeyEquals, nodeKeyLabel, parseRange, serializeRange } from '@poker/core';
-import { NodeKeyEditor, RangeMatrix, RangeTextIO } from '@poker/ui';
+import { nodeKeyEquals, parseRange, serializeRange } from '@poker/core';
+import { NodeKeyEditor, NodeLabel, RangeMatrix, RangeTextIO, useUndoRedo, useUndoShortcuts } from '@poker/ui';
 import { computed, ref, watch } from 'vue';
 
 import type { RangeSource, StoredRange } from '~/ranges/api';
@@ -22,9 +23,15 @@ const source = ref<RangeSource>('own');
 const sourceTool = ref('');
 const tagsText = ref('');
 const note = ref('');
-const range = ref<WeightedRange | null>(null);
+const edits = useUndoRedo<WeightedRange | null>(null);
+const range = computed(() => edits.state.value);
 const message = ref<string | null>(null);
 const problem = ref<string | null>(null);
+
+/** Two bodies are the same when they would be stored as the same text — what a version compares. */
+function sameBody(a: WeightedRange | null, b: WeightedRange | null): boolean {
+  return a !== null && b !== null && serializeRange(a, 'combo') === serializeRange(b, 'combo');
+}
 
 function reset(r: StoredRange | undefined): void {
   if (r === undefined) return;
@@ -33,13 +40,28 @@ function reset(r: StoredRange | undefined): void {
   source.value = r.source;
   sourceTool.value = r.source_tool;
   tagsText.value = r.tags.join(', ');
-  range.value = { ...parseRange(r.weights).range, label: r.name };
+  // A save of the edited body comes back as that same body and keeps the undo; a load or a
+  // revert brings another body and starts it again.
+  edits.sync({ ...parseRange(r.weights).range, label: r.name }, sameBody);
+  // A rename alone keeps the body, and with it the label the range was carrying — which the matrix
+  // uses as its accessible name. Put the saved name on it without touching the history, which is
+  // what `reset` would do.
+  const kept = edits.state.value;
+  if (kept !== null && kept.label !== r.name) edits.state.value = { ...kept, label: r.name };
   note.value = '';
 }
 watch(data, reset, { immediate: true });
+useUndoShortcuts(() => edits);
 
 const weightsText = computed(() => (range.value === null ? '' : serializeRange(range.value, 'combo')));
-const bodyChanged = computed(() => data.value !== undefined && weightsText.value !== data.value.weights);
+/**
+ * Against the stored body *as this page would write it*, not against its text. A range that was
+ * imported or posted in another notation ("AsKs: 1,AhKh: 1") holds the same combos as the text
+ * this page serializes ("AsKs,AhKh"), and comparing the two strings made an untouched page offer
+ * "Save as v2" — and left one offered after an undo that had put every combo back.
+ */
+const storedText = computed(() => (data.value === undefined ? '' : serializeRange(parseRange(data.value.weights).range, 'combo')));
+const bodyChanged = computed(() => data.value !== undefined && weightsText.value !== storedText.value);
 const tags = computed(() => tagsText.value.split(',').map((t) => t.trim()).filter((t) => t !== ''));
 const dirty = computed(() => {
   const r = data.value;
@@ -82,7 +104,7 @@ async function remove(): Promise<void> {
 }
 
 function setRange(next: WeightedRange): void {
-  range.value = { ...next, label: name.value };
+  edits.set({ ...next, label: name.value });
 }
 </script>
 
@@ -96,6 +118,8 @@ function setRange(next: WeightedRange): void {
         <span class="text-sm text-zinc-500" data-testid="range-version">v{{ data.version }}</span>
         <span class="ml-auto flex gap-2 text-sm">
           <NuxtLink :to="`/ranges/compare?range=${id}`" class="rounded border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900">Compare at this situation</NuxtLink>
+          <button type="button" data-testid="range-undo" :disabled="!edits.canUndo.value" title="⌘Z" class="rounded border border-zinc-300 px-3 py-1 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900" @click="edits.undo()">Undo</button>
+          <button type="button" data-testid="range-redo" :disabled="!edits.canRedo.value" title="⌘⇧Z" class="rounded border border-zinc-300 px-3 py-1 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900" @click="edits.redo()">Redo</button>
           <button type="button" data-testid="range-save" :disabled="!dirty" class="rounded bg-zinc-900 px-3 py-1 text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900" @click="save">Save{{ bodyChanged ? ' as v' + (data.version + 1) : '' }}</button>
           <button type="button" data-testid="range-delete" class="rounded border border-red-300 px-3 py-1 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950" @click="remove">Delete</button>
         </span>
@@ -140,7 +164,7 @@ function setRange(next: WeightedRange): void {
               </li>
             </ol>
           </div>
-          <p class="text-xs text-zinc-500">{{ nodeKeyLabel(key) }} · {{ data.source_tool || 'no tool named' }}</p>
+          <p class="text-xs text-zinc-500"><NodeLabel :node="key" /> · {{ data.source_tool || 'no tool named' }}</p>
         </div>
       </div>
     </template>

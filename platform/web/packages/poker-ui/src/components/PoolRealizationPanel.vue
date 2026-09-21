@@ -16,6 +16,7 @@ import { computed } from 'vue';
 
 import type { RealizationRow } from '../estimate';
 import { poolEqr } from '../estimate';
+import { explainRealization } from '../explain';
 import { num } from '../format';
 import MetricLabel from './MetricLabel.vue';
 
@@ -68,10 +69,11 @@ function eqrOf(row: RealizationRow): number | null {
     <p v-else class="pk-muted" data-testid="realization-empty">
       The field has not {{ action }} here often enough to say what it won.
     </p>
+    <p v-if="overall" class="pk-explain" data-testid="realization-explain">{{ explainRealization(action, overall, overallEqr) }}</p>
 
     <p v-if="overall" class="pk-muted" data-testid="realization-covers">
       Overall counts every {{ action }} here. The rows below can only count the {{ covered }} that were
-      turned over, which favours hands that saw a showdown; under {{ minBucketN }} shown, a hand carries
+      turned over, which favours hands that saw a showdown; under {{ minBucketN.toLocaleString('en-US') }} shown, a hand carries
       its count and no number.
     </p>
 
@@ -82,7 +84,7 @@ function eqrOf(row: RealizationRow): number | null {
           <th scope="col">n</th>
           <th scope="col">bb from here</th>
           <th scope="col">realized</th>
-          <th scope="col">EQR</th>
+          <th scope="col"><MetricLabel term="eqr" label="EQR" /></th>
         </tr>
       </thead>
       <tbody>
@@ -122,6 +124,10 @@ function eqrOf(row: RealizationRow): number | null {
   font-size: 1.25rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+.pk-explain {
+  margin: 0;
+  font-size: 0.9rem;
 }
 .pk-muted {
   margin: 0;

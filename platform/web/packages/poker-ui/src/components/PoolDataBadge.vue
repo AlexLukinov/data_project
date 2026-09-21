@@ -5,8 +5,14 @@
  *
  * The badge is the promise the product makes: **never a fabricated number**. A node under the
  * server's `minN` shows the count and the word "insufficient", never a percentage.
+ *
+ * Every word on it is explained where it stands (audit §3.2): the tier chip by that tier's
+ * glossary entry, "n" and "insufficient data" by the sample size, "shown down" by the coverage.
  */
 import { computed } from 'vue';
+
+import { TIER_TERMS } from '../glossary';
+import MetricLabel from './MetricLabel.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -31,18 +37,16 @@ const PERCENT = 100;
 
 const label = computed(() => TIER_NAMES[props.tier] ?? `tier ${props.tier}`);
 const count = computed(() => props.sampleSize.toLocaleString('en-US'));
-const covered = computed(() =>
-  props.covers === null ? '' : `${(props.covers * PERCENT).toFixed(props.covers < 0.1 ? 1 : 0)}% of the decisions here were shown down`,
-);
+const covered = computed(() => (props.covers === null ? '' : `${(props.covers * PERCENT).toFixed(props.covers < 0.1 ? 1 : 0)}%`));
 </script>
 
 <template>
   <p class="pk-badge" :class="enough ? 'pk-ok' : 'pk-thin'" data-testid="pool-badge">
-    <span class="pk-tier">pool · tier {{ tier }}</span>
+    <span class="pk-tier"><MetricLabel :term="TIER_TERMS[tier]" :label="`pool · tier ${tier}`" /></span>
     <span class="pk-what">{{ label }}</span>
-    <span v-if="enough" class="pk-n" data-testid="pool-badge-n">n = {{ count }}</span>
-    <span v-else class="pk-n" data-testid="pool-badge-thin">insufficient data — {{ count }} of the {{ minN }} needed</span>
-    <span v-if="enough && covered" class="pk-covers" data-testid="pool-badge-covers">{{ covered }}</span>
+    <span v-if="enough" class="pk-n" data-testid="pool-badge-n"><MetricLabel term="sampleSize" label="n" /> = {{ count }}</span>
+    <span v-else class="pk-n" data-testid="pool-badge-thin"><MetricLabel term="sampleSize" label="insufficient data" /> — {{ count }} of the {{ minN.toLocaleString('en-US') }} needed</span>
+    <span v-if="enough && covered" class="pk-covers" data-testid="pool-badge-covers">{{ covered }} of the decisions here were <MetricLabel term="showdownCoverage" label="shown down" /></span>
   </p>
 </template>
 

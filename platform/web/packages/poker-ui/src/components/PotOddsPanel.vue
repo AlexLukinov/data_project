@@ -10,7 +10,7 @@ import type { PotOddsFigures, RakeConfig } from '@poker/core';
 import { NO_RAKE, impliedOddsEquity, potOdds } from '@poker/core';
 import { computed } from 'vue';
 
-import { explainPotOdds } from '../explain';
+import { explainOddsFailure, explainOddsInputs, explainPotOdds } from '../explain';
 import { num, percent } from '../format';
 import type { GlossaryKey } from '../glossary';
 import MetricLabel from './MetricLabel.vue';
@@ -54,12 +54,18 @@ const ROWS: Row[] = [
 
 const callAmount = computed(() => props.call ?? props.bet);
 
-/** The figures, or the reason there are none (a pot of zero). */
+/**
+ * The figures, or a sentence saying why there are none and what to type. Amounts core would refuse
+ * (a pot of zero, a negative bet) are caught before it is called, so its own wording never reaches
+ * the reader; anything else it throws is still shown, in words first.
+ */
 const outcome = computed<{ figures: { raw: PotOddsFigures; rakeAdjusted: PotOddsFigures } | null; error: string | null }>(() => {
+  const refused = explainOddsInputs(props.pot, props.bet, callAmount.value);
+  if (refused !== null) return { figures: null, error: refused };
   try {
     return { figures: potOdds(props.pot, props.bet, callAmount.value, props.rakeConfig), error: null };
   } catch (e) {
-    return { figures: null, error: e instanceof Error ? e.message : String(e) };
+    return { figures: null, error: explainOddsFailure(e) };
   }
 });
 

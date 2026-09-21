@@ -11,6 +11,7 @@ import EstimatedRangePanel from '../src/components/EstimatedRangePanel.vue';
 import PoolRealizationPanel from '../src/components/PoolRealizationPanel.vue';
 import type { EstimatedClass, RealizationRow } from '../src/estimate';
 import { poolEqr } from '../src/estimate';
+import { explainRealization } from '../src/explain';
 
 function cls(hand_class: string, over: Partial<EstimatedClass> = {}): EstimatedClass {
   return { hand_class, prior: 0.25, posterior: 0.4, likelihood: 1.6, action_rate: 0.23, sample_size: 1633, fallback: false, ...over };
@@ -101,6 +102,29 @@ describe('PoolRealizationPanel', () => {
     const filled = mount(PoolRealizationPanel, { props: { ...props, equity: { AA: 0.75 }, overallEquity: 0.25 } });
     expect(filled.get('[data-testid="realization-eqr"]').text()).toContain('1.2');
     expect(filled.get('[data-testid="realization-AA"]').text()).toContain('1.2');
+  });
+
+  it('explains the overall row, and without an equity names the step that would give an EQR', () => {
+    const blank = mount(PoolRealizationPanel, { props });
+    const sentence = blank.get('[data-testid="realization-explain"]').text();
+    expect(sentence).toBe(explainRealization('bet', props.overall, null));
+    expect(sentence).toContain('won 30.0% of the 8 bb pot from that point on: 2.4 bb per decision over 3,000 decisions');
+    expect(sentence).toContain('work out the equity of the range that takes this bet here');
+    expect(sentence).not.toContain('EQR of');
+
+    const filled = mount(PoolRealizationPanel, { props: { ...props, overallEquity: 0.25 } });
+    expect(filled.get('[data-testid="realization-explain"]').text()).toContain("Divided by that range's equity it is an EQR of 1.2, so the range over-realizes");
+  });
+
+  it('has no sentence when there is no overall row to explain', () => {
+    const w = mount(PoolRealizationPanel, { props: { ...props, overall: null, rows: [] } });
+    expect(w.find('[data-testid="realization-explain"]').exists()).toBe(false);
+  });
+
+  it('labels the EQR column through the glossary', () => {
+    const w = mount(PoolRealizationPanel, { props });
+    const header = w.get('[data-testid="realization-rows"] thead [data-term="eqr"]');
+    expect(header.text()).toBe('EQR');
   });
 
   it('says the per-hand rows only see the hands that were turned over', () => {

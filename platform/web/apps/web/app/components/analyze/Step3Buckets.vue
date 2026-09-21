@@ -3,7 +3,7 @@
 // distributions sit side by side because the answer to "who liked this flop" is the comparison,
 // not either column on its own.
 import { cardToString } from '@poker/core';
-import { BoardSelector, ComboDistributionPanel } from '@poker/ui';
+import { BoardSelector, ComboDistributionPanel, explainHitShares } from '@poker/ui';
 import { computed } from 'vue';
 
 import type { AnalysisStep } from '~/analyze/api';
@@ -33,6 +33,16 @@ const actual = computed(() => {
 const unavailable = computed(() =>
   actual.value === null ? 'Deal a board above and give the other seat a range in step 1, and this can be counted.' : '',
 );
+
+/**
+ * The comparison the columns are for, in words — and only once the prediction is committed: the
+ * sentence carries villain's top-pair-or-better share, which is the answer to this step's question.
+ */
+const comparison = computed(() => {
+  const { hero, villain } = props.ctx.spot;
+  if (props.ctx.step.prediction === null || hero === null || villain === null || !isDealt(board.value)) return '';
+  return explainHitShares(topPairOrBetterShare(hero, board.value), topPairOrBetterShare(villain, board.value), 'your range', 'their range');
+});
 </script>
 
 <template>
@@ -53,6 +63,8 @@ const unavailable = computed(() =>
         <ComboDistributionPanel :range="ctx.spot.villain" :board="board" :group-by="GROUP_BY" />
       </div>
     </div>
+
+    <p v-if="comparison" class="text-sm" data-testid="step3-comparison">{{ comparison }}</p>
 
     <p v-if="isDealt(board) && !ctx.spot.villain" class="text-sm text-zinc-500" data-testid="step3-no-range">
       No range assigned to the other seat yet — step 1 is where that happens.

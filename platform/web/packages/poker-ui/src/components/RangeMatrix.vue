@@ -3,12 +3,17 @@
  * The 13×13 hand matrix (spec §12): weighted cells render as a partial fill, drag paints with
  * the brush weight, shift-drag erases, an optional heatmap overlays a per-combo value, the
  * combos a board or dead card block are shaded, and highlighted combos get a ring. Fully
- * keyboard-operable: arrows move, Enter/Space toggles a cell between the brush and empty.
+ * keyboard-operable: arrows move; Enter/Space selects the focused cell (`cellClick`, in both
+ * modes) and, in edit mode, toggles it between the brush and empty.
+ *
+ * One drag is one edit: the stroke is painted into a local draft the cells render from, and a
+ * single `update:range` carries the whole stroke when the pointer lifts — so an undo takes back
+ * the stroke, not the last cell it crossed. A stroke that changed no weight emits nothing.
  * This is the one grid in the repo (plan D.3's HandMatrix).
  */
 import type { Card, ComboIndex, HandClass, WeightedRange } from '@poker/core';
 import { COMBOS_WITH_CARD, HAND_CLASS_COMBOS, RANK_COUNT, createRange, handClassName, isPairClass, isSuitedClass, toHandClassMatrix } from '@poker/core';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -51,6 +56,11 @@ interface Cell {
   kind: 'pair' | 'suited' | 'offsuit';
 }
 
+/** The stroke being painted, as the range will be once the pointer lifts; null between strokes. */
+const draft = shallowRef<WeightedRange | null>(null);
+/** What the cells show: the stroke while one is being painted, the range otherwise. */
+const shown = computed(() => draft.value ?? props.range);
+
 const blocked = computed(() => {
   const set = new Set<ComboIndex>();
   for (const card of props.blockedCards) for (const combo of COMBOS_WITH_CARD[card]!) set.add(combo);
@@ -68,7 +78,7 @@ function heatOf(cls: HandClass): number | null {
   let n = 0;
   for (const combo of HAND_CLASS_COMBOS[cls]!) {
     const v = props.heatmap[combo]!;
-    if (props.range.weights[combo]! > 0 && Number.isFinite(v)) {
+    if (shown.value.weights[combo]! > 0 && Number.isFinite(v)) {
       sum += v;
       n++;
     }
@@ -79,7 +89,7 @@ function heatOf(cls: HandClass): number | null {
 }
 
 const cells = computed<Cell[]>(() =>
-  toHandClassMatrix(props.range).map((cell) => {
+  toHandClassMatrix(shown.value).map((cell) => {
     const combos = HAND_CLASS_COMBOS[cell.cls]!;
     let blockedCount = 0;
     let highlightCount = 0;
@@ -101,18 +111,30 @@ const cells = computed<Cell[]>(() =>
   }),
 );
 
-function paint(cls: HandClass, weight: number): void {
-  const next = createRange(props.range.weights, props.range.label);
+/** `base` with every combo of `cls` at `weight`, as a new range. */
+function painted(base: WeightedRange, cls: HandClass, weight: number): WeightedRange {
+  const next = createRange(base.weights, base.label);
   for (const combo of HAND_CLASS_COMBOS[cls]!) next.weights[combo] = weight;
-  emit('update:range', next);
+  return next;
 }
 
+/** The weight the stroke in progress paints with (0 for a shift-drag); null between strokes. */
 const painting = ref<number | null>(null);
 const focused = ref<HandClass>(0);
 
-function stopPainting(): void {
+/** Forget the stroke in progress and stop listening for its end. */
+function dropStroke(): void {
+  window.removeEventListener('pointerup', endStroke);
+  window.removeEventListener('pointercancel', endStroke);
+  draft.value = null;
   painting.value = null;
-  window.removeEventListener('pointerup', stopPainting);
+}
+
+/** The pointer lifted, or the browser took it back: the whole stroke is one edit, if it changed a weight. */
+function endStroke(): void {
+  const stroke = draft.value;
+  dropStroke();
+  if (stroke !== null && stroke.weights.some((weight, combo) => weight !== props.range.weights[combo])) emit('update:range', stroke);
 }
 
 function onPointerDown(cls: HandClass, event: PointerEvent): void {
@@ -120,13 +142,15 @@ function onPointerDown(cls: HandClass, event: PointerEvent): void {
   if (props.mode !== 'edit') return;
   event.preventDefault();
   painting.value = event.shiftKey ? 0 : props.brush;
-  paint(cls, painting.value);
-  window.addEventListener('pointerup', stopPainting);
+  // A stroke whose pointerup never arrived (released outside the window) carries on, not lost.
+  draft.value = painted(draft.value ?? props.range, cls, painting.value);
+  window.addEventListener('pointerup', endStroke);
+  window.addEventListener('pointercancel', endStroke);
 }
 
 function onPointerEnter(cls: HandClass): void {
   emit('cellHover', cls);
-  if (painting.value !== null) paint(cls, painting.value);
+  if (draft.value !== null && painting.value !== null) draft.value = painted(draft.value, cls, painting.value);
 }
 
 const MOVES: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -RANK_COUNT, ArrowDown: RANK_COUNT };
@@ -142,14 +166,15 @@ function onKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     return;
   }
-  if ((event.key === 'Enter' || event.key === ' ') && props.mode === 'edit') {
-    const cell = cells.value[focused.value]!;
-    paint(focused.value, cell.fill > 0 ? 0 : props.brush);
+  if (event.key === 'Enter' || event.key === ' ') {
+    // The keyboard's click: selects the cell wherever a page listens, and toggles it in edit mode.
+    emit('cellClick', focused.value);
+    if (props.mode === 'edit') emit('update:range', painted(props.range, focused.value, cells.value[focused.value]!.fill > 0 ? 0 : props.brush));
     event.preventDefault();
   }
 }
 
-onBeforeUnmount(stopPainting);
+onBeforeUnmount(dropStroke);
 
 function title(cell: Cell): string {
   const parts = [`${cell.name}: ${cell.count} of ${cell.possible} combos`];

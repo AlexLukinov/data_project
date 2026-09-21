@@ -4,8 +4,8 @@
 // component; this page only wires state, undo/redo and keyboard shortcuts.
 import type { Axis, Card, ComboIndex, DistributionGroup, EquityResult, HandClass, RakeConfig, WeightedRange } from '@poker/core';
 import { NO_RAKE, comboCards, comboIndex, createRange, filterByPredicate, parseCards, parseRange } from '@poker/core';
-import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityCalculator, MDFPanel, NumberInput, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO, useUndoRedo } from '@poker/ui';
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { BlockerPanel, BoardSelector, CardBlockerHeatmap, CardPicker, CardRemovalPanel, ComboDistributionPanel, ComboDrilldown, EQRPanel, EquityCalculator, MDFPanel, NumberInput, PotOddsPanel, RangeComparisonPanel, RangeDiffView, RangeMatrix, RangeTextIO, useUndoRedo, useUndoShortcuts } from '@poker/ui';
+import { computed, ref, shallowRef } from 'vue';
 
 definePageMeta({ public: true }); // spec §17: pure calculation works without a backend
 
@@ -101,14 +101,7 @@ function onGroup(group: DistributionGroup): void {
   highlightSide.value = 'hero';
 }
 
-function onKey(event: KeyboardEvent): void {
-  const target = event.target as HTMLElement | null;
-  if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-  (lastEdited.value === 'hero' ? hero : villain).onKeydown(event);
-}
-
-onMounted(() => window.addEventListener('keydown', onKey));
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+useUndoShortcuts(() => (lastEdited.value === 'hero' ? hero : villain));
 
 const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain));
 </script>

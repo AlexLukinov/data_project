@@ -1,14 +1,38 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import type { NutAdvantage, RangeAdvantage } from '@poker/core';
-import { potOdds } from '@poker/core';
+import type { AxisContext, NutAdvantage, RangeAdvantage } from '@poker/core';
+import { AXES, DEFAULT_THRESHOLDS, DRAW_CLASSES, MADE_HAND_CLASSES, NODE_ACTIONS, POSITIONS, STRATEGIC_CATEGORIES, labelFor, potOdds } from '@poker/core';
 import { describe, expect, it } from 'vitest';
 
 import { explainEqr, explainMdf, explainNutAdvantage, explainPotOdds, explainRangeAdvantage } from '../src/explain';
-import { GLOSSARY, GLOSSARY_KEYS, REQUIRED_TERMS } from '../src/glossary';
+import type { TermEntry } from '../src/glossary';
+import { GLOSSARY, GLOSSARY_KEYS, POOL_TERMS, REQUIRED_TERMS, TIER_TERMS } from '../src/glossary';
+import { AXIS_WORDS, CATEGORY_WORDS, DRAW_WORDS, MADE_HAND_WORDS, NODE_WORDS, POSITION_WORDS, VOCABULARY } from '../src/vocabulary';
 
 const COMPONENTS = fileURLToPath(new URL('../src/components/', import.meta.url));
+const APP = fileURLToPath(new URL('../../../apps/web/app/', import.meta.url));
+
+/** The `term="…"` of every `<MetricLabel …>` tag in the .vue files under `dir`; another component's `term` prop is not read. */
+function staticMetricTerms(dir: string, recursive: boolean): string[] {
+  const terms: string[] = [];
+  for (const file of readdirSync(dir, { recursive }) as string[]) {
+    if (!file.endsWith('.vue') || file.endsWith('MetricLabel.vue')) continue;
+    for (const tag of readFileSync(`${dir}${file}`, 'utf8').matchAll(/<MetricLabel\b[^>]*>/g)) {
+      const term = /\sterm="([a-zA-Z]+)"/.exec(tag[0]);
+      if (term !== null) terms.push(term[1]!);
+    }
+  }
+  return terms;
+}
+
+/** One sentence ending in a full stop, and a rule or formula beside it. */
+function expectOneSentenceWithRule(entry: TermEntry, name: string): void {
+  expect(entry.term.length, name).toBeGreaterThan(0);
+  expect(entry.definition.endsWith('.'), `${name} ends with a full stop`).toBe(true);
+  expect(entry.definition.slice(0, -1).includes('. '), `${name} is one sentence`).toBe(false);
+  expect(entry.formula?.length ?? 0, `${name} has a rule`).toBeGreaterThan(0);
+}
 
 describe('glossary', () => {
   it('has the terms spec §13 names, each with one sentence and a formula', () => {
@@ -23,14 +47,55 @@ describe('glossary', () => {
   });
 
   it('every static metric label in the components is a glossary key', () => {
-    const used = new Set<string>();
-    for (const file of readdirSync(COMPONENTS)) {
-      if (!file.endsWith('.vue') || file === 'MetricLabel.vue') continue;
-      for (const match of readFileSync(`${COMPONENTS}${file}`, 'utf8').matchAll(/\bterm="([a-zA-Z]+)"/g)) used.add(match[1]!);
-    }
+    const used = new Set(staticMetricTerms(COMPONENTS, false));
     for (const key of used) expect(GLOSSARY_KEYS, key).toContain(key);
     // The pot-odds rows bind `:term="row.key"`, typed as GlossaryKey; the rest are static.
-    for (const key of ['mdf', 'alpha', 'eqr', 'nutAdvantage', 'rangeAdvantage', 'equityDistribution', 'equity', 'defendingSet']) expect(used).toContain(key);
+    for (const key of ['mdf', 'alpha', 'eqr', 'nutAdvantage', 'rangeAdvantage', 'equityDistribution', 'equity', 'defendingSet', 'sampleSize', 'observedFrequencies']) expect(used).toContain(key);
+  });
+
+  it('every static metric label in the app is a glossary key too', () => {
+    // Nuxt compiles the app without vue-tsc seeing a string attribute as a GlossaryKey, so this is the guard.
+    const used = staticMetricTerms(APP, true);
+    expect(used.length).toBeGreaterThan(0);
+    for (const key of used) expect(GLOSSARY_KEYS, key).toContain(key);
+  });
+
+  it('has an entry for every pool tier and for the sampling words beside them', () => {
+    expect(Object.values(TIER_TERMS)).toEqual(['observedFrequencies', 'showdownRange', 'reconstructedRange']);
+    for (const key of POOL_TERMS) expect(GLOSSARY_KEYS, key).toContain(key);
+    expect(POOL_TERMS).toEqual([...Object.values(TIER_TERMS), 'sampleSize', 'showdownCoverage']);
+  });
+});
+
+describe('the category vocabulary', () => {
+  it('has exactly one row per value of each of core’s types, in core’s order', () => {
+    expect(Object.keys(POSITION_WORDS)).toEqual([...POSITIONS]);
+    expect(Object.keys(MADE_HAND_WORDS)).toEqual([...MADE_HAND_CLASSES]);
+    expect(Object.keys(DRAW_WORDS)).toEqual([...DRAW_CLASSES]);
+    expect(Object.keys(CATEGORY_WORDS)).toEqual([...STRATEGIC_CATEGORIES]);
+    expect(Object.keys(AXIS_WORDS)).toEqual([...AXES]);
+    for (const action of NODE_ACTIONS) expect(Object.keys(NODE_WORDS)).toContain(action);
+  });
+
+  it('gives every row one sentence and the rule that places it', () => {
+    for (const [name, table] of Object.entries(VOCABULARY)) {
+      for (const [key, entry] of Object.entries<TermEntry>(table)) expectOneSentenceWithRule(entry, `${name}.${key}`);
+      expect(new Set(Object.values<TermEntry>(table).map((entry) => entry.term)).size, `${name} terms are distinct`).toBe(Object.keys(table).length);
+    }
+  });
+
+  it('names a hand class, a draw and a category exactly as core’s distribution labels them', () => {
+    const ctx: AxisContext = { classes: [], thresholds: DEFAULT_THRESHOLDS };
+    for (const made of MADE_HAND_CLASSES) expect(MADE_HAND_WORDS[made].term).toBe(labelFor('made', made, ctx));
+    for (const draw of DRAW_CLASSES) expect(DRAW_WORDS[draw].term).toBe(labelFor('draw', draw, ctx));
+    for (const category of STRATEGIC_CATEGORIES) expect(CATEGORY_WORDS[category].term).toBe(labelFor('strategic', category, ctx));
+  });
+
+  it('states the category thresholds from core’s defaults rather than its own copy', () => {
+    const percent = (share: number): string => `${Math.round(share * 100)}%`;
+    expect(CATEGORY_WORDS.value.formula).toContain(`≥ ${percent(DEFAULT_THRESHOLDS.value)}`);
+    expect(CATEGORY_WORDS.bluff_catcher.formula).toContain(`${percent(DEFAULT_THRESHOLDS.bluffCatcher)} ≤ equity < ${percent(DEFAULT_THRESHOLDS.value)}`);
+    expect(CATEGORY_WORDS.air.formula).toContain(`under ${percent(DEFAULT_THRESHOLDS.bluffCatcher)}`);
   });
 });
 

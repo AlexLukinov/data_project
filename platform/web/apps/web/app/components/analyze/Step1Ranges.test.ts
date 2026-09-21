@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 /**
  * Step 1's "Load my chart for this spot" (audit §2.6, §2.11): the button must never do nothing
- * silently, and a range that came from the library must say which chart it came from.
+ * silently, and a range that came from the library must say which chart it came from. And its
+ * undo (audit §2.7): one history over both seats, every step of it saved as a patch.
  */
 import type { NodeKey } from '@poker/core';
-import { nodeKey, nodeKeyLabel } from '@poker/core';
+import { nodeKey, nodeKeyLabel, parseRange, serializeRange } from '@poker/core';
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, reactive } from 'vue';
 
 import type { AnalysisStep, RangeAssignment } from '~/analyze/api';
@@ -49,6 +50,12 @@ function stored(over: Partial<StoredRange> = {}): StoredRange {
   };
 }
 
+/** Every step mounted by a test, unmounted after it so its window shortcuts do not outlive it. */
+const mounted: ReturnType<typeof mount>[] = [];
+afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount();
+});
+
 /** The page's part: a context read through getters, and every patch applied to the step. */
 function mountStep(node: NodeKey | null = KEY, ranges: RangeAssignment[] = []) {
   const state = reactive<{ step: AnalysisStep }>({ step: { ...emptyStep(1), work: { ...emptyWork(), ranges } } });
@@ -66,6 +73,7 @@ function mountStep(node: NodeKey | null = KEY, ranges: RangeAssignment[] = []) {
   };
   const onPatch = (patch: Partial<AnalysisStep>) => (state.step = { ...state.step, ...patch });
   const wrapper = mount(Step1Ranges, { props: { ctx, onPatch }, global: { components: { NuxtLink } } });
+  mounted.push(wrapper);
   return { wrapper, state };
 }
 
@@ -121,7 +129,9 @@ describe('Step1Ranges — loading my chart', () => {
     await flushPromises();
 
     const none = wrapper.find('[data-testid="step1-none"]');
-    expect(none.text()).toContain(`No chart of yours is stored for ${nodeKeyLabel(KEY)}.`);
+    // The situation is a `NodeLabel`, so its own tooltip text sits inside this paragraph too.
+    expect(none.text()).toContain('No chart of yours is stored for');
+    expect(none.get('.pk-term-text').text()).toBe(nodeKeyLabel(KEY));
     expect(none.find('a').attributes('href')).toBe('/ranges/import');
     expect(has(wrapper, 'step1-load-error')).toBe(false);
     expect(state.step.work.ranges).toEqual([]);
@@ -181,6 +191,111 @@ describe('Step1Ranges — loading my chart', () => {
 
     expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: 'AsKs: 1', label: CHART_NAME }]);
     expect(wrapper.find('[data-testid="seat-source-BB"]').text()).toContain(CHART_NAME);
+  });
+});
+
+/** The combo text a painted class is stored as. */
+const comboText = (classes: string) => serializeRange(parseRange(classes).range, 'combo');
+const AA = 0;
+const KK = 14;
+const QQ = 28;
+
+/** A stroke over one cell of seat `seat`'s matrix (0 = hero): down on it, up anywhere on the page. */
+async function paint(wrapper: ReturnType<typeof mount>, cls: number, seat = 0): Promise<void> {
+  await wrapper.findAll('[role="grid"]')[seat]!.find(`[data-cls="${cls}"]`).trigger('pointerdown');
+  window.dispatchEvent(new Event('pointerup'));
+  await flushPromises();
+}
+
+async function press(key: string, mods: KeyboardEventInit = {}): Promise<void> {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...mods }));
+  await flushPromises();
+}
+
+const undoButton = (w: ReturnType<typeof mount>) => w.find<HTMLButtonElement>('[data-testid="step1-undo"]');
+const redoButton = (w: ReturnType<typeof mount>) => w.find<HTMLButtonElement>('[data-testid="step1-redo"]');
+
+describe('Step1Ranges — undo and redo across both seats', () => {
+  beforeEach(() => {
+    library.lookup.mockReset();
+    library.status = 'idle';
+  });
+
+  it('has nothing to undo or redo before an edit, and a shortcut then patches nothing', async () => {
+    const { wrapper, state } = mountStep();
+    const before = state.step;
+    expect(undoButton(wrapper).element.disabled).toBe(true);
+    expect(redoButton(wrapper).element.disabled).toBe(true);
+    await press('z', { metaKey: true });
+    expect(state.step).toBe(before);
+  });
+
+  it('starts the history again when the step changes from outside to different ranges', async () => {
+    const { wrapper, state } = mountStep();
+    await paint(wrapper, AA);
+
+    state.step = { ...state.step, work: { ...state.step.work, ranges: [{ position: 'CO', weights: AK_SUITED, label: '' }] } };
+    await flushPromises();
+
+    expect(undoButton(wrapper).element.disabled).toBe(true);
+    await press('z', { metaKey: true });
+    expect(state.step.work.ranges).toEqual([{ position: 'CO', weights: AK_SUITED, label: '' }]);
+  });
+
+  it('keeps the history when the same ranges come back in another order, as a save may send them', async () => {
+    const { wrapper, state } = mountStep();
+    await paint(wrapper, AA, 0);
+    await paint(wrapper, KK, 1);
+
+    state.step = { ...state.step, work: { ...state.step.work, ranges: [...state.step.work.ranges].reverse().map((r) => ({ ...r })) } };
+    await flushPromises();
+
+    await undoButton(wrapper).trigger('click');
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA'), label: '' }]);
+  });
+
+  it('undoes a stroke as a patch of the ranges and redoes it, from the buttons and from the keys', async () => {
+    const { wrapper, state } = mountStep();
+    await paint(wrapper, AA);
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA'), label: '' }]);
+
+    await undoButton(wrapper).trigger('click');
+    expect(state.step.work.ranges).toEqual([]);
+    await redoButton(wrapper).trigger('click');
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA'), label: '' }]);
+
+    await press('z', { ctrlKey: true });
+    expect(state.step.work.ranges).toEqual([]);
+    await press('z', { metaKey: true, shiftKey: true });
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA'), label: '' }]);
+    expect(undoButton(wrapper).attributes('title')).toBe('⌘Z');
+    expect(redoButton(wrapper).attributes('title')).toBe('⌘⇧Z');
+  });
+
+  it('walks back across both seats, and a new edit after an undo clears the redo', async () => {
+    const { wrapper, state } = mountStep();
+    await paint(wrapper, AA, 0);
+    await paint(wrapper, KK, 1);
+
+    await undoButton(wrapper).trigger('click');
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA'), label: '' }]);
+    await paint(wrapper, QQ, 0);
+
+    expect(redoButton(wrapper).element.disabled).toBe(true);
+    expect(state.step.work.ranges).toEqual([{ position: 'BB', weights: comboText('AA,QQ'), label: '' }]);
+  });
+
+  it('takes back a loaded chart in one undo, name and all', async () => {
+    library.lookup.mockResolvedValue([stored()]);
+    const { wrapper, state } = mountStep(KEY, [{ position: 'CO', weights: AK_SUITED, label: '' }]);
+
+    await button(wrapper).trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="seat-source-BB"]').exists()).toBe(true);
+
+    await undoButton(wrapper).trigger('click');
+    expect(state.step.work.ranges).toEqual([{ position: 'CO', weights: AK_SUITED, label: '' }]);
+    expect(wrapper.find('[data-testid="seat-source-BB"]').exists()).toBe(false);
   });
 });
 

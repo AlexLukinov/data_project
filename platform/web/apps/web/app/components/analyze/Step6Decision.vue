@@ -4,7 +4,7 @@
 // answer appear beside it. We structure the comparison; we do not generate a solver's answer.
 import type { EquityResult } from '@poker/core';
 import { rangeAdvantage } from '@poker/core';
-import { EquityCalculator, NumberInput, PoolDataBadge } from '@poker/ui';
+import { EquityCalculator, NumberInput, PoolDataBadge, explainRangeAdvantage } from '@poker/ui';
 import { computed, shallowRef } from 'vue';
 
 import type { AnalysisStep } from '~/analyze/api';
@@ -36,6 +36,17 @@ const advantage = computed(() => {
     { equities: equities.perComboEquity, weights: hero.weights },
     { equities: equities.perComboEquityVillain, weights: villain.weights },
   );
+});
+
+/**
+ * The advantage in words, from the shared template so its verdict and its even-range margin are
+ * the Lab's. The seats go by the names the calculator above prints, so the sentence and the
+ * numbers name the same two ranges.
+ */
+const advantageText = computed(() => {
+  const [hero, villain] = both.value;
+  if (advantage.value === null) return '';
+  return explainRangeAdvantage(advantage.value, hero?.label ?? 'Hero', villain?.label ?? 'Villain');
 });
 
 /** What the field does: the aggressive share against everything else. */
@@ -77,10 +88,7 @@ function setSize(percent: number | null): void {
   <StepShell :step="ctx.step" :def="definition" :actual="actual" :unavailable="unavailable" @patch="emit('patch', $event)">
     <template v-if="both.length === 2">
       <EquityCalculator :ranges="both" :board="ctx.spot.board" :service="service" @result="result = $event" />
-      <p v-if="advantage" class="text-sm" data-testid="step6-advantage">
-        Mean equity {{ asPercent(advantage.heroMean) }}% against {{ asPercent(advantage.villainMean) }}% — a range advantage of
-        {{ (advantage.difference * PERCENT).toFixed(1) }} points.
-      </p>
+      <p v-if="advantage" class="text-sm" data-testid="step6-advantage">{{ advantageText }}</p>
     </template>
     <p v-else class="text-sm text-zinc-500" data-testid="step6-no-ranges">Both seats need a range first.</p>
 

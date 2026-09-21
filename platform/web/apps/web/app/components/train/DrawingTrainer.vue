@@ -8,7 +8,7 @@
 // wrong hands is not a range you know. Both are printed, labelled.
 import type { WeightedRange } from '@poker/core';
 import { createRange, weightedCombos } from '@poker/core';
-import { RangeDiffView, RangeMatrix, useUndoRedo } from '@poker/ui';
+import { RangeDiffView, RangeMatrix, useUndoRedo, useUndoShortcuts } from '@poker/ui';
 import { computed, shallowRef, watch } from 'vue';
 
 import { CHART_PROVENANCE } from '~/train/charts';
@@ -30,6 +30,10 @@ watch(
   () => drawing.reset(createRange(undefined, 'Your range')),
 );
 
+// On the window, not the wrapper: painting a cell does not give it focus. Once revealed, the
+// drawing has been graded and is no longer the reader's to change.
+useUndoShortcuts(() => (props.revealed ? null : drawing));
+
 const drawn = computed(() => weightedCombos(drawing.state.value));
 const error = computed(() => weightError(drawing.state.value, props.spot));
 const known = computed(() => error.value <= props.spot.weightTolerance);
@@ -39,7 +43,7 @@ watch(error, (next) => emit('update:weightError', next), { immediate: true });
 </script>
 
 <template>
-  <div class="space-y-4" @keydown="drawing.onKeydown">
+  <div class="space-y-4">
     <div class="flex flex-wrap items-center gap-3">
       <span class="text-sm text-zinc-500">Weight</span>
       <button
@@ -63,7 +67,8 @@ watch(error, (next) => emit('update:weightError', next), { immediate: true });
       <button
         type="button"
         class="rounded border border-zinc-300 px-2 py-0.5 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
-        :disabled="!drawing.canUndo.value"
+        :disabled="revealed || !drawing.canUndo.value"
+        title="⌘Z"
         data-testid="drawing-undo"
         @click="drawing.undo()"
       >
@@ -71,7 +76,18 @@ watch(error, (next) => emit('update:weightError', next), { immediate: true });
       </button>
       <button
         type="button"
-        class="rounded border border-zinc-300 px-2 py-0.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        class="rounded border border-zinc-300 px-2 py-0.5 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        :disabled="revealed || !drawing.canRedo.value"
+        title="⌘⇧Z"
+        data-testid="drawing-redo"
+        @click="drawing.redo()"
+      >
+        Redo
+      </button>
+      <button
+        type="button"
+        class="rounded border border-zinc-300 px-2 py-0.5 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        :disabled="revealed"
         data-testid="drawing-clear"
         @click="drawing.set(createRange(undefined, 'Your range'))"
       >
