@@ -5,8 +5,12 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: 1 — MVP thin slice → v2 plan phase F (Range Lab) interleaved with D (UI)** · **Status: spine complete · 9.1M real hands loaded · audited · POKER_PLAN.md phases A, B and C done and merged (registry, 73.7M decisions, generated rollup, report engine, API v2 + saved objects, v1 chain deleted, hero/pool analysis modules) · Range Lab: F.1–F.9 committed with D.1/D.2 (headless core, equity engine, metrics and blockers, the Nuxt app and `poker-ui`, sign-in, the range library with importers, the hand replayer, the pool's tiered answers at a node, and the 9-step analyzer); F.10 (tier 3 + empirical EQR) done, verified and uncommitted; the §5b corpus re-parse and the whole-chain rebuild ran on 2026-09-11 — **pool showdown cards 17.4% → 100%**, hero fingerprint unmoved; **CI real and green since 2026-09-15, F.1 ticked (ADR-054)****
-**Last updated:** 2026-09-21 (session 22, **the round-7 merge** — three lanes committed (`5a4f6cd`, `7ac25e1`, `a6cb7e0`) plus the platform scripts (`7b63f5b`); **F.12 ticked** and **F.14 added**. `make check` **1,735** · `make web-check` **1,601 / 152** · `make seed && make test-all` **1,847 passed, 6 skipped** · `make privacy-check` clean. Still unpushed.)
+**Current phase: the v2 plan is complete** — 66 steps, **65 ticked**; the one that is not (D.9b) is waiting on a push, not on work · **Status: 9.1M real hands loaded · `hand_uid` is `FixedString(16)` end to end · `make check` 1,756 · `make web-check` 1,656 / 156 · nothing pushed**
+**Last updated:** 2026-09-22 (session 24, **the round-8 merge** — four workstreams committed: B.5b `1289512`, the registry lane `6023a71`, F.14 `569691f`, the leftovers lane `588d55d`, plus the docs. **F.14 ticked**, so every plan step but D.9b's is closed. Eleven ADRs, 064–074, and for the first round no merge fixes were needed at all. `make check` **1,756** · `make web-check` **1,656 / 156** · `make seed && make test-all` ****1,869 passed, 6 skipped**** · `make privacy-check` clean. Still unpushed, 25 commits ahead.)
+
+**Previously:** 2026-09-21 (session 23, **B.5b — the `core.*` rebuild**, with the machine to itself; ADR-064). `hand_uid` is `FixedString(16)` on every core, staging, intermediate and mart table; the id column fell **2.23 GiB → 0.78 GiB** and live `core.*` **9.02 → 5.10 GiB**; the parity fingerprint did not move. `make check` **1,737** · `make seed && make test-all` **1,849 passed, 6 skipped** · `make privacy-check` clean. The `FREEZE` backup is still on disk. Still unpushed.)
+
+**Previously:** 2026-09-21 (session 22, **the round-7 merge** — three lanes committed (`5a4f6cd`, `7ac25e1`, `a6cb7e0`) plus the platform scripts (`7b63f5b`); **F.12 ticked** and **F.14 added**. `make check` **1,735** · `make web-check` **1,601 / 152** · `make seed && make test-all` **1,847 passed, 6 skipped** · `make privacy-check` clean.)
 
 **Previously:** 2026-09-21 (session 21, **the round-6 merge** — six lanes committed, **D.9c, F.12b, F.12c, F.12d and F.13 ticked**, D.9b left `[ ]` because its Done means is a green CI job and nothing is pushed. `make check` **1,714** · `make web-check` **1,549 / 146** · `make seed && make test-all` **1,821 passed, 6 skipped**. The app now explains itself: every screen says what it is, how it works and what to do first, and a test fails when a new one does not. A privacy guard runs before every push — and found a **fifteenth** real handle still in the public history.)
 
@@ -46,35 +50,121 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Next: **B.5b** — `hand_uid` as `FixedString(16)` in `core.*`, **with the machine to itself**
+### ▶ Next: **push, watch CI, tick D.9b** — and the v2 plan is finished
 
-Round 7 is merged (below). Every web lane is done; what is left in the plan is **B.5b**, the new
-**F.14** (ADR-062's client half, a web lane that can run beside anything) and **D.9b's tick**, which
-needs a push.
+**There is no build work left in `docs/POKER_PLAN.md`.** 65 of its 66 steps are `[x]`. The 66th,
+**D.9b**, is built, committed and green locally; its *Done means* is *its E2E job green in CI*, and
+nothing has ever been pushed. So the remaining step is an operation, not a feature:
 
-**B.5b runs alone.** No other lane, no `make seed`, no `make test-all` while it runs: it rebuilds
-every `core.*` table, exchanges them, recreates the mart chain empty and backfills it, so nothing
-else can read the real data through that, and the 4 GB ClickHouse cannot do two of these at once.
-The mart half is already done in C.2 — the marts carry `FixedString(16)` today and the staging
-boundary converts — so what remains is `core.*` itself.
+1. **`cd platform && make up && make privacy-check`** — it reads every real opponent's key from the
+   real ClickHouse read-only and refuses a tree or a push that carries one. `make install-hooks`
+   installs it as `pre-push`; it is installed here.
+2. **`make e2e`** (needs `make up && make seed` first, and **never beside `make test-all`** — same
+   consumer group, and that session drops the test databases). Round 8 added
+   `web/e2e/pool-lookup.spec.ts`, which is **written and typechecked but has never been run**.
+3. **Push `feat/range-lab`** (25 commits ahead of `origin`), watch the `e2e` job, and **tick D.9b**
+   when it is green. If it is red, that is the step's *Done means* doing its job — fix and push again.
 
-Read first: `docs/POKER_PLAN.md` step **B.5b** (it carries the design), **ADR-017** (a sort-key
-change is a rebuild, not a migration) and **ADR-019** (partition-at-a-time work on a 4 GB node).
+**Then the plan is done, and the next unit of work no longer comes from it.** It comes from
+[POKER_FEATURES.md](POKER_FEATURES.md): the plan's §1 non-goals are what is left — live HUD (F-8xx),
+solver integration (F-904/905), Iceberg/Spark (F-206/B06), Airflow (F-B05), billing (F-704) and new
+site parsers — and each needs a plan of its own before it is started, the way phases A–F did.
 
-**The founder's rules bind hardest here.** The real `core.*` holds 9.1M hands that cannot be
-re-parsed cheaply. Write the backup step down in the note *and run it* before any `EXCHANGE TABLES`;
-keep the old tables until the parity fingerprint matches; never `DROP TABLE` before that; work
-partition by partition with bounded memory; stop at the first disagreement rather than continuing.
+**Two things are still only the founder's**, both about history that is already public: the
+fifteenth real handle lives in `88625fd` and its ancestors, so removing it means a second
+`filter-repo --replace-text` and a second force-push; and the two pre-rewrite Actions runs need
+deleting, with GitHub Support asked to purge the old commits. **Decide these before pushing**, since
+a push is what makes the rest of the history public too.
 
-**Done means** `system.columns` shows `FixedString(16)` on every core and mart table; the replayer
-and `/v1/hands` still resolve a hand by its hex id (the API converts at the boundary); the parity
-fingerprint is unchanged; `marts.player_hand_flags`' compressed size drops by ~0.5 GiB in
-`system.parts`; `make check` and `make test-all` green; and the old tables are dropped only after
-all of that, with the backup recorded. Then tick **B.5b**.
+> **Do not put a real screen name in a test fixture, a commit message or a verification note**
+> (ADR-058).
 
 **To bring the platform up:** `cd platform && make start` (the stack plus the API, a worker and the
 app, backgrounded; logs in `platform/.run/logs`). `make pause` frees the memory and keeps the data;
 `make stop` takes the containers down too. `make nuke` is still the only thing that deletes data.
+---
+### ✅ Round 8 is merged (2026-09-22) — four workstreams, **F.14 ticked, the plan closed**
+
+**Committed:** B.5b `1289512` · the registry lane `6023a71` · F.14 `569691f` · the leftovers lane
+`588d55d`. **Nothing is pushed.**
+
+**Gates over the combined tree:** `make check` **1,756** · `make web-check` **1,656 tests / 156
+files** · `make seed && make test-all` ****1,869 passed, 6 skipped**** · `make privacy-check` clean.
+
+**The first round that needed no merge fixes.** The two reds the F.14 lane reported mid-round — a
+41-line function in `poker-core/src/formats/combo.ts` and two tests pinning `ev_bb_per_100`'s
+registry description — were both closed by the lanes that caused them, before either finished.
+**And the ADR numbers did not collide:** the lanes settled 064 / 065–066 / 067 / 068–074 between
+themselves mid-session, which is exactly what round 7's merge had to unpick by hand. Two lanes wrote
+no `.files` manifest, so ownership was rebuilt from their notes and by path and reconciled against
+`git status --porcelain -uall`: 110 paths, four disjoint sets, nothing unattributed.
+
+**What landed:**
+
+- **B.5b — the `core.*` rebuild** (ADR-064), the highest-stakes step in the plan: 9.1M real hands
+  that cannot be re-parsed cheaply. It was done the way the rules ask. The backup was written down
+  *and run* before any `EXCHANGE TABLES`; all **346,922,887** rows were proved to round-trip before a
+  byte was written; the copy ran partition by partition at a **1.05 GiB** peak against a 2.5 GB
+  ceiling; parity is **exact** under `FINAL` on counts, id hashes and
+  `sum(cityHash64(tuple(* EXCEPT hand_uid)))`; the old `core.<t>__v2` tables were dropped only after
+  every gate was green. Verified again at the merge: `system.columns` shows `FixedString(16)` on all
+  four core and both mart tables, no `__v2` table survives, and `marts.player_hands` still holds
+  **54,562,770** rows. **Two clauses of the step were amended with evidence rather than followed** —
+  the mart-chain rebuild would have destroyed 6.2 GiB to write byte-identical rows back, and the
+  table the size claim named had been deleted in C.6.
+- **The registry lane** (ADR-065, ADR-066). Ordering moved into SQL, so the lookup ADR-062 built
+  ranks in the database. And **round 7's "this number cannot be right" was wrong, exactly as the
+  merge had measured**: the field's `bb_per_100` and `ev_bb_per_100` agree by construction, because
+  all-in EV is zero-sum across a hand's seats and the baseline spans every seat. ADR-066 is a
+  decision *not* to change the engine and to put the reason in the registry instead of a client-side
+  special case. A nine-label voice proposal is written, costed and **not applied** — the founder's.
+- **F.14** (ADR-067) — the client stops deciding what the server has already decided. The page holds
+  none of the lookup's rules: a name too short is asked, refused, and the server's own sentence
+  appears, because the server counts the *name half* and nothing in the client can tell.
+- **The leftovers lane** (ADR-068…074) — six items three rounds had named and left. The replayer's
+  defending set belongs to the seat that has to answer the bet (round 7 refused to guess); a trainer
+  failure is worded as *this browser's*; a range is counted as the board leaves it, **which changes
+  graded answers**; an empty state may offer a worked example; a control that renders as a control
+  does something.
+
+**Still open after this merge:** D.9b's tick, which needs a push — and the follow-ups the lanes
+wrote down: `BlockerPanel`'s unconditional click affordance, a Worker whose module fails to load and
+never settles, the label proposal, and whether a saved report should be able to carry a ranking.
+
+---
+### ✅ B.5b is closed (2026-09-21) — `hand_uid` is `FixedString(16)` everywhere (ADR-064)
+
+The rebuild ran with the machine to itself. **The backup was written into the plan note and run
+before any `EXCHANGE TABLES`:** `FREEZE WITH NAME 'b5b_20260921'` on all four core tables — 9.1 GB of
+hard links, **0 bytes of extra disk**, still in `/var/lib/clickhouse/shadow/b5b_20260921/` inside the
+`poker-platform_clickhouse-data` volume, uuid→table mapping recorded in the plan (it survives a
+`DROP TABLE`, which is the one unrecoverable mistake).
+
+**Pre-flight:** all **346,922,887** rows proved to round-trip — 0 broken, 0 malformed — before a byte
+was written. **Copy:** `scripts/rebuild_core_uid.py`, 39 monthly partitions, **peak 1.05 GiB** against
+the 2.5 GB ceiling. **Parity: exact** — under `FINAL`, counts, id hashes and
+`sum(cityHash64(tuple(* EXCEPT hand_uid)))` are bit-identical on all four tables, and the marts'
+counters did not move. **Size:** `hand_uid` across `core.*` **2.23 GiB → 0.78 GiB**.
+
+**Two clauses of the step were amended, with evidence, rather than followed:**
+
+- *"recreate the mart chain empty and backfill"* — **not done, and it should not be.** The marts have
+  carried `FixedString(16)` since C.2, so the only change is that the staging boundary stops
+  converting. Rebuilding five day-partitions through the new boundary produced **byte-identical mart
+  rows**, which proves the change is a no-op there; the recreate would have destroyed 6.2 GiB and a
+  quarter-hour to write the same bytes back.
+- *"`marts.player_hand_flags`' compressed size drops by ~0.5 GiB"* — that table was **deleted in C.6**
+  with the rest of the v1 chain. The equivalent measurement was taken on `core.*` instead, and the
+  win is larger than the clause predicted.
+
+**The old tables were `core.<t>__v2`**, kept until every gate above was green and dropped only then —
+live `core.*` is now **5.10 GiB** against 9.02 before. The `FREEZE` snapshot is **kept** and is now the
+only copy of the pre-rebuild data, so it costs its 9.1 GB for real (it was free while the tables
+existed, being hard links to their parts): `ALTER TABLE core.<t> UNFREEZE WITH NAME 'b5b_20260921'`
+releases it whenever the founder is satisfied nothing is missing.
+`scripts/fingerprint.py` is *not* what "the parity fingerprint" means here — it compares v1 against
+v2 and the v1 chain is gone (its own docstring says so); the fingerprint used is the counters in
+`marts.stats_daily` plus the `core.*` content hashes, both recorded in the plan note.
 
 **Before any push, from `platform/`:** `make up && make privacy-check` (also a `pre-push` hook here).
 
@@ -1522,11 +1612,16 @@ Cross-session state: what is actually in ClickHouse right now.
 | Opponent tracking | impossible across sessions | possible (not yet built) |
 
 Totals (logical, after `FINAL` and the duplicate purge): **9,093,796** hands ·
-**54,562,770** player-rows · **100,346,158** actions · ~5 GB on disk for `core.*`;
-the marts are `decisions` **3.84 GiB** (73.7M rows, 55.9 B/row), `player_hands` **2.18 GiB**
-(54.6M rows, 43 B/row) and `stats_daily` 278 MiB — the v1 `player_hand_flags` was 3.20 GiB for
-the same hands, 52% of it the 32-char `hand_uid` that plan B.5b turned into `FixedString(16)`
-on the marts (`core.*` still holds the hex). (The earlier "143.75M actions" was a physical count
+**54,562,770** player-rows · **100,346,158** actions · **5.58 GiB** on disk for `core.*`
+(`hand_players` 2.81 GiB · `actions` 1.75 GiB · `hands` 761 MiB · `pot_winners` 285 MiB);
+the marts are `decisions` **3.98 GiB** (73.7M rows), `player_hands` **2.19 GiB**
+(54.6M rows) and `stats_daily` 278 MiB. **B.5b closed on 2026-09-21**: `hand_uid` is
+`FixedString(16)` on every core *and* mart table, and the id column across the four core tables
+fell **2.23 GiB → 0.78 GiB** (31.1 → 16.0 bytes per row on `core.hands`). The old `core.*` held
+9.02 GiB for the same hands; the rest of that difference is the superseded rows of the
+2026-09-11 re-parse, which the rebuild's merges collapsed. The v1 `player_hand_flags` this step
+originally measured itself against was deleted in C.6.
+(The earlier "143.75M actions" was a physical count
 including ReplacingMergeTree duplicates.) Chain state: 160/160 daily partitions on every model;
 the v2 facts were bootstrapped on 2026-09-09 in 35 passes / 641 s and the rollup in 35 passes /
 186 s on the 4 GB node.
@@ -1549,6 +1644,7 @@ a stat query over the 54M-row fact table uses **13–29 MiB** and returns in **u
 |---|---|---|
 | **minikube `dataplatform`** | The **learning lab** — interview prep, DE sprints. Not the product. | ⏸️ **PAUSED** via `scripts/pause.sh` to free ~11.5 GiB for the 9.1M-hand build. PVCs intact; `scripts/resume.sh` + `scripts/port-forwards.sh` to restore |
 | **docker-compose (product)** | Local dev for the poker platform. | ✅ running at the end of the phase-A session (`cd platform && make up` if not). Ports shifted off the lab's: CH 8124, PG 5434, Kafka 9094, Redis 6380, MinIO 9010/9011 |
+| **Docker VM clock** ⚠️ | Docker Desktop's VM clock jumps on this Mac. | ⚠️ **Measured 2026-09-21, and it costs a session hours if you do not know it.** The VM clock jumps **backwards by 976 s (~16 min)** for windows of ~12 s at a time, then snaps back. 976 s is just over MinIO's 15-minute signature tolerance, so during a window **every signed S3 request fails with `RequestTimeTooSkewed`** — measured **12 failures in 40 one-second `put_raw` calls**. **`date` inside the container reads correct throughout**, which is why the obvious clock check clears it. It breaks `make seed` at `scripts/seed.py`'s `PutObject` and then errors every S3-dependent integration test at setup (~106 of them, all "ERROR … at setup", none of them about the code under test). **Remedy:** retry `make seed` — the windows pass; if it keeps landing in one, restart Docker Desktop. **Do not use `docker compose restart minio`: it brings the container back as `9000-9001/tcp` with no published ports** and nothing can reach it — use `docker compose up -d --force-recreate minio` then `docker start poker-minio`. |
 | **ClickHouse memory** | Sized as a production node. | ✅ **4 GB** default (`CLICKHOUSE_MEM`), per-query ceiling 2.5 GB, caches sized in `platform/infra/clickhouse/small-node.xml`, spill + `grace_hash` + `max_threads 2` in `limits.xml`. Bootstrapping the full corpus is `scripts/backfill.py`, never a one-shot full refresh (ADR-019) |
 | **production** | — | ❌ not chosen ([open question](POKER_GAP_ANALYSIS.md#open-questions-for-you-before-the-implementation-run)) |
 
@@ -1642,6 +1738,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-21 (session 23 — **B.5b, the `core.*` rebuild**, with the machine to itself) | **`hand_uid` is `FixedString(16)` on every core, staging, intermediate and mart table** (ADR-064). Backup first and written down first (`FREEZE`, 9.1 GB of hard links, 0 bytes of extra disk); all 346,922,887 ids proved to round-trip before a byte was written; 39 partitions copied at peak 1.05 GiB; **parity exact under `FINAL`** on counts, id hashes and full row hashes, and the marts' counters unmoved. `hand_uid` **2.23 GiB → 0.78 GiB**. New: `scripts/rebuild_core_uid.py`, migration `0013` (proved on a throwaway prefixed database), `core.ids` as the one home of the hex↔bytes boundary. **Amended two clauses of the step with evidence** — the mart chain was not recreated (rebuilding five day-partitions through the new boundary gave byte-identical rows) and the size clause was measured on `core.*` (`player_hand_flags` was deleted in C.6). Three ClickHouse behaviours measured and designed around, incl. **a SELECT alias shadowing the column in WHERE**; one defect the fix introduced (an over-long id → 500) caught over HTTP and guarded. Verified against the real corpus on a scratch account: hero list, pool list, both replayers, the tag filter, the search pair key. **Also measured and recorded: Docker's VM clock jumps back 976 s for ~12 s at a time**, which breaks MinIO signing and was the cause of a long run of false integration failures. | Old `core.<t>__v2` tables and the `FREEZE` snapshot still on disk; **F.14** next |
 | 2026-09-21 (session 21 — **the round-6 merge**) | Six lanes committed (`22ddf18` D.9b, `e24e45e` D.9c, `76b0b42` F.12b, `3f42270` F.12c, `4dbfa08` F.12d, `e9a0ee2` F.13, `2e543fc` allowlist); **five steps ticked**, D.9b left `[ ]` by design. Manifests cross-checked: 229 paths, none unclaimed, 12 shared and each assigned deliberately. Two privacy fixes only the merge could make (a name quoted in STATUS, folded out of the unpushed docs commit; D.9c's fifteenth handle), after which `make privacy-check` answers *no real player key found* and its hook is installed. Gates: `make check` 1,714 · `make web-check` 1,549 / 146 · `make test-all` 1,821 passed, 6 skipped. | **D.10** (close phase D), then F.12's three remaining §13 lines and B.5b; nothing pushed |
 | 2026-09-15 (session 20, continued — **history rewrite**) | Bundle backup of all refs; `git filter-repo --replace-text` trialled in a mirror (tree identical, only five files touched in any commit, full-history scan clean), then run in place with identical hashes; force-pushed with a lease to `88625fd`; docs' commit hashes remapped; round-6 lanes had written nothing, so nothing was lost to the reset. GitHub still serves old SHAs. | Founder: delete the two old Actions runs, Support purge (or go private meanwhile) |
 | 2026-09-15 (session 20, **the round-5 merge** — no lane work of its own) | D.9a `dd770bd`, D.8 `b1a535a`, F.12a `a60611e` committed; **D.9a ticked** (the merge did its `git rm`s; its isolation and rate-limit probes green by name in the full run). Three gate runs: a heuristic-log clock bug (`confirmed_at` from the API's clock, `created_at` from the database's; fixed `c36faa4`), then the unit test that fix broke — and two background notifications that said exit 0 over logs that said `EXIT 2`. Final: `make check` 1,675 · `make web-check` 1,015 · `make test-all` **1,783 passed, 6 skipped**. **Fourteen real opponents' screen names found in the public history**; tree scrubbed, then the history rewritten (below). D.9a's doc rows had been lost to a concurrent rewrite; rebuilt. | **The founder's history decision**; `make pg-migrate`; round 6 (D.9b · D.9c · F.12b · F.12c · F.12d) |

@@ -73,6 +73,17 @@ not a change I've made.
 | [061](#adr-061--a-gate-handed-a-reason-prints-it-an-example-therefore-opens-all-nine-steps-and-step-4-stops-printing-the-answer-it-is-about-to-ask-for) | A gate handed a reason prints it; an example opens all nine steps | ✅ |
 | [062](#adr-062--a-player-is-found-by-the-name-a-person-types-not-by-the-key-the-pipeline-stores-and-the-registry-says-what-it-means-to-a-reader-with-the-porting-record-kept-out-of-their-way) | A player is found by the name a person types; the registry says what it means | ✅ |
 | [063](#adr-063--the-reading-threshold-is-the-one-control-on-a-report-screen-that-folds) | The reading threshold is the one control on a report screen that folds | ✅ |
+| [064](#adr-064--a-hand-id-is-16-raw-bytes-in-storage-and-32-hex-characters-everywhere-else-and-the-boundary-is-written-once) | A hand id is 16 bytes in storage, hex everywhere else; the boundary is written once | ✅ |
+| [065](#adr-065--a-report-says-how-to-rank-itself-and-the-database-does-the-ranking) | A report says how to rank itself, and the database does the ranking | ✅ |
+| [066](#adr-066--the-fields-all-in-adjusted-win-rate-is-its-actual-win-rate-and-the-registry-says-so-rather-than-the-client) | The field's all-in adjusted win rate is its actual win rate, and the registry says so… | ✅ |
+| [067](#adr-067--the-client-stops-deciding-what-the-server-has-already-decided-one-lookup-one-vocabulary-one-place-each-numbers-caveat-is-read) | The client stops deciding what the server has already decided: one lookup, one vocabulary,… | ✅ |
+| [068](#adr-068--the-defending-set-on-the-replayer-belongs-to-the-seat-that-has-to-answer-the-bet-not-to-the-seat-the-node-is-named-for) | The defending set on the replayer belongs to the seat that has to answer the bet, not to… | ✅ |
+| [069](#adr-069--a-trainer-failure-is-worded-as-this-browsers-because-that-is-what-it-is) | A trainer failure is worded as this browser's, because that is what it is | ✅ |
+| [070](#adr-070--a-range-weight-is-a-finite-float32-and-a-weight-that-rounds-away-says-so) | A range weight is a finite float32, and a weight that rounds away says so | ✅ |
+| [071](#adr-071--a-range-is-counted-as-the-board-leaves-it-in-the-numerator-and-in-the-denominator-both) | A range is counted as the board leaves it, in the numerator and in the denominator both | ✅ |
+| [072](#adr-072--fact-4-binds-the-seats-not-the-number-of-examples) | Fact 4 binds the seats, not the number of examples | ✅ |
+| [073](#adr-073--an-empty-state-with-no-data-to-offer-may-offer-a-worked-example-and-names-one-spot-rather-than-the-index) | An empty state with no data to offer may offer a worked example, and names one spot rather… | ✅ |
+| [074](#adr-074--a-control-that-renders-as-a-control-does-something) | A control that renders as a control does something | ✅ |
 
 ---
 
@@ -4554,3 +4565,950 @@ it sets. What was *not* met there was §2.1's other bullet — controls that ren
 nothing — and folding the panel would have hidden that rather than fixed it: `ComboDistributionPanel`
 was mounted with a literal `:group-by` and neither listener, so its four axis checkboxes emitted into
 nothing and Export CSV did nothing at all. That is what was fixed instead.
+
+---
+
+## ADR-064 — A hand id is 16 raw bytes in storage and 32 hex characters everywhere else, and the boundary is written once
+**Status:** ✅ Implemented 2026-09-21 (plan B.5b)
+
+**Context.** `hand_uid` is a truncated SHA-256 — 128 bits of incompressible randomness. Stored as
+its 32-character hex text it was **51% of the v1 fact table**, and LZ4 can do nothing with it
+(measured in phase A: `LowCardinality` saved nothing on the bucket columns because they repeat;
+this column never repeats). C.2 moved the marts to `FixedString(16)`. `core.*` kept the hex, so
+every mart build paid `toFixedString(unhex(hand_uid), 16)` and the two halves of the warehouse
+disagreed about what a hand id *is*.
+
+**Decision.** **Storage holds the 16 raw bytes; everything a person or another system sees holds
+the 32-character lowercase hex.** `core.*` and the marts are `FixedString(16)`. Postgres (notes,
+tags, analyses), every URL, every API response, every log line and the whole TypeScript side keep
+the hex string. The conversion lives in exactly two places, both in `core/ids.py`:
+
+* `uid_bytes()` — hex → bytes, called only from `core.schema.base.hand_uid_column()`, which is the
+  single `ColumnSpec` all four core tables share;
+* `UID_HEX`, `UID_MATCH` and `uid_in()` — the SQL half, used by `api/hand_query.py` and
+  `stats/hands.py`; plus `is_hand_uid()`, which the router calls before either.
+
+Because the column leads every core sort key, applying it was a **table rebuild, not a migration**
+([ADR-017](#adr-017--clickhouse-migrations-are-versioned-sql-not-a-framework)): migration `0013`
+states the new DDL and does the rebuild in one shot for an empty database, and
+`scripts/rebuild_core_uid.py` does the same thing a partition at a time for one that holds a corpus
+([ADR-019](#adr-019--the-stat-chain-is-incremental-by-daily-partition-anchored-and-backfilled-in-batches)).
+`0013` is the one migration in the directory that is **not** re-runnable, which is stated in its
+header: after it runs, `unhex()` over the stored bytes is not an error, it is silent nonsense.
+
+**Alternatives.** *`UUID`* — 16 bytes too, and ClickHouse prints it in canonical form for free; but
+our id is not a UUID (no version/variant bits), and calling it one invites a reader to parse it as
+one. *`UInt128`* — the same 16 bytes with endianness as a new way to be wrong. *Leave `core.*` as
+hex and convert in the marts* — the status quo, which is the thing that cost 1.45 GiB and put a
+conversion in the hot path of every build. *Hex everywhere, buy a bigger disk* — the node is sized
+as a production node on purpose; the point of the lab is to meet this problem, not to outspend it.
+
+**Consequences — three ClickHouse behaviours that make this sharper than it looks.** All measured on
+25.8.16.10002.altinitystable during the step, all of them silent or surprising:
+
+1. Comparing the column to a hex string is **silently false**. No error, no rows. This is why
+   `UID_MATCH` exists rather than a bare `hand_uid = {uid:String}` at each site.
+2. An `IN` list of hex strings raises `TOO_LARGE_STRING_SIZE` — the loud half, and the reason
+   `uid_in()` is a subquery rather than `arrayMap` over a bound array (which the server refuses
+   outright with `UNSUPPORTED_METHOD`, found earlier in [ADR-048](#adr-048)).
+3. **A `SELECT … AS hand_uid` alias shadows the column of that name in `WHERE`.** A query that
+   projects the hex *and* filters on the id silently matches nothing unless the filter is qualified
+   with the table alias (`h.hand_uid`). Every such query in `api/hand_query.py` now carries an
+   alias for this reason alone; `hand_detail` stopped projecting the id altogether, since its
+   caller passed it in.
+
+A fourth consequence was introduced by the fix and caught in the browser, not by a test: because
+`toFixedString` raises on anything over 16 bytes, an over-long id in a URL became a **500** where it
+had always been a 404. `is_hand_uid()` restores the 404 before the value reaches ClickHouse —
+`api/routers/hands.py` calls it on both entry points. A guard, not a parser: the id is validated,
+never repaired.
+
+**Measured.** `hand_uid` across the four core tables **2.23 GiB → 0.78 GiB**: 31.1 → 16.0 bytes per
+row on `core.hands`, and ~1.9× on each of the others. Parity was exact — under `FINAL`, row counts,
+`sum(cityHash64(<canonical hex>))` and `sum(cityHash64(tuple(* EXCEPT hand_uid)))` are bit-identical
+on all four tables, and every one of **346,922,887** rows was proved to round-trip
+(`lower(hex(toFixedString(unhex(hand_uid),16))) = hand_uid`) before anything was written.
+
+
+---
+
+## ADR-065 — A report says how to rank itself, and the database does the ranking
+
+**Status:** accepted · 2026-09-22 · round 8, lane registry · **Constrained by** ADR-021 (the
+registry is the one vocabulary), ADR-022 (filters are a typed AST, every value bound, every
+identifier the registry's), ADR-026 (hero and pool are separate modules), ADR-062 (a player is
+found by the name a person types).
+
+**Context.** [ADR-062](#adr-062) decision 3 settled *what* the pool's player lookup must rank by —
+the exact name first, then the busiest, then alphabetically — and named the right place for it in
+its own Alternatives: "*Ordering by hands in SQL — the right answer, and it needs an `order_by`
+on `ReportRequest`, which is `stats/`, outside this lane.*" It sorted in Python instead, and was
+exact because the query is as wide as the match set.
+
+It is exact **until the cap**. The lookup asks for `limit = MAX_MATCHES` (10,000) and the builder
+emitted `ORDER BY <group keys>`, so a query that reaches the cap returns *the alphabetically
+first 10,000 matches* and Python ranks those. `matched_capped` says the count is a floor, which
+is honest about the count — but the ranking was then a ranking of the alphabetically first, not
+of the busiest. On today's corpus the cap is unreachable at three characters (the worst
+three-character fragment is inside 2,259 names, §H.3), so this was latent, not live. It is the
+kind of latent that gets worse with every upload.
+
+**Decisions.**
+
+1. **`ReportRequest` gains `order_by`, a list of at most four typed terms.** A term is
+   `{key, direction}` or `{match, direction}` — **two model classes, `OrderKey` and
+   `OrderMatch`, not one class with two nullable fields**, so a term that is both or neither
+   does not exist to be handled and the renderer carries no error path that cannot fire.
+   (Pydantic resolves the union structurally, the way `Node` already is.) `direction` is
+   `asc` | `desc`, default `asc`. Empty is the behaviour every report has today —
+   `ORDER BY <the group keys>` — so no existing document, saved report or preset changes
+   meaning, and an old stored request is still valid.
+
+2. **A `key` names a column the answer already has: one of the request's own group-by
+   dimensions, or one of its own stats.** That is the whole allowlist, and it is what makes the
+   clause safe without a new escaping rule: the text that reaches the SQL is the alias
+   `build_query` itself wrote two lines earlier. Anything else — a dimension not grouped by, a
+   stat not asked for, `__hands`, a column of the mart — is a `ReportError` naming the term
+   (`order_by[1]: 'wtsd' is neither a group-by nor a stat of this report`). The `CODE` pattern on
+   the field (`^[a-z][a-z0-9_]{0,63}$`) refuses `hands DESC, 1` and its family before the
+   allowlist is even consulted.
+
+3. **A `match` is an ordinary filter tree, because a ranking is not always a column.** "The
+   exact name first" is a predicate over the group key, not a column of the answer, and there is
+   no honest way to say it as an identifier. So the second form takes a `Node` — the same
+   grammar as `filter`, through the same `Compiler`, which re-checks every leaf against the
+   dimension registry (`check_leaf`) and binds every value it carries. It renders as a
+   parenthesised 0/1 predicate: `ORDER BY (s.player_key IN {p1:Array(String)}) DESC`. Its
+   dimensions **must be in `group_by`**: a column that is not a grouping key cannot be ranked
+   under `GROUP BY`, and a bucketed dimension is refused outright, because grouping by `spr`
+   selects `multiIf(...)` and `s.spr` is then not a key of that query either. Both are named
+   here rather than left to ClickHouse to report.
+
+4. **An ordered report that splits by grain is refused, by name.** `stats.router.plan` returns
+   *two* plans when the stats span hand grain and decision grain, and `run_report` merges them in
+   Python on the group key. Each plan carries its own `LIMIT`, so a ranking would let the two
+   halves keep *different* rows: the merged answer would hold half the stats in half the rows,
+   and the order would be plan 1's followed by whatever plan 2 alone produced. Today's
+   `ORDER BY <group keys>` is the reason that has never happened — both halves truncate the same
+   prefix. So `plans_for()` raises rather than answer in an order the caller cannot read off the
+   request: *"order_by needs one table: these stats split across decisions and player_hands."*
+   `validate_request` goes through the same function, so a saved report that cannot run is still
+   never stored.
+
+5. **`order_by` without `group_by` is a validation error**, not a silently ignored field: such a
+   report has exactly one row.
+
+6. **The lookup's ranking is now three terms, and the exact-name term is equality, not a
+   pattern.** `(player_key IN [<site>:<fragment> for each site]) DESC, hands DESC,
+   player_key ASC`. A `player_key` is `<site>:<screen name>` (`core.ids.player_key`), so the name
+   half **is** the typed fragment exactly when the key is one of those — one candidate per
+   `core.enums.Site`, seven today. A trailing-anchored `LIKE '%:<fragment>'` would have been
+   shorter and would also match a name that merely *ends* `:<fragment>`, which a screen name
+   containing a colon can. Equality is also why these values are **not** wildcard-escaped while
+   the filter's `LIKE` pattern is: `%`, `_` and `\` are LIKE's own and nobody else's.
+   `analysis/pool/service.py` now slices the answer instead of sorting it, and `matched`,
+   `matched_capped` and `hands` are unchanged — the query is still as wide as the match set, so
+   `matched` is still a count and `hands` is still the total over everyone who matched.
+
+7. **The ordering lives in `stats/order.py`, not in `stats/query.py`.** The builder was at 271
+   lines and the rule is 300; more to the point, this is the one clause whose terms come from a
+   caller, and it is worth reading on its own.
+
+**Alternatives.** *A `key`-only term, with the exact-name rank left in Python* — a partial SQL
+sort plus a Python sort is still a Python sort, and the cap still keeps the wrong rows.
+*Expressing "the exact name first" as a custom stat* — a custom stat is never `cached`, so the
+report would drop off the rollup onto `player_hands` and the lookup would read 54M rows instead
+of a daily rollup. *Ordering by the name half, extracted in SQL* (`substring(player_key,
+position(player_key, ':') + 1)`) — exactly equivalent to the deleted Python, but it is raw SQL
+around a column, which is precisely what rule 3 exists to prevent; the third term orders by the
+whole key instead, which is identical on any single-site pool and orders by `(site, name)` on a
+multi-site one. Measured: the pool holds **one** site and **zero** keys with a second colon
+(§H.4), so the two orders are the same order today, and the difference is recorded here rather
+than discovered later. *Sorting the merged rows in Python after a two-plan report* — it would
+work and it would be a lie: the rows to sort are already the wrong rows, because each plan
+truncated independently.
+
+**Consequences.** `stats/` gains one module and `ReportRequest` one optional field; nothing else
+in the engine changes, and the default clause is byte-identical to today's for every request
+that does not use it. The cache key already hashes the whole request document, so two differently
+ordered reports cannot share an entry — verified. The four `/v1/pool/node/*` routes moved to
+`api/routers/pool_nodes.py` under `pool.py`'s own `PREFIX` and `TAG`, which ADR-062's own
+Consequences called for ("*the next line added there should come with the node routes moving to
+their own router, which is a split the client already draws*"): eleven pool paths, unchanged in
+URL, method, response model, tag and rate limit; `pool.py` falls 299 → 228 lines and the new
+module is 128. `hero.py` already imported `cohort_spec` and `load_cohort` from `pool.py`, so the
+new module does the same and `pool.py` imports nothing back.
+
+---
+
+## ADR-066 — The field's all-in adjusted win rate is its actual win rate, and the registry says so rather than the client
+
+**Status:** accepted · 2026-09-22 · round 8, lane registry · **Constrained by** ADR-039 (all-in
+EV redistributes the pot that was actually awarded, per side pot), ADR-057 (registry words reach
+the screen through one component), ADR-062 decision 8 (one name per number, and a description a
+reader can act on).
+
+**Context.** Round 7's lane A reported from *My game* that `bb_per_100` and `ev_bb_per_100` show
+**the same field number**, and called it not credible. It is credible and it is structural, but
+not in the shape the report guessed, and the difference decides what to do about it.
+
+Measured on the real pool, read-only (§H.1):
+
+| dataset | seat rows | hands | bb/100 | all-in adjusted bb/100 | rows where the two differ |
+|---|---:|---:|---:|---:|---:|
+| hero (every seat) | 118,812 | 19,802 | −6.0610 | −6.0610 | 464 |
+| population (every seat) | 54,443,958 | 9,073,994 | −7.5357 | −7.5357 | 207,904 |
+| hero's own seat (`is_hero = 1`) | 19,802 | 19,802 | **−1.3735** | **+0.2809** | — |
+
+The adjustment moves chips **between the seats of one hand** (ADR-039: each side-pot layer is
+awarded to the best hand among the players eligible for it, then shared out by expected share,
+with `sum(ev_won) == sum(net_won)` per hand — the invariant
+`assert_ev_won_bb_redistributes_the_pot` already asserts on this data). Both datasets hold every
+seat of every hand. So over any row set that is **closed over hands**, the two sums are the same
+sum and the two rates are the same rate. Not approximately: the residual over the whole pool is
+**0.005 bb in 4,102,768.8** — 1.2 parts per billion, from rounding each seat's share to
+`Decimal(18,4)`, on 1,105 of the 101,765 hands that carry an adjustment at all, none of them by
+more than 0.001 bb (§H.2).
+
+**But it is not true of every comparison, and the round-7 note's "for any population baseline,
+for ever" is too strong.** The identity holds exactly while the rows are whole hands. Group or
+filter by something that picks *one seat out of a hand* and the field's two numbers part company
+(§H.1):
+
+| population, grouped by position | bb/100 | all-in adjusted bb/100 | difference |
+|---|---:|---:|---:|
+| BB | −55.4987 | −55.5686 | −0.0699 |
+| BTN | 15.3109 | 15.1471 | −0.1638 |
+| CO | 10.2023 | 10.0797 | −0.1225 |
+| HJ | 7.3820 | 7.6383 | **+0.2563** |
+| SB | −28.2184 | −28.1645 | +0.0538 |
+| UTG | 5.6072 | 5.6533 | +0.0461 |
+
+while a hand-level grouping keeps them identical to four decimals — by stake (NL10 −7.5599 /
+−7.5599, NL25 −7.5240 / −7.5240) and by players dealt in (§H.1).
+
+**Decisions.**
+
+1. **The population baseline for `ev_bb_per_100` stays what it is: the field's own all-in
+   adjusted rate over every seat.** It is a real, correctly computed number — it is not, as the
+   defect report had it, "a baseline that carries no all-in adjustment": it carries the
+   adjustment, and the adjustment nets to zero because the pool holds every seat. Serving no
+   baseline (the way a count grows no comparison, `reports/cell.ts`) was the tempting option and
+   would have been a regression: the comparison is *informative* wherever it is not hand-closed,
+   which is every position, hand-class or stack-depth breakdown a reader is likely to want, and
+   that is exactly where all-in luck by spot lives.
+
+2. **Defining it over "the hero-seat population" is not an option here, because there is no such
+   population.** `marts.player_hands` holds **0** rows with `is_hero = 1` in the `population`
+   dataset (§H.1) — pool exports have no hero seat, which is why `ReportRequest` refuses
+   `hero_only` with `dataset: population` in the first place.
+
+3. **The reason goes in the registry's own words, where every surface already reads them, and
+   nowhere else.** `ev_bb_per_100`'s `description` was one sentence restating its label ("All-in
+   adjusted big blinds won per 100 hands."); it now says what the number actually does:
+
+   > Big blinds won per 100 hands, all-in adjusted; each all-in pot is shared out by expected
+   > share rather than awarded to whoever won it.
+
+   Its `notes` — the "Caveat" line `DefinitionPanel` prints under ADR-057 — now carries both the
+   things a reader cannot otherwise know, ADR-039's un-dealt runouts and this ADR's identity:
+
+   > Where the site settled an all-in without dealing the rest of the board, nothing is
+   > adjusted: nobody gambled, so the actual result stands. Read the number against your own
+   > bb/100 to see how you ran; against the field it says what bb/100 says. The adjustment only
+   > moves chips between the seats of one hand and the pool holds every seat of it, so on any
+   > comparison covering whole hands the field's two rates are one number; they part company
+   > only where a comparison picks one seat out of a hand, and grouped by position they differ
+   > by up to 0.26 bb/100.
+
+   No client learns this by special case (ADR-057, ADR-062 decision 8), and
+   `test_the_all_in_adjusted_rate_explains_its_own_population_baseline` fails if the caveat stops
+   naming the number, the condition, or the case where it breaks.
+
+   **The description is one line on purpose.** Every stat description in the registry is a
+   single-line scalar (17 *dimension* descriptions are folded `>-`; no stat's is), and
+   `web/apps/web/app/hero/words.test.ts` encodes that convention: it reads this very entry out
+   of `money.yaml` with `description: (.+)` and asserts the sentence still contains the words
+   that page uses for the number. A folded description returns `">-"` to that regex. Written as
+   one line containing "all-in adjusted", the test passes untouched — which is the test doing
+   exactly what its own docstring says it is for.
+
+**Alternatives.** *Serve no baseline for `ev_bb_per_100`* — see decision 1; it hides a real
+comparison to avoid a duplicated one. *Drop the stat from the two-tile row on My game* — that is
+the client's composition and not the registry's business, and the number a hero most wants is the
+gap between their own two, which needs both tiles. *Say it in a comment in `money.yaml`* — a
+comment reaches nobody; there is one there too, for whoever edits the file, and the reader's copy
+is in `notes`.
+
+**Consequences.** `make gen` rewrote `dbt/poker_dwh/seeds/stat_definitions.csv` (a stat's
+`description` and `notes` are seed columns); `make gen-check` is green. `GET /v1/definitions`
+serves both fields, so the caveat reaches the browser with the label. Nothing about the engine,
+the query, the mart or the baseline computation changed — this ADR is a decision **not** to
+change them, with the measurement that justifies it recorded beside it. The claim it rests on is
+tested, not asserted: ADR-039's `assert_ev_won_bb_redistributes_the_pot` is the per-hand
+invariant, and §H is the reading of it on the corpus as it stands on 2026-09-22.
+
+### The measurements behind ADR-065 and ADR-066 (§H)
+
+Every number in A and B, re-run on 2026-09-22 against the real ClickHouse, read-only. The pool is
+`user_id = 1`, `dataset = 'population'`: 9,073,994 hands, 54,443,958 seat rows, 94,276 distinct
+player keys plus the anonymized `''`.
+
+**H.1 — the two win rates, and when they differ.** Base query, over `marts.player_hands`:
+
+```sql
+SELECT <grouping>, count() AS n,
+       round(100 * sum(net_won_bb) / count(), 4) AS bb100,
+       round(100 * sum(ev_won_bb)  / count(), 4) AS ev100
+FROM marts.player_hands WHERE dataset = 'population' GROUP BY <grouping>
+```
+
+Ungrouped, and grouped by `stake_level` and by `players_dealt_in`, `bb100` and `ev100` agree to
+four decimals. Grouped by `position` they do not — the table in block B. The hero's own seat
+(`dataset = 'hero' AND is_hero = 1`) reads −1.3735 against +0.2809, which is the number a reader
+of My game actually wants: 19,802 hands run 1.65 bb/100 below all-in expectation. And
+`SELECT is_hero, count() FROM marts.player_hands WHERE dataset='population' GROUP BY is_hero`
+returns exactly one row, `is_hero = 0`.
+
+**H.2 — the residual is rounding, not modelling.**
+
+```sql
+SELECT count() AS hands, countIf(gap != 0) AS with_gap, max(abs(gap)) AS worst, sum(gap) AS total
+FROM (SELECT hand_uid, sum(ev_won_bb) - sum(net_won_bb) AS gap
+      FROM marts.player_hands WHERE dataset = <ds> GROUP BY hand_uid)
+```
+
+hero: 19,802 hands, **2** with any gap, worst **0.002 bb**, total −0.004.
+population, restricted to the 101,765 hands that carry an adjustment: **1,105** with any gap,
+worst **0.001 bb**, total −0.005 — against a net total of −4,102,768.8 bb.
+
+**H.3 — why three characters is still the minimum** (ADR-062 decision 2, unchanged, re-confirmed
+incidentally): the worst three-character fragment tested, `ing`, matches **2,259** keys, well
+inside `MAX_MATCHES` = 10,000, so every match is still counted and the ranking is still a ranking
+of all of them.
+
+**H.4 — the two places the SQL order could have diverged from the Python one, measured.**
+Distinct site halves in the pool: **one** (`ggpoker`, 94,276 keys) plus the anonymized `''`.
+Keys carrying a second colon: **0**. So ordering by the whole key and ordering by the name half
+are the same order on this corpus, and `IN [<site>:<fragment>]` is exactly `_name_of(key) ==
+fragment`.
+
+**H.5 — the ranking itself, old against new, on the real pool.** Two throwaway scripts (in the
+session scratchpad, not the repository) run the deleted `_rank`/`_name_of` pair over the
+unordered query and the new SQL ranking over the same data, and compare the resulting key
+sequences in memory. They print counts and booleans only.
+
+*Ten typed fragments*, including wildcards and a site-qualified one — `abc` (36 matches), `aaa`
+(392), `ing` (2,259), `123` (705), `xyz` (13), `qwe` (51), `poker` (1,403), `0_0` (5), `a%b` (0),
+and `aa` (refused, under the minimum): **every sequence identical**, and the shown top-200
+identical too.
+
+*Eight real names that busier names contain* — found by a join over the pool's own name halves,
+never printed:
+
+| name length | its hands | names containing it | busiest container | matched | same order | exact first |
+|---:|---:|---:|---:|---:|---|---|
+| 4 | 43 | 20 | 2,603 | 51 | yes | yes |
+| 4 | 88 | 16 | 1,171 | 60 | yes | yes |
+| 4 | 646 | 14 | 1,068 | 103 | yes | yes |
+| 4 | 19 | 12 | 1,320 | 48 | yes | yes |
+| 4 | 14 | 11 | 27,196 | 25 | yes | yes |
+| 4 | 1 | 11 | 7,492 | 85 | yes | yes |
+| 4 | 10 | 11 | 3,567 | 27 | yes | yes |
+| 5 | 1 | 11 | 4,820 | 72 | yes | yes |
+
+A name with **one** hand still ranks above a name containing it with **27,196**, in SQL exactly
+as it did in Python. That is ADR-062 decision 3, now done by the database.
+
+**H.6 — the SQL the ranking emits.** For a bare three-character search, on the rollup read
+through its two producers (ADR-047):
+
+```sql
+... GROUP BY player_key
+ORDER BY (s.player_key IN {p1:Array(String)}) DESC, hands DESC, player_key ASC
+LIMIT {limit:UInt32}
+```
+
+`p1` is the seven `<site>:<fragment>` candidates, `p0` the escaped `LIKE` pattern, `limit`
+10,000. `hands` there is the SELECT alias `sum(s.hands)`, which is the same expression as the
+`__hands` column `row.hands` was read from — and ClickHouse's `prefer_column_name_to_alias` is
+0, so it binds the aggregate and not the rollup's own per-day `hands` column. Confirmed both by
+reading the emitted SQL and by the row-for-row equality above.
+
+**H.7 — and it is checked in CI, not only here.** `seeds/hands/ggpoker/ranked_nl25.txt` is a new
+two-hand population corpus of invented names — `Onlooker` sat in one hand, `Onlooker9` and
+`PreOnlooker` in both — so `test_the_database_ranks_the_exact_name_first_then_the_busiest`
+asserts, through the real pipeline and real ClickHouse, that a search for "onlooker" returns
+`onlooker` (1 hand) first, then `onlooker9` (2) and `preonlooker` (2) alphabetically. All three
+ranking terms in one answer. The names were checked against the real pool first: zero of them
+appears in any real key.
+
+---
+
+## ADR-067 — The client stops deciding what the server has already decided: one lookup, one vocabulary, one place each number's caveat is read
+
+**Status:** accepted · 2026-09-22 · round 8, lane F.14 · **Constrained by** ADR-021 (the registry is
+the one vocabulary), ADR-053 (a number typed and a number sent agree), ADR-057 (registry words reach
+the screen through one component), ADR-058 (a real screen name is personal data), ADR-059 (every
+screen and every chooser carries its own sentence), ADR-062 (the lookup and the registry's own
+words). **Supersedes** ADR-057 §3's *reason*, not its outcome.
+
+**Context.** ADR-062 rebuilt three things on the server and left the client on the old ones.
+`/pool/players` still searched through the ordinary report path with a `like '%…%'` it built itself,
+named the seven stats it wanted in a `PLAYER_STATS` constant, and capped the list at a number it
+chose; `stats/vocabulary.ts` still rewrote `5bet_plus` → `5bet+` and read every `''` as "not
+applicable"; and `stat.notes` was kept off the tip for a reason that had stopped being true. Each of
+those is the same shape of defect: **the client asserting something it was not told.** That is what
+made the original route answer "no such player" to every real opponent, and it is worth naming,
+because three unrelated-looking cleanups are one rule.
+
+**Decisions.**
+
+1. **The lookup is `POST /v1/pool/players` and the page holds none of its rules.** `findPlayers(name)`
+   sends `{name}` and nothing else. No `limit`: how many of the matches come back is the route's own
+   default, and the answer carries `matched`, so a number chosen here could only disagree with it.
+   No minimum either — **the Search button is not disabled under three characters.** The page asks,
+   the server refuses with a 400 whose detail is a sentence, and `describeApiError` puts that
+   sentence on screen unchanged. A copy of "three" in the client would be a second number to keep in
+   step with a measurement taken on the real pool, *and it would still be wrong*: the server counts
+   the characters of the **name half**, so `ggpoker:ab` is too short and nothing in the browser can
+   tell. The cost is one round trip on a mistyped search; the alternative is a client that refuses
+   what the server would have accepted, or accepts what it refuses.
+2. **The stats a player is read by come back with the answer.** `PLAYER_STATS` is deleted.
+   `playerReport(key, shown)` takes the `StatMeta[]` the lookup returned and asks for exactly those
+   codes, so the grid under a chosen name shows the columns that name was already listed with.
+   `playerIntroWords` reads the same list: **before a search the page no longer claims what you
+   get.** That is a real loss of a first-visit sentence and it is accepted deliberately — a promise
+   about someone else's list, made before asking, is the shape of claim this whole ADR is about, and
+   `/help`'s catalogue entry (ADR-059) says what the tool is for without pretending to know what the
+   server will send.
+3. **Two sentences the answer earns, and the word in each of them that had to be right.** *How many
+   matched*, printed only when more matched than are shown — with **"at least"**, not "more than",
+   when `matched_capped` makes the count a floor: the route caps its own query at the ceiling, so a
+   capped answer counted *exactly* the ceiling and "more than 10,000" is false when 10,000 matched
+   (ADR-062 §4 gives the floor; the strict inequality would have thrown it away). And *what was not
+   searched*: the empty answer says the site a key starts with is not part of the name.
+   **Both sentences say "matched", never "contains"**, and that is not a style choice. The route
+   lower-cases what was typed and, for a pasted key, splits the site off and matches only the rest —
+   so typing `MAN` matches 1,469 names and not one of them contains `MAN`, and "1,469 names contain
+   “MAN”" would be a false claim about the list underneath it. That is the same shape of untruth
+   ADR-062 removed from the answer, moved up into the sentence over it; the browser found it.
+   Neither sentence contains a number this client computed.
+4. **`Dimension.value_labels` is required on the wire type, and the client's rewrites are gone — all
+   three of them.**
+   `valueWords` asks the dimension and otherwise returns the value as it stands. The `_plus` rewrite
+   ran on every string and turned a pool player called `a_plus_b` into `a+b`; the single global
+   `'' → "not applicable"` gave one phrase to the **ten** dimensions that declare `''` and mean
+   **seven** different things by it. A test pins all ten by name through `valueWords`, so a rule that
+   collapses them again fails with the dimensions it collapsed — pinned through the function and not
+   off the YAML, because the registry file would still be correct.
+5. **What no label can answer keeps its own rule, and there are only two.** A bucket prints its
+   bounds (`bucketWords`, ADR-057 §4). An action line goes through `@poker/ui`'s `lineWords`, which
+   is the one place that knows `''` on a line is "no action yet" — a live path, since all four line
+   dimensions are offered as group-bys, and one that printed "not applicable" until now. A `''` with
+   no dimension at all reads as a dash: visible, and claiming nothing.
+5b. **The third rewrite, and where a sweep for one misses.** `valueWords` and `valueLabel` were the
+   two the step named; a third survived in `@poker/ui`'s `PositionPicker`, which `ClauseValue` routes
+   any enum listing `BTN` and `SB` to — so `opener_position` and `last_raiser_position` never reached
+   `valueWords` at all, and the picker's own `'' → "Not applicable — nobody in that role"` is the
+   exact phrase this lane deleted, on the two dimensions the registry now distinguishes ("Nobody has
+   raised yet" against "No bet or raise yet"). One value, two client-authored words, on one screen.
+   It is fixed by **passing the labels in** — an optional `labels` prop bound to `dim.value_labels` —
+   which keeps `@poker/ui` registry-free: it still takes strings through props and imports nothing.
+   Two boundaries, and the browser moved one of them:
+   - **The chip's own text stays the component's**, and that is a *layout* rule rather than a
+     vocabulary one — a seat button is 2.6rem in a ring of them and "Nobody has raised yet" does not
+     go on one. The short form is on the chip; the meaning is on the hover, where every other seat's
+     meaning already is.
+   - **The caller's word wins on the hover exactly where the component would be guessing, which is
+     `''` and nothing else.** The first cut let a label win everywhere, and in the browser that made
+     `UNKNOWN` read "Unknown" where it had read "An anonymised seat the export does not name" — a
+     *label* bound onto a *definition* surface. The ten real seats have `POSITION_WORDS` and
+     `UNKNOWN` has a sentence; `''` is the one value whose meaning depends on the dimension, so it
+     is the one value the component cannot know. Verified on both: `opener_position`'s blank hovers
+     "Nobody has raised yet" and `last_raiser_position`'s "No bet or raise yet", which is the whole
+     point and what one hardcoded phrase could never do.
+
+   **Two lessons for the next lane.** *Grep for the phrase, not for the function* — a rewrite behind
+   a component the value never routes through is invisible to a sweep of the module that was
+   supposed to own it. And *a label is not a definition*: ADR-057's "the registry owns the word" is
+   about the word a value is **called**, and a surface that answers "what does this mean" may
+   already hold something better.
+6. **`notes` stays off the tip — ADR-057 §3's outcome reaffirmed on a new and measured reason.** Its
+   old reason has gone: `notes` was v1-parity arithmetic written for whoever ported the stat, and
+   ADR-062 rewrote all of them for the reader and moved the porting record to `v1_parity`, which is
+   not on the wire. So the question was reopened, and answered by measuring, on the tree as the
+   round-8 merge will have it: over the **43** stats that carry one, the median `notes` is **136
+   characters** against a median `description` of **49**, and the longest is **550**
+   (`ev_bb_per_100`, rewritten by the registry lane this round; the next longest is 218). Putting
+   one on the tip roughly quadruples it for two thirds of the stats, on a surface that is a hover
+   over a column header — and `RegistryTerm` places that tip against a constant assumption of a
+   five-line box (`TIP_HEIGHT_PX`), which a paragraph quietly breaks, so the tip would start
+   flipping to the wrong side of the word. A tip answers "what is this number"; the caveat answers
+   "why is it not the number I expected", which is a question a reader asks on purpose, on the
+   surface they open on purpose. **What changed is that `DefinitionPanel`'s "Caveat" line is now
+   worth reading** — the panel got better, which is not a reason for the tip to grow.
+   *(The first draft of this decision cited 42 and 218, measured at HEAD before the registry lane's
+   rewrite landed; the adversarial review caught it. The conclusion only got stronger.)*
+7. **A control the page composes needs an anchor the page renders.** `/pool` builds its standard
+   reports out of `PresetButton`s rather than mounting `PresetMenu`, so `[data-testid="report-library"]`
+   — what ADR-059's "Presets and saved reports" attaches to — is never in this page's DOM, and the
+   loudest control on the screen was the one the explainer could not list. The row carries
+   `data-testid="pool-presets"` and its own catalogue entry. The general form of the bug: **control
+   help attaches by DOM presence, so a page that reimplements a component silently loses its
+   sentence, with no error anywhere** — and the existing guard cannot see it, because it greps the
+   entry's `source` file for the anchor string and would pass just as happily on an anchor inside a
+   `v-if` that is false. `pages/pool/index.test.ts` mounts the page and asserts every catalogue entry
+   sourced from it renders, before its data has loaded.
+9. **Two seams where the server's kindness would have been worse than a refusal.** `playerReport`
+   **throws** on an empty stat list rather than sending one, because `stats/resolve.py` reads
+   `request.stats or DEFAULT_STATS` — an empty list is not an error there, it silently becomes five
+   other stats, and the grid would show numbers the lookup never named under a sentence promising
+   the seven it did. And `valueWords` reads `dim.value_labels ?? {}`: the field's only source is a
+   live `/v1/definitions`, so an API process older than the web build (an old `make api` left
+   running across a pull) does not send it, and `Object.hasOwn(undefined, …)` throws *inside a
+   render* — taking out the whole filter bar or grid, where the old code merely printed a raw code.
+   The TypeScript `required` is a statement about the server's contract, not a guarantee about the
+   process answering today.
+
+**Alternatives.** *Disable Search under three characters* — one fewer round trip, and a second copy
+of a measured constant that cannot be right anyway (decision 1). *Keep `PLAYER_STATS` for the intro
+alone* — the same seven in two places, which is how they drift. *Make `value_labels` optional with a
+fallback* — a fallback is a guess, and guessing is precisely what produced `a+b`. *Show `notes` on
+the tip now that it reads well* — measured against, decision 6. *A text test over `pages/pool/*.vue`
+instead of mounting* — cheaper, and blind to the `v-if` case that is the actual failure.
+
+**Consequences.** `pool/stats.ts` loses `searchPlayers`, `likeLiteral`, `PLAYER_STATS` and
+`PLAYER_LIMIT`; `pool/words.ts` no longer imports from it. Every `Dimension` fixture in the
+workspace carries `value_labels` (nineteen test factories and literals) — ten of them were `as
+Dimension` casts, which typecheck happily with the field missing and fail at runtime instead, so a
+green `nuxt typecheck` was not evidence here and the suite was run. `/pool` and `/pool/players` have
+unit tests for the first time, and `e2e/pool-lookup.spec.ts` visits both.
+
+---
+
+## ADR-068 — The defending set on the replayer belongs to the seat that has to answer the bet, not to the seat the node is named for
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Answers** the question round 7 refused to guess at (`scratchpad/lane-analyzer.docs.md`, F.12c's
+list) · **Constrained by** [ADR-032](#adr-032) (`nodeKeyAt` gives the situation a step is in).
+
+**Context.** `HandStudy.vue` mounted `MDFPanel` with `:range="mine"` and no `:equities` at all, so
+the panel's "The defending set appears when the equities have been computed." was permanent on
+`/hands/[id]` and `/hands/paste`, and `mdf-show` could never render — while `EquityCalculator`
+three lines below was already computing exactly the array that was missing. Round 7 left it because
+`/lab` pairs `:range="villain"` with `perComboEquityVillain` while the replayer passed hero's own
+chart, and which array belongs with which range is a correctness question, not a prop to fill in.
+
+**It is the wrong range, and filling in `perComboEquity` would have printed a confident wrong
+number.** The two halves of that panel come from two different seats:
+
+- the pot and the bet are `state.pot` and `state.toCall`, and `toCall` is reckoned **for the seat
+  of the next action** (`poker-core/src/hand/replay.ts#toCallFor`, `hand/types.ts`: "the seat the
+  *money* of the next step belongs to");
+- `mine` is the stored chart at `nodeKeyAt(hand, index)`, whose hero is **the seat that just
+  acted** (`hand/node.ts`: "the sequence ends with hero's own action").
+
+At any step where anything is faced those are never the same seat, so `mine` is the **bettor**.
+MDF is the defender's obligation (`metrics/defend.ts`, and `explainMdf` says "…equity against the
+betting range"), so the panel was being asked what share of the *betting* range continues against
+its own bet.
+
+**Decisions.**
+
+1. **The defender is `state.toAct`, and its range is `ranges.villain`** — the other seat's own most
+   recent node (`hands/panels.ts#villainStep`). Because `both` goes into `EquityCalculator` as
+   `[mine, villain]`, and `perCombo` is `[ranges[0], ranges[1]]` (`equity/exact.ts`,
+   `equity/montecarlo.ts`), the array that pairs with it is **`perComboEquityVillain`** — the same
+   pairing `/lab:171` and `dev/components.vue:141` already make, and the same one `Step9Deviation`
+   makes with `ctx.spot.villain`. HandStudy's existing `equity` ref already held it; nothing had to
+   be fetched.
+   *Rejected:* `:range="mine"` with `perComboEquity` (the bettor's own defending set against its
+   own bet); passing `villain` unguarded (decision 2).
+
+2. **The pairing is guarded, because three-handed it is not always available.** With a fold between
+   the bet and the defender — button bets, small blind folds, big blind to act — `villain` is a
+   *third* player's range, and computing a stranger's defending set is worse than computing none.
+   `defenderRange` is `villain` only while `ranges.villainNode.hero_position` is the position of
+   `state.toAct`; otherwise it is `null`, MDF and alpha stay (they are pot arithmetic and always
+   true), and `study-mdf-no-chart` says which chart it would need.
+   *Verified on `GG_HAND`:* state 10 (hero SB has bet the flop, button to act) pairs; state 7
+   (small blind has 3-bet, big blind to act, the other seat's last node is the *button's* open)
+   refuses.
+
+3. **The panel is told whose obligation it is, on the page rather than in the component.**
+   `study-mdf-whose` reads "What BB has to defend against it — not what the seat that bet is
+   holding." `explainMdf`'s own "continue with X% of the range" never names a seat and is in
+   `poker-ui/src/explain.ts`, outside this lane; `/lab` solves it the same way, with a heading.
+   *Rejected:* a `defenderLabel` prop on `MDFPanel` — it duplicates what the page can say, and
+   `MDFPanel.vue`'s props already document the contract correctly ("The range that faces the bet").
+
+4. **"Show on the matrix" is given somewhere to land.** Wiring the range without `@defend-click`
+   would have traded one dead control for another — the exact class of defect F.12a and round 7
+   were fixing. The combos come back into `study-defend-matrix`, a `RangeMatrix` of the
+   **defender's** range with them ringed (hero's grid would be the wrong one), and they are dropped
+   at the next step beside the exported text, for the same reason: they are the answer to *this*
+   bet.
+
+**No change to `MDFPanel.vue`.** Its contract was already right; the call site was wrong. That
+leaves this lane with no file in `packages/poker-ui/` at all.
+
+**Consequences.** `/hands/[id]` and `/hands/paste` can now show a defending set, which they never
+could. It needs both charts stored *and* the guard to pass, so it is absent more often than not —
+which is why the absence has a sentence.
+
+---
+
+## ADR-069 — A trainer failure is worded as this browser's, because that is what it is
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Closes** [ADR-061](#adr-061)'s "Found and not taken" ·
+**Constrained by** [ADR-057](#adr-057) decision 8 (a failure is a sentence that says what to do).
+
+**Context.** `train/session.ts` passed a thrown error to `describeApiError` — a function written for
+HTTP failures, on pages that make no HTTP call. Three of its branches are unreachable there (401,
+5xx, a bare status), its silent fallback is "The API did not answer. Start it with `make api`" —
+the one sentence `apps/web/README.md` says must never appear on a trainer — and the branch that did
+fire prints `${name}: ${message}`, so the reader met a class name where a sentence belonged.
+`AdvantageTrainer.vue` had been given the same function by round 7 and had the same defect.
+
+**Decisions.**
+
+1. **`train/problems.ts`**: `reasonOf(error)` (the message, as a sentence, never the class name),
+   `localProblem(lead, error)`, and the three constants. **It is not the third home ADR-061's
+   follow-up warns about.** `hands/study.ts` and `analyze/problems.ts` both word *a call that
+   failed*; this words *a calculation that did not finish*, which is a different fact about the
+   world and needs a different sentence: there is nothing to retry on a server, and nothing to wait
+   for.
+   *Rejected:* a `describeLocalFailure` beside `describeApiError` in `auth/api.ts` — it puts the
+   trainers' wording in the auth module, and `auth/api.ts` is out of this lane anyway.
+
+2. **Every trainer failure carries `IN_THIS_BROWSER`**: "Every answer here is worked out in this
+   browser rather than on the server, so nothing about the API is the cause." A reader meeting one
+   of these with the API deliberately stopped — a supported way to use `/train` — must not go
+   looking for a server.
+
+3. **The class name goes; the message stays.** `pages/train/index.vue:37`, round 7's own
+   local-failure sentence, already dropped the class and kept the message, and
+   `AdvantageTrainer.test.ts` pins that the thrown message reaches the reader. The gate and the
+   panel now read as one voice, differing only in their lead.
+
+4. **`session.test.ts` asserts the sentence.** Its only assertion on this path was
+   `not.toBe('')`, which passed while the gate read "Error: the equity service was asked for
+   nothing" — so the defect was not merely untested, it was *silently* untested.
+
+**Out of lane, and taken anyway:** `apps/web/app/train/` is a sibling of `app/components/train/`
+and `app/pages/train/`, neither of which contains `session.ts`. It is two files —
+`train/problems.ts` (new) and one line of `train/session.ts` — and the item cannot be closed
+without them. Named here the way round 7 named `RangeComparisonPanel.vue`.
+
+**Left, and said plainly:** a Worker whose module fails to load never settles, so
+`PredictionGate` still shows "Working out what actually happens here…" for ever in that one case.
+No wording reaches it; the fix is a rejection on the Worker's `error` event in
+`composables/useEquityService.ts`, out of this lane. **Any claim that the trainers' forever-gate is
+closed would be false.**
+
+---
+
+## ADR-070 — A range weight is a finite float32, and a weight that rounds away says so
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Amends nothing; declines** the item as reported (see below).
+
+**Context.** The round-7 note reported "the combo-notation parser does not trim entries", evidenced
+by `POST /v1/ranges` refusing `AsAh: 1, AsAd: 1` with `entry 2 (' AsAd: 1') is not combo notation`.
+
+**The premise is false, and the defect it points at is not a defect.** `splitEntries` strips *all*
+whitespace from every entry before anything looks at it (`formats/combo.ts`), so
+`parseRange('AsAh: 1, AsAd: 1')` parses cleanly — and `formats.combo.test.ts` has pinned exactly
+that since it was written (`parseComboFormat('AsKh: 1, AsAs: 1')` reports its entry as `AsAs:1`,
+already trimmed). The rejection comes from `platform/api/schemas_ranges.py#check_weights`, which
+splits on `,` without `.strip()` and matches a strict canonical regex **deliberately**: its
+docstring says "Accept only `poker-core`'s canonical combo text", the module says why ("so a broken
+client cannot store garbage that every later page fails to parse"), and
+`platform/tests/test_ranges_schemas.py` pins that exact message for that exact string. Every client
+path into `POST`/`PUT /v1/ranges` sends `serializeRange(range, 'combo')` output — the folder import
+(`ranges/review.ts`), the range editor (`pages/ranges/[id].vue`), the analyzer's seat panel
+(`components/analyze/SeatRange.vue`) — and the backup importer re-parses a file's `weights` through
+`parseRange` before anything is sent, so a hand-edited backup with `", "` is safe too. **No
+reachable client can produce the reported failure**; it is what a hand-written `curl` gets, which is
+the contract working.
+
+**What is real, and is in this lane.** The weights are float32 and `Number.parseFloat` is a double,
+so a literal past 3.4e38 — `AsKh: 1e999`, or a solver export with a runaway number — arrived as
+`Infinity`, sat in the range unremarked, and serialized as `AsKh: Infinity`. That is **not combo
+notation**, so the save failed at the server with "entry 1 ('AsKh: Infinity') is not combo notation"
+— the API accusing the client of garbage the client's own serializer had written. Measured, not
+reasoned: `serializeComboFormat(parseComboFormat('AsKh: 1e999').range) === 'AsKh: Infinity'`.
+
+**Decisions.**
+
+1. **A non-finite weight is refused at the paste box**, in both notations (`combo.ts` and
+   `classes.ts` share one reason string), with the entry number and a sentence about the weight —
+   not about notation. Both write into the same float32 weights and both are serialized as combo
+   text before anything is stored, so one guard would have been half a guard.
+2. **A positive weight that rounds to zero is a warning, not a refusal.** Below ~1.4e-45 a float32
+   holds nothing, the combo leaves the range, and it is gone from the serialized text — so parsing
+   an export of it would not give the range back. Said, in the shape the existing warnings use.
+3. **The cross-language contract is pinned in TypeScript** (`formats.combo.test.ts`, "what the
+   server will accept"): every entry the serializer emits must match a transliteration of
+   `schemas_ranges.py#COMBO_ENTRY`, over the 1326-entry fixture plus the awkward weights
+   (`1e-7`, `0.333`, `1.005`, `3.4e38`). It is the only defence that can live on this side of the
+   boundary, since the Python regex is out of lane.
+   *Rejected:* a `canonicalComboText` export — `parseRange` + `serializeRange` already is that
+   helper and every caller already uses it; a third name would have no caller. *Rejected:* relaxing
+   `check_weights` with a `.strip()` — out of lane, contradicted by its own docstring, pinned by its
+   own test, and it would store a body byte-different from what the client sent, weakening the
+   round-trip guarantee `formats.combo.test.ts` opens with.
+
+**For whoever owns `platform/api/`:** if the founder does want the endpoint permissive for
+hand-written requests, the change is `entries = [e.strip() for e in text.split(",")]` at
+`schemas_ranges.py:47` plus moving one case in `test_ranges_schemas.py` from the reject list to the
+accept list — and it should strip *and normalise*, not merely accept. This lane recommends against
+it.
+
+---
+
+## ADR-071 — A range is counted as the board leaves it, in the numerator and in the denominator both
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers · **changes graded answers** ·
+**Constrained by** [ADR-053](#adr-053) (the definition a number is graded by).
+
+**Context.** Round 7 left step 3 as an open question: its two distribution panels let a careful
+reader read off villain's top-pair-or-better share before answering. Settling that turned up
+something worse underneath it.
+
+**`analyze/reveals.ts` divided a live numerator by a dead total.** `classifyCombos` refuses to
+classify a combo holding a board card — it is not a hand anybody can have — so those combos could
+never reach the numerator; but `topPairOrBetterShare` and `classPercentile` both divided by
+`weightedCombos(range)`, the range as written down. The answer was therefore smaller the more of
+the range the board blocked, and it disagreed with the `ComboDistributionPanel` drawn beside the
+question on the same screen, which removes the board first (`distribution/tree.ts`). Nobody chose
+that: it is one bug in three functions. `combosRemoved` had the same shape from the other side,
+counting a combo the board had already killed as one hero's hand removed.
+
+**Decisions.**
+
+1. **Every reveal counts the range the board leaves.** `topPairOrBetterShare`, `classPercentile`
+   and `combosRemoved` take the live range; `combosRemoved` gained a `board` parameter for it.
+   (`flushDrawCombos` was already right — `classifyCombos` had been doing the removal for it.)
+   *Rejected:* fixing step 3 alone (it would leave `reveals.ts` internally inconsistent, and steps
+   5 and 7 wrong in the same way); wording the divergence instead of fixing it (the page would be
+   explaining an arithmetic nobody would defend).
+
+2. **This re-grades saved answers**, and that is the cost. A stored analysis keeps its prediction;
+   the `actual` beside it is recomputed on open, so a reopened step 3, 5 or 7 shows a number a few
+   points different from the one it was scored against. Measured on the shipped examples: step 3's
+   answer moved 17.5 → 21.4 / 16.0 → 18.0 / 15.6 → 18.7 points, and on a wide range against a
+   blocky board the old figure was **nine points** out. **One lesson changed with it**: `AhKd` on
+   K♥9♦4♠ moved from the 68.6th percentile of the button's range to the 78.6th, so example 1's
+   step 7 reveal is now `value` rather than `protection` — which is the better answer, and
+   `examples.test.ts` caught it rather than a reader.
+
+3. **Step 3 hides nothing** — it is step 5's case, not step 4's, and `gates.test.ts` now says so
+   where round 7 stated the rule for steps 5 and 8. A reader *can* add the made-class rows at or
+   above "Top pair" in the villain panel and reach exactly the graded figure — **more** exactly
+   since decision 1. But step 3 is titled "Bucket both ranges on the board", its purpose is "Count
+   what each range actually hit — by made-hand class, side by side", and its hint is "Count the
+   classes, not the feeling": the panel is the instrument the step hands the reader for the
+   counting it asks for. Withholding it would make the step's own hint a lie and leave nothing to
+   work with — ADR-061 decision 3's test for step 5, applied. What stays withheld is what always
+   was: `step3-comparison`, the sentence that states the share in words, which is the one summary
+   arithmetically equal to the graded figure.
+   *Verified in a browser:* on `/examples/their-board-second-pair` the villain panel's rows at or
+   above Top pair sum to 26.5%, and the gate grades 26.5%. Before decision 1 they would not have.
+
+**Follow-up not taken:** `reveals.ts`'s own docstrings now describe the live range, but
+`steps.ts`'s question ("What percentage of villain's range is top pair or better?") still says
+"range" without saying which. It is the right word for a player and it was not worth the sentence.
+
+---
+
+## ADR-072 — Fact 4 binds the seats, not the number of examples
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Amends** [ADR-050](#adr-050) follow-up 5.
+
+**Context.** ADR-050 follow-up 5 says "A fourth and fifth example need a reference chart the set
+does not have", citing its own fact 4: `btn_rfi` against `bb_call_vs_btn` is the only pair of the
+eight charts in which the caller's chart *is* the range that reaches the flop.
+
+**Fact 4 is true and the follow-up does not follow from it.** Fact 4 constrains the **seats and the
+preflop line**. An `Example` is six content fields of which only two are chart ids; `exampleSteps`
+writes the board, hero's cards and the bet size per example. The honest pair therefore supports as
+many spots as there are boards, hands and sizes. The set was three because nobody had picked a
+fourth board, not because a fourth needed a chart. What a fourth example *does* need is something
+to teach that the three do not, and there were two such gaps:
+
+- **`roleOf` has four answers and the set reached three.** After ADR-071 they are value (ex 1),
+  semi-bluff (ex 2) and give-up (ex 3); **protection** was reachable by no example.
+- **`explainHitShares` has two branches and the set reached one.** The three shipped boards give
+  gaps of 1.5, 0.1 and 1.6 points against an `EVEN_HIT_MARGIN` of 3, so every example says "it hits
+  both about as hard" — step 3's whole point, who the board favours, was never demonstrated.
+
+**Decisions.**
+
+1. **A fourth example, `their-board-second-pair`**: the same two ranges on **8♠ 6♦ 5♣**, hero
+   **Q♥ 6♥**, a half-pot bet. Measured against the real charts: the big blind is top-pair-or-better
+   **26.5%** against the button's **21.6%** — a **4.9-point** reversal, the largest caller-ahead
+   board of all 286 unpaired rainbow rank-triples and the only one clearing the margin with room —
+   so step 3 prints "the board hits their range harder" for the first time. Q♥6♥ is second pair with
+   no draw at the 69th percentile of its own range: `roleOf` returns **protection**, the fourth of
+   four. Rainbow, so step 5 asks the default question rather than a third flush-draw repeat.
+   *The id is deliberately not a word-order flip of `range-ahead-hand-behind`*: `/examples/<id>` is
+   a public URL that `tour.ts` and the tool catalogue resolve by literal string, and `exampleById`
+   answers a typo with the *other* example rather than with null.
+   *Rejected:* a pot-sized bet with a set on the same board, which would have demonstrated step 8's
+   own stated ratio (`alpha(1,1) = 0.5`, "one bluff for every two value hands") — but betting the
+   pot with a set is a different lesson, `value` was already covered, and the story has to be a
+   spot somebody would actually play. *Rejected:* a different hand on the seed board — it reaches
+   the role gap but not step 3's branch, and makes one hand carry two examples.
+   *The `teaches` makes no claim about who is ahead in nuts or in equity*: both ranges hold
+   straights on 8-6-5 and the caller holds twice as many, so "the best hand either of you has"
+   would have been false. What `classPercentile` measures is the top of **your own** range, and
+   that is what the sentence says.
+
+2. **`HONEST_PAIRS` is exported and asserted.** The existing guard checks that each chart is written
+   for its *seat*, which `utg_rfi` against `bb_call_vs_btn` would pass — and that is a range the big
+   blind never calls an under-the-gun open with. Fact 4 is now a list in `examples.ts` with fact 4
+   as its doc comment, and `examples.test.ts` checks every example against it. Four lines, and it is
+   what stops a fifth example landing on a pair fact 4 forbids.
+
+3. **Four pieces of prose that hardcoded "three" now say four**, and one that was loose is fixed:
+   "Compare the three examples: the ranges never change, only the board does" is now "…the ranges
+   never change; the board and the hand you hold do", which was already true of the three.
+   `examples.test.ts`'s 3-to-5 bound, spec §13's own range, is untouched. The examples index grid
+   goes to four columns to match the welcome strip, which was already built for four.
+
+**Follow-up, recorded rather than left implied:** ADR-050 decision 5 claims example 1's node
+reproduces seed hand #245678901235 "byte-for-byte through `nodeKeyAt`". It checks out field by field
+by hand, and **nothing pins it** — `examples.test.ts` asserts the cards, the flop and the size
+against the seed text, not the node key, and the web suite cannot assert it because there is no
+PokerStars parser in JavaScript. Pinning it needs a committed `ReplayHand` JSON fixture under
+`packages/poker-core/test/fixtures/`, which is outside this lane.
+
+---
+
+## ADR-073 — An empty state with no data to offer may offer a worked example, and names one spot rather than the index
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Closes** [ADR-050](#adr-050) follow-up 3 · **Supersedes** one sentence of
+[ADR-057](#adr-057) decision 7.
+
+**Context.** ADR-050 follow-up 3 asks for "Try an example" links in the empty states the audit §2.4
+lists (`/hands`, `/analyze`, `/ranges/compare`, the report workbench). The reason none exists is in
+ADR-057 decision 7's own words: "Never a route that does not exist: the Examples and the tour are
+lane E's and are not linked from here." **That constraint has lapsed** — both routes exist and are
+`public: true`. The rule itself is unchanged: one way in *that exists*, and the count was never the
+prohibition (the shipped `/hands` state already offered two).
+
+**The blanket version is declined, with evidence.** Every tool in the catalogue declares an example
+and `ToolCard` renders it as "See it worked through: …" inside `PageHelp`, which `app.vue` mounts
+above *every* page and which opens by itself on a reader's first visit to that tool — so on the one
+visit where an empty state is most likely, a link to that page's own example is already on screen.
+And `/examples` is a permanent nav item, so an empty state linking the *index* offers the chrome
+back. Sixteen empty branches were opened across this lane's files; fourteen want nothing.
+
+**Decisions.**
+
+1. **A new `EMPTY_ACTIONS.example`**, in the shared vocabulary that exists "so two screens cannot
+   label the same way out differently", pointing at **`/examples/top-pair-dry-board`** — the spot
+   the `hands` and `analyses` tools both already declare. Label: **"Try an example"**, the spec's
+   own phrase, which `ToolCard`'s sentence lead-in ("See it worked through:") is not competing with
+   — one is a button, the other a clause.
+
+2. **Two states take it, and only those two.**
+   - `/analyze`'s `analyses-empty`: both existing ways in start at a hand, and an account with no
+     analyses usually has no hands either — `/hands` is empty for it and pasting needs hand-history
+     text it may not have. The example needs neither and, since ADR-061, opens all nine steps. It
+     also makes the page agree with `help/tools/analyze.ts`, which already says "Start from a hand,
+     or from an example." The id is read from the tool entry, so the two cannot drift.
+   - `/hands`' **nothing-stored** branch only. Not the narrowed branch: there the reader has hands
+     and wants them widened, and a link away from their data is noise. Not the pool branch: an
+     example is not a hand somebody else played.
+
+3. **The six analyzer step branches are declined decisively**, not as a judgement call: those
+   components are mounted **by `/examples/[id]` itself** (ADR-050 decision 3), so a link inside them
+   would, on that page, point at the page rendering it. Each already names its way in, and that way
+   in is a step on the same rail.
+
+**Two empty states with no way in at all, found while counting and fixed** (ADR-057 decision 7, not
+the examples question):
+
+- `HandStudy.vue`'s `study-no-villain-range` — "No stored range for …, so there is nothing to run
+  the equity against yet", with nothing to do about it. The audit named this exact line. It now
+  carries the `/ranges/import` link its sibling three lines above already had, and says what
+  follows from it (the equity, the defending set and the realization).
+- `HeuristicLog.vue`'s `heuristics-empty` — "finish an analysis and adopt it" named a noun and
+  linked nowhere. It links `/analyze`. **Not an example:** nothing an example does is saved, so its
+  ninth step cannot put a line in this log, and pointing here at one would promise what it cannot
+  deliver.
+
+**Stays open, and belongs to other lanes:** `/ranges/compare` (`ranges/compareEmpty.ts`) and the
+report workbench (`reports/emptyState.ts`'s grid views) — the other two pages follow-up 3 names.
+Both are read by somebody who already holds data, so the case there is weaker than on `/analyze`.
+
+**Out of lane, and taken:** `reports/emptyState.ts` (the shared action) and `hands/emptyState.ts`
+(one array entry and one clause). The in-lane alternative — splicing the action into the view
+inside `pages/hands/index.vue` — would put a user-facing label in a template, which is the exact
+drift that module was written to prevent.
+
+---
+
+## ADR-074 — A control that renders as a control does something
+
+**Status:** accepted · 2026-09-22 · round 7 leftovers ·
+**Closes** the UX audit §2.1 bullet "Controls that render editable and do nothing".
+
+**Context.** The brief carried this as "PotOddsTrainer.vue is the other half of the bullet". **It is
+not: that half was closed by F.12a** (`a60611e`) and the audit's own §1b block says so ("the panels
+on `/hands/[id]` and the trainers became editable, `useEditableOdds` — §2.1's first bullet is stale
+as written"); only §2.1's un-updated prose still names the file. Verified in a browser, not taken on
+the audit's word: typing `2` into the bet moves MDF from 39.8% to 69.2%, both panels share the
+numbers, "These are your numbers now, not the spot's" appears with its reset, and the reset restores
+39.8%. `useEditableOdds.test.ts` already carries a mounted-trainer suite.
+
+**Three live instances were found instead**, all in this lane, none previously recorded:
+
+1. **`BlockersTrainer.vue`** — `BlockerPanel` gives every ranked row `cursor: pointer`, a hover
+   highlight and a `comboSelect` emit; mounted with neither the listener nor `selectedCombo`, the
+   whole reveal table advertised itself as clickable and answered a click with nothing. A clicked
+   row is now pinned in the table and ringed on **hero's** grid (the rows are hero's candidates; the
+   second matrix is villain's continuing range), and a new spot starts unpinned. The trainer had no
+   test at all, which is why nothing caught it; it has one now.
+2. **`Step8ValueBluffs.vue`** — the same panel, the same omission. A pinned row lets a reader hold
+   one candidate still while reading the rest. It changes no input and nothing graded.
+3. **`Step3Buckets.vue`** — both `ComboDistributionPanel`s took a literal `['made','draw']` with no
+   listener, so all four axis checkboxes ticked and nothing regrouped, and Export CSV did nothing
+   whatever: the same defect F.12 fixed on the replayer, surviving in the analyzer. **The two panels
+   share one axis choice**, because the step *is* the comparison and two differently cut trees are
+   not side by side in any useful sense. Export hands the text back in a `<details>`, as `/lab` and
+   the replayer do, because a download is inert in this app's sandbox.
+   *Verified:* ticking `structure` on one panel regrouped both; ticking `equity`, which this step
+   computes no equities for, printed the panel's own "This grouping cannot be drawn: the equity axis
+   needs per-combo equities. Untick that axis to read the rest of the tree." — which is what a
+   checkbox that cannot be honoured should do, and is why binding them is right even for the two
+   axes that cannot always be served.
+
+   **Binding Export brought a staleness of its own, and it is guarded.** `HandStudy.vue` drops its
+   exported text on every step change, with a comment saying why: the text is about the range it
+   was taken from and must not sit under the next one's heading. Step 3 had no equivalent, and its
+   stale window is *worse* than the replayer's — dealing a new flop is this step's **own** control,
+   so the reader never leaves and no remount closes it. `watch(board, …)` drops it; the axes are
+   the reader's choice and deliberately survive. Mutation-checked: removing the watch turns the new
+   `Step3Buckets.test.ts` case red. Found by a neighbouring lane's sweep for exactly this shape —
+   a result that outlives the question it answered — and it was **this lane's own new code**.
+
+**The root cause is out of lane and stays open.** `BlockerPanel.vue` advertises pointer and hover
+*unconditionally*, whether or not a host binds the listener, so the next unbound mount will lie
+again. The proper fix is in the component — a `selectable` prop, or gating the cursor on whether a
+listener is attached — and only `MDFPanel.vue` was in this lane's reach. Three call sites are bound
+instead.
+
+**Not taken, and why.** `Step5Blockers.vue` has the same unbound rows, and wiring them would let a
+table row overwrite `hero_cards`, which is that step's **graded input** — and `selectedCombo` there
+is deliberately withheld until the commit (ADR-061). Changing what a graded step's input responds to
+needs its own decision, so the rows there stay read-only and the honest fix is the out-of-lane one
+above. `RangeMatrix` in `mode="view"` emits an unhandled `cellClick` in four trainers and is **not**
+a finding: it sets `cursor: default` for view mode, so it advertises nothing. That contrast — does
+the element *say* it is a control? — is the test this ADR uses.
