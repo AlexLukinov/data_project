@@ -17,6 +17,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.main import app
+from core.ids import UID_MATCH
 from core.settings import get_settings
 from ingestion import sinks, worker
 from ingestion.clickhouse import clickhouse
@@ -81,7 +82,9 @@ def _raw_key_of(hand_uid: str) -> str:
         clickhouse()
         .query(
             f"SELECT raw_object_key FROM {get_settings().db('core')}.hands FINAL "
-            "WHERE hand_uid = {uid:String} LIMIT 1",
+            # The id arrives as the API's hex; `core.hands` keys on the 16 raw bytes, and
+            # comparing the two is silently false rather than an error (plan B.5b).
+            f"WHERE {UID_MATCH.format('', 'uid')} LIMIT 1",
             parameters={"uid": hand_uid},
         )
         .result_rows

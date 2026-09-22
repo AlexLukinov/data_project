@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from core.enums import Site
+from core.ids import uid_bytes
 from core.schema import ACTIONS, HANDS, PLAYERS, TABLES, WINNERS, RowContext
 from core.schema.staging import render_staging_model
 from ingestion.loader import to_rows
@@ -69,7 +70,27 @@ def test_winner_rows_carry_the_hand_provenance(stars_edge_text: str) -> None:
     hands = _hands(stars_edge_text)
     _, _, _, winners = to_rows(hands, tenant_id=4)
     uid_at = WINNERS.column_names.index("hand_uid")
-    assert {w[uid_at] for w in winners} <= {h.hand_uid for h in hands}
+    assert {w[uid_at] for w in winners} <= {uid_bytes(h.hand_uid) for h in hands}
+
+
+def test_every_table_writes_hand_uid_as_sixteen_raw_bytes(stars_edge_text: str) -> None:
+    """The write half of the B.5b boundary: the model carries hex, `core.*` takes the bytes.
+
+    Asserted on all four tables at once because the column is declared once
+    (`core.schema.base.hand_uid_column`) and a regression would be silent -- ClickHouse takes
+    a 32-character hex string into a `FixedString(16)` by refusing it, but a Python `str` of
+    16 characters would be accepted and would be the wrong hand.
+    """
+    hands = _hands(stars_edge_text)
+    rows_per_table = to_rows(hands, tenant_id=4)
+    expected = {uid_bytes(h.hand_uid) for h in hands}
+    for spec, rows in zip(TABLES, rows_per_table, strict=True):
+        assert spec.types()["hand_uid"] == "FixedString(16)", spec.name
+        uid_at = spec.column_names.index("hand_uid")
+        written = {row[uid_at] for row in rows}
+        assert written, spec.name
+        assert all(isinstance(uid, bytes) and len(uid) == 16 for uid in written), spec.name
+        assert written <= expected, spec.name
 
 
 def test_generated_staging_models_are_current() -> None:

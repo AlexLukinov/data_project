@@ -24,7 +24,7 @@ with flop as (
 
     select
         user_id,
-        toFixedString(unhex(hand_uid), 16)                        as hand_uid,
+        hand_uid,
         played_at_utc,
         src_parsed_at,
         [board_flop_1, board_flop_2, board_flop_3]                as f,

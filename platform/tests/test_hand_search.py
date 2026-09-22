@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from core.ids import is_hand_uid
 from stats.errors import ReportError
 from stats.hands import HandRef, find_hands, hand_search_sql
 from stats.request import HandSearch
@@ -113,3 +114,19 @@ def test_find_hands_returns_refs_in_query_order() -> None:
         HandRef(hand_uid="a", seat=3),
         HandRef(hand_uid="b", seat=5),
     ]
+
+
+def test_is_hand_uid_accepts_only_a_32_char_lowercase_hex_id() -> None:
+    """The guard that keeps a typed URL a 404 instead of a 500 (plan B.5b).
+
+    `UID_MATCH` matches with `toFixedString(unhex(x), 16)`, and ClickHouse raises
+    TOO_LARGE_STRING_SIZE for anything over 16 bytes -- measured, an over-long id came back
+    as a 500 before this existed.
+    """
+    good = "443598d28c517810ff2ffbe4b2cef6f4"
+    assert is_hand_uid(good)
+    assert not is_hand_uid(good * 2), "over-long is what raised TOO_LARGE_STRING_SIZE"
+    assert not is_hand_uid(good[:31]), "short"
+    assert not is_hand_uid(good.upper()), "hex() is upper-case; our ids never are"
+    assert not is_hand_uid("zzzz"), "not hex"
+    assert not is_hand_uid(""), "empty"

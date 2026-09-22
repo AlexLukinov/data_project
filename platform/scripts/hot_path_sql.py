@@ -17,8 +17,9 @@ runs it with the three parameters bound.
 
 The batch is identified by its stamp rather than by hand ids because `parsed_at` is stamped once
 per ingest batch, reaches every staging view as `src_parsed_at`, and is the one column every call
-site of the gate carries in the same form -- `hand_uid` is the hex string in staging and a
-`FixedString(16)` after `hand_arrays()`. The partitions are passed as well, for the pruning the
+site of the gate carries in the same form -- while `hand_uid`, a `FixedString(16)` from `core.*`
+onwards since plan B.5b, is not a stamp and cannot say which hands a batch was.
+The partitions are passed as well, for the pruning the
 gate gets: filtering `staging.stg_hands FINAL` by stamp alone costs 1.1 s on a 9M-hand tenant,
 with the partition 4 ms (measured on the real database, 2026-09-14).
 """

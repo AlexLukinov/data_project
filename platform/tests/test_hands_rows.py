@@ -8,7 +8,6 @@ from decimal import Decimal
 from api.hand_query import action_from_row, detail_from_rows, summary_from_row
 
 HAND = {
-    "hand_uid": "abc",
     "site": "pokerstars",
     "site_hand_id": "1",
     "played_at_utc": datetime(2026, 8, 18, 16, 46, 10, tzinfo=UTC),
@@ -50,7 +49,8 @@ def test_detail_reads_every_field_by_name() -> None:
         "to_call": Decimal("0"),
         "is_allin": 0,
     }
-    detail = detail_from_rows(HAND, [player], [action])
+    detail = detail_from_rows("abc", HAND, [player], [action])
+    assert detail.hand_uid == "abc"
     assert detail.board == ["Ah", "Td", "7c"]
     assert detail.players[0].is_hero is True and detail.players[0].won_hand is True
     assert detail.players[0].starting_stack == 50.0

@@ -4,6 +4,12 @@ The dedup key is what makes re-uploading a file free and what lets an at-least-o
 consumer be safe. It must be **deterministic** — the same hand parsed twice, by two parser
 versions, on two machines, must produce the same `hand_uid`, or `ReplacingMergeTree` cannot
 collapse the duplicate.
+
+**A hand id has two forms, and this module is where they meet** (plan B.5b, ADR-064): the
+32-character lowercase hex that Postgres, the API, every URL and every log line speak, and the
+16 raw bytes that `core.*` and the marts key on. `uid_bytes` converts on the write side;
+`UID_HEX`, `UID_MATCH` and `uid_in` are the read side, in SQL; `is_hand_uid` is the guard for a
+value that came from a URL. Nothing else may spell the conversion out.
 """
 
 from __future__ import annotations
@@ -27,6 +33,59 @@ def hand_uid(site: Site, site_hand_id: str) -> str:
     """
     digest = hashlib.sha256(f"{site.value}:{site_hand_id}".encode())
     return digest.hexdigest()[: _UID_BYTES * 2]
+
+
+def uid_bytes(hex_uid: str) -> bytes:
+    """The 16 raw bytes ClickHouse stores for a hex `hand_uid` (plan B.5b).
+
+    `core.*` and the marts key on `FixedString(16)`; Postgres, the API, every URL and every
+    log line keep the 32-character hex form. This is where the two meet on the write side --
+    `UID_HEX` and `UID_MATCH` are the read half, in SQL. `bytes.fromhex` raises on anything
+    that is not an even number of hex digits, which is the loud failure we want.
+    """
+    return bytes.fromhex(hex_uid)
+
+
+def is_hand_uid(value: str) -> bool:
+    """Whether `value` could be a hand id at all: exactly 32 lowercase hex characters.
+
+    Checked before a value taken from a URL reaches `UID_MATCH`, because `toFixedString` of
+    anything longer than 16 bytes raises `TOO_LARGE_STRING_SIZE` -- which would turn a typed
+    URL into a 500 instead of the 404 it has always been.
+    """
+    return len(value) == _UID_BYTES * 2 and all(c in "0123456789abcdef" for c in value)
+
+
+UID_HEX = "lower(hex({0}hand_uid)) AS hand_uid"
+"""Project the stored bytes as the hex everything outside ClickHouse speaks.
+
+`lower` is not decoration: ClickHouse's `hex()` is upper-case, and every id in Postgres, in
+every URL and in every log line is lower-case. `{0}` is a table alias with its dot, or empty.
+"""
+
+UID_MATCH = "{0}hand_uid = toFixedString(unhex({{{1}:String}}), 16)"
+"""Match one bound hex id against the stored bytes.
+
+`toFixedString` rather than a bare `unhex`, which yields a `String`: a `FixedString` compares
+zero-padded against one, so the bare form would also match a shorter id. Measured on the
+server (25.8.16): comparing the column to the hex string itself is **silently false**, so
+forgetting this conversion costs rows rather than raising.
+"""
+
+
+def uid_in(column: str, param: str) -> str:
+    """The `IN` term matching a bound array of hex ids against stored bytes.
+
+    A subquery, not `arrayMap` over the parameter: ClickHouse's `IN` takes a constant or a
+    table expression, and a function applied to a bound array is neither -- the `arrayMap`
+    form is accepted by a unit test and refused by the server with `UNSUPPORTED_METHOD`
+    (found in plan D.7b, ADR-048). Passing the hex list straight in does raise, loudly:
+    `TOO_LARGE_STRING_SIZE`, since 32 characters do not fit a `FixedString(16)`.
+    """
+    return (
+        f"{column} IN (SELECT toFixedString(unhex(x), 16) "
+        f"FROM (SELECT arrayJoin({{{param}:Array(String)}}) AS x))"
+    )
 
 
 def content_uid(site: Site, raw_text: str) -> str:

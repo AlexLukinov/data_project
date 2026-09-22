@@ -162,9 +162,8 @@ def _replay_day(client: Client, day: date, *, tag: str, limit: str = "") -> None
 
     Plain `INSERT`, which is the only thing that reaches a materialized view -- dbt writes the
     marts with `ALTER TABLE ... REPLACE PARTITION`, a part-level swap that triggers no view at
-    all. `hand_uid` is `FixedString(16)` here while `core.*` uses the hex form, so a tag cannot
-    be appended to it; `hex(cityHash64(...))` is exactly 16 characters and gives each block its
-    own distinct hands.
+    all. `hand_uid` is a fixed 16 bytes wide, so a tag cannot simply be appended to it;
+    `hex(cityHash64(...))` is exactly 16 characters and gives each block its own distinct hands.
     """
     marts = get_settings().db("marts")
     where = limit or "where played_date = %(day)s and src_parsed_at < %(cut)s"

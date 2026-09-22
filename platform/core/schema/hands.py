@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from core.models import ZERO
-from core.schema.base import ColumnSpec, RowContext, TableSpec
+from core.schema.base import ColumnSpec, RowContext, TableSpec, hand_uid_column
 
 LC = "LowCardinality(String)"
 MONEY = "Decimal(18, 4)"
@@ -39,7 +39,7 @@ HANDS = TableSpec(
     columns=(
         ColumnSpec("user_id", "UInt32", lambda c: c.tenant_id),
         ColumnSpec("dataset", LC, lambda c: c.dataset),
-        ColumnSpec("hand_uid", "String", lambda c: c.hand.hand_uid),
+        hand_uid_column(),
         ColumnSpec("site", LC, lambda c: c.hand.site.value),
         ColumnSpec("site_hand_id", "String", lambda c: c.hand.site_hand_id),
         # Aware datetime, never naive: clickhouse-connect reads a naive value as LOCAL time.

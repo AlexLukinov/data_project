@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from core.schema.base import ColumnSpec, RowContext, TableSpec
+from core.schema.base import ColumnSpec, RowContext, TableSpec, hand_uid_column
 
 LC = "LowCardinality(String)"
 MONEY = "Decimal(18, 4)"
@@ -37,7 +37,7 @@ PLAYERS = TableSpec(
     columns=(
         ColumnSpec("user_id", "UInt32", lambda c: c.tenant_id),
         ColumnSpec("dataset", LC, lambda c: c.dataset),
-        ColumnSpec("hand_uid", "String", lambda c: c.hand.hand_uid),
+        hand_uid_column(),
         ColumnSpec("played_at_utc", STAMP, lambda c: c.hand.played_at_utc),
         ColumnSpec("seat", "UInt8", lambda c: c.require_player().seat),
         # NULL on anonymized sites -- the single field every opponent-stat gate keys off.

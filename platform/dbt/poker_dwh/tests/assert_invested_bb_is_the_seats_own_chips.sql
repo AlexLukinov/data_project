@@ -18,9 +18,9 @@
 -- systematic, not per-row: it shows up in any representative slice.
 --
 -- The sample is taken on `cityHash64` of the 16 raw `hand_uid` bytes, which is why the two
--- sides can filter independently and still select the same hands: `stg_actions` stores the uid
--- as hex and `decisions` as FixedString(16), and cityHash64 over `unhex(...)` equals cityHash64
--- over the FixedString of the same bytes. Sampling on the hand rather than on the calendar is
+-- sides can filter independently and still select the same hands: since plan B.5b both
+-- `stg_actions` (over `core.actions`) and `decisions` hold the uid as `FixedString(16)`, so
+-- the same expression hashes the same bytes on both. Sampling on the hand rather than on the calendar is
 -- what keeps **every** month in scope -- an earlier day-of-month sample silently covered 4
 -- months of 10 and missed both hero months entirely, because sparse months have no such day.
 -- Set `invested_bb_sample_mod` to 1 to test everything, with `DBT_CH_MAX_MEMORY` raised to match.
@@ -30,7 +30,7 @@
 with expected as (
 
     select
-        toFixedString(unhex(hand_uid), 16) as hand_uid,
+        hand_uid,
         seat,
         action_index,
         sum(amount) over (
@@ -42,7 +42,7 @@ with expected as (
     where action_type in ('post_sb', 'post_bb', 'post_ante', 'post_straddle', 'post_dead',
                           'fold', 'check', 'call', 'bet', 'raise')
     {% if sample_mod > 1 %}
-      and cityHash64(unhex(hand_uid)) % {{ sample_mod }} = 0
+      and cityHash64(hand_uid) % {{ sample_mod }} = 0
     {% endif %}
 
 )

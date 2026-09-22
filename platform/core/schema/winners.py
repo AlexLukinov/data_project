@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.schema.base import ColumnSpec, TableSpec
+from core.schema.base import ColumnSpec, TableSpec, hand_uid_column
 
 WINNERS = TableSpec(
     name="pot_winners",
@@ -10,7 +10,7 @@ WINNERS = TableSpec(
     columns=(
         ColumnSpec("user_id", "UInt32", lambda c: c.tenant_id),
         ColumnSpec("dataset", "LowCardinality(String)", lambda c: c.dataset),
-        ColumnSpec("hand_uid", "String", lambda c: c.hand.hand_uid),
+        hand_uid_column(),
         ColumnSpec("played_at_utc", "DateTime64(3, 'UTC')", lambda c: c.hand.played_at_utc),
         ColumnSpec("pot_index", "UInt8", lambda c: c.require_winner().pot_index),
         ColumnSpec("seat", "UInt8", lambda c: c.require_winner().seat),

@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from core.ids import uid_in
 from core.settings import get_settings
 from stats import tenancy
 from stats.compiler import Compiler, Params
@@ -39,20 +40,13 @@ class HandRef:
 def restrict_to(only_hand_uids: Sequence[str]) -> tuple[str, list[str]]:
     """The WHERE term (and its bound value) that keeps only the given hands.
 
-    The list arrives in the hex form the API speaks; the mart holds the 16 raw bytes, so the
-    values are unhexed on the way in and the column is compared bare, as the sort key likes it.
-    **As a subquery, not `arrayMap` over the parameter:** ClickHouse's `IN` takes a constant or a
-    table expression, and a function applied to a bound array is neither -- the `arrayMap` form
-    was accepted by the unit test and refused by the server with UNSUPPORTED_METHOD. A keyword on
-    the builder rather than a field of `HandSearch`, on purpose: the search document is a
+    The list arrives in the hex form the API speaks; the mart holds the 16 raw bytes, so
+    `core.ids.uid_in` converts on the way in (and says why it must be a subquery). A keyword
+    on the builder rather than a field of `HandSearch`, on purpose: the search document is a
     *situation*, and an id list is not one -- it is how a tag kept in Postgres narrows a list
     answered here (plan D.7b, ADR-048).
     """
-    term = (
-        "s.hand_uid IN (SELECT toFixedString(unhex(x), 16) "
-        "FROM (SELECT arrayJoin({only_hand_uids:Array(String)}) AS x))"
-    )
-    return term, list(only_hand_uids)
+    return uid_in("s.hand_uid", "only_hand_uids"), list(only_hand_uids)
 
 
 def hand_search_sql(
@@ -84,8 +78,9 @@ def hand_search_sql(
 
     table = f"{get_settings().db('marts')}.{PHYSICAL[DECISIONS]}"
     sql = (
-        # The mart stores the hand id as the 16 raw bytes; `core.*` and the API speak the
-        # 32-character lowercase hex. Converting here keeps that difference inside the query.
+        # The mart stores the hand id as the 16 raw bytes, as `core.*` has since plan B.5b;
+        # the API, its URLs and Postgres speak the 32-character lowercase hex. Converting
+        # here keeps that difference inside the query.
         "SELECT lower(hex(s.hand_uid)) AS hand_uid, s.seat AS seat, "
         "max(s.played_at_utc) AS played_at_utc "
         f"FROM {table} AS s WHERE {' AND '.join(where)} "

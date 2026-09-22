@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.schema.base import ColumnSpec, TableSpec
+from core.schema.base import ColumnSpec, TableSpec, hand_uid_column
 
 MONEY = "Decimal(18, 4)"
 STAMP = "DateTime64(3, 'UTC')"
@@ -19,7 +19,7 @@ ACTIONS = TableSpec(
     columns=(
         ColumnSpec("user_id", "UInt32", lambda c: c.tenant_id),
         ColumnSpec("dataset", "LowCardinality(String)", lambda c: c.dataset),
-        ColumnSpec("hand_uid", "String", lambda c: c.hand.hand_uid),
+        hand_uid_column(),
         ColumnSpec("played_at_utc", STAMP, lambda c: c.hand.played_at_utc),
         # GLOBAL order within the hand, not per-street: "did anyone raise BEFORE this player
         # acted" is unanswerable from a per-street counter.

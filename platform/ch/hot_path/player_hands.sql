@@ -187,7 +187,7 @@ seats as (
 select
     h.user_id                                                    as user_id,
     h.dataset                                                    as dataset,
-    toFixedString(unhex(h.hand_uid), 16)                         as hand_uid,
+    h.hand_uid                                                   as hand_uid,
     h.played_at_utc                                              as played_at_utc,
     h.played_date                                                as played_date,
     h.src_parsed_at                                              as src_parsed_at,
@@ -293,7 +293,7 @@ with flop as (
 
     select
         user_id,
-        toFixedString(unhex(hand_uid), 16)                        as hand_uid,
+        hand_uid,
         played_at_utc,
         src_parsed_at,
         [board_flop_1, board_flop_2, board_flop_3]                as f,

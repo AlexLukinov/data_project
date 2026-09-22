@@ -21,8 +21,9 @@
     a_amt / a_to / a_pot / a_call   chips put in, raised-to, pot before, to call -- in BIG BLINDS
   Seat arrays (s_*) are sorted by seat and aligned; `indexOf(s_seat, seat)` finds a player.
 
-  `hand_uid` becomes FixedString(16) here and in everything downstream (plan B.5b): the hex
-  string was 51% of the v1 fact table. `lower(hex(hand_uid))` gives the core.* form back.
+  `hand_uid` is a FixedString(16) all the way through -- `core.*` stores the 16 raw bytes and
+  staging passes them on untouched (plan B.5b): the 32-char hex form was 51% of the v1 fact
+  table and does not compress. `lower(hex(hand_uid))` is how the API gets the hex back.
 #}
 
 {% macro hand_arrays() %}
@@ -133,7 +134,7 @@ seats as (
 select
     h.user_id                                                    as user_id,
     h.dataset                                                    as dataset,
-    toFixedString(unhex(h.hand_uid), 16)                         as hand_uid,
+    h.hand_uid                                                   as hand_uid,
     h.played_at_utc                                              as played_at_utc,
     h.played_date                                                as played_date,
     h.src_parsed_at                                              as src_parsed_at,

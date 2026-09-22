@@ -7,6 +7,11 @@ wrong field (docs/POKER_AUDIT.md B11).
 
 Every query is scoped by `user_id` from the token. A hand belonging to another tenant is not
 found, which is also the answer for a hand that does not exist.
+
+**`hand_uid` crosses a boundary here.** `core.*` stores 16 raw bytes (plan B.5b), the API
+speaks 32-character hex: reads use `UID_HEX`, filters `UID_MATCH` / `uid_in` (`core.ids`). And
+a `SELECT … AS hand_uid` alias shadows that column in `WHERE` -- measured, it matches nothing
+-- so every filter below is qualified with its table alias: `h.hand_uid`, never `hand_uid`.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from typing import Any
 
 from api.db import clickhouse
 from api.schemas import ActionOut, HandDetail, HandPlayerOut, HandSummary
+from core.ids import UID_HEX, UID_MATCH, uid_in
 from core.settings import get_settings
 from stats.hands import HandRef
 
@@ -34,6 +40,16 @@ FOCUS = "(p.hole_cards != '', p.net_won_bb)"
 A pool hand has no hero, and a replayer has to start looking somewhere."""
 
 Row = Mapping[str, Any]
+
+
+def _date_range(where: list[str], args: dict[str, Any], lo: date | None, hi: date | None) -> None:
+    """Append the optional day bounds in place. `h` is the hands table in both callers."""
+    if lo is not None:
+        where.append("toDate(h.played_at_utc) >= {date_from:Date}")
+        args["date_from"] = lo
+    if hi is not None:
+        where.append("toDate(h.played_at_utc) <= {date_to:Date}")
+        args["date_to"] = hi
 
 
 def summary_from_row(row: Row) -> HandSummary:
@@ -84,8 +100,10 @@ def action_from_row(row: Row) -> ActionOut:
     )
 
 
-def detail_from_rows(hand: Row, players: Sequence[Row], actions: Sequence[Row]) -> HandDetail:
-    """Assemble the replayer payload from named rows."""
+def detail_from_rows(
+    hand_uid: str, hand: Row, players: Sequence[Row], actions: Sequence[Row]
+) -> HandDetail:
+    """Assemble the replayer payload. `hand_uid` is passed in: `core.hands` stores bytes."""
     board = [
         c
         for c in (
@@ -98,7 +116,7 @@ def detail_from_rows(hand: Row, players: Sequence[Row], actions: Sequence[Row]) 
         if c
     ]
     return HandDetail(
-        hand_uid=hand["hand_uid"],
+        hand_uid=hand_uid,
         site=hand["site"],
         site_hand_id=hand["site_hand_id"],
         played_at_utc=hand["played_at_utc"],
@@ -121,7 +139,7 @@ def hand_exists(tenant_id: int, hand_uid: str) -> bool:
     """
     rows = clickhouse().query(
         f"SELECT 1 FROM {CORE}.hands "
-        "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String} LIMIT 1",
+        "WHERE user_id = {tenant_id:UInt32} AND " + UID_MATCH.format("", "hand_uid") + " LIMIT 1",
         parameters={"tenant_id": tenant_id, "hand_uid": hand_uid},
     )
     return len(rows.result_rows) > 0
@@ -143,17 +161,12 @@ def hero_hands(
     """
     where = ["h.user_id = {tenant_id:UInt32}", "p.is_hero = 1"]
     params: dict[str, Any] = {"tenant_id": tenant_id, "limit": min(limit, MAX_LIST)}
-    if date_from is not None:
-        where.append("toDate(h.played_at_utc) >= {date_from:Date}")
-        params["date_from"] = date_from
-    if date_to is not None:
-        where.append("toDate(h.played_at_utc) <= {date_to:Date}")
-        params["date_to"] = date_to
+    _date_range(where, params, date_from, date_to)
     if only is not None:
-        where.append("h.hand_uid IN {only:Array(String)}")
+        where.append(uid_in("h.hand_uid", "only"))
         params["only"] = list(only)
     sql = (
-        "SELECT h.hand_uid AS hand_uid, h.site AS site, h.played_at_utc AS played_at_utc, "
+        f"SELECT {UID_HEX.format('h.')}, h.site AS site, h.played_at_utc AS played_at_utc, "
         "h.stake_level AS stake_level, p.seat AS seat, p.position AS position, "
         f"p.hole_cards AS hole_cards, {BOARD} AS board, p.net_won_bb AS net_won_bb, "
         "p.went_to_showdown AS went_to_showdown "
@@ -179,26 +192,22 @@ def pool_hand_refs(
 
     `only` restricts to those `hand_uid`s, as in `hero_hands`.
     """
-    where = ["user_id = {tenant_id:UInt32}", "dataset = 'population'"]
+    where = ["h.user_id = {tenant_id:UInt32}", "h.dataset = 'population'"]
     params: dict[str, Any] = {"tenant_id": tenant_id, "limit": min(limit, MAX_LIST)}
-    if date_from is not None:
-        where.append("toDate(played_at_utc) >= {date_from:Date}")
-        params["date_from"] = date_from
-    if date_to is not None:
-        where.append("toDate(played_at_utc) <= {date_to:Date}")
-        params["date_to"] = date_to
+    _date_range(where, params, date_from, date_to)
     if stake_level is not None:
-        where.append("stake_level = {stake_level:String}")
+        where.append("h.stake_level = {stake_level:String}")
         params["stake_level"] = stake_level
     if only is not None:
-        where.append("hand_uid IN {only:Array(String)}")
+        where.append(uid_in("h.hand_uid", "only"))
         params["only"] = list(only)
     uids = [
         str(row["hand_uid"])
         for row in clickhouse()
         .query(
-            f"SELECT hand_uid FROM {CORE}.hands FINAL WHERE {' AND '.join(where)} "
-            "ORDER BY played_at_utc DESC LIMIT {limit:UInt32}",
+            f"SELECT {UID_HEX.format('h.')} FROM {CORE}.hands AS h FINAL "
+            f"WHERE {' AND '.join(where)} "
+            "ORDER BY h.played_at_utc DESC LIMIT {limit:UInt32}",
             parameters=params,
         )
         .named_results()
@@ -213,9 +222,10 @@ def _focus_seats(tenant_id: int, uids: Sequence[str]) -> list[HandRef]:
     rows = (
         clickhouse()
         .query(
-            f"SELECT p.hand_uid AS hand_uid, argMax(p.seat, {FOCUS}) AS seat "
+            f"SELECT {UID_HEX.format('p.')}, argMax(p.seat, {FOCUS}) AS seat "
             f"FROM {CORE}.hand_players AS p FINAL "
-            "WHERE p.user_id = {tenant_id:UInt32} AND p.hand_uid IN {uids:Array(String)} "
+            "WHERE p.user_id = {tenant_id:UInt32} "
+            f"AND {uid_in('p.hand_uid', 'uids')} "
             "GROUP BY hand_uid",
             parameters={"tenant_id": tenant_id, "uids": list(uids)},
         )
@@ -239,15 +249,17 @@ def summaries_for(tenant_id: int, refs: Sequence[HandRef]) -> list[HandSummary]:
         "pairs": [f"{r.hand_uid}:{r.seat}" for r in refs],
     }
     sql = (
-        "SELECT h.hand_uid AS hand_uid, h.site AS site, h.played_at_utc AS played_at_utc, "
+        f"SELECT {UID_HEX.format('h.')}, h.site AS site, h.played_at_utc AS played_at_utc, "
         "h.stake_level AS stake_level, p.seat AS seat, p.position AS position, "
         f"p.hole_cards AS hole_cards, {BOARD} AS board, p.net_won_bb AS net_won_bb, "
         "p.went_to_showdown AS went_to_showdown "
         f"FROM {CORE}.hands AS h FINAL "
         f"INNER JOIN {CORE}.hand_players AS p FINAL "
         "  ON p.user_id = h.user_id AND p.hand_uid = h.hand_uid "
-        "WHERE h.user_id = {tenant_id:UInt32} AND h.hand_uid IN {uids:Array(String)} "
-        "  AND concat(p.hand_uid, ':', toString(p.seat)) IN {pairs:Array(String)}"
+        "WHERE h.user_id = {tenant_id:UInt32} "
+        f"AND {uid_in('h.hand_uid', 'uids')} "
+        # On the hex: `concat` over the stored bytes cannot meet a Python "<hex>:<seat>".
+        "  AND concat(lower(hex(p.hand_uid)), ':', toString(p.seat)) IN {pairs:Array(String)}"
     )
     found = {
         (str(row["hand_uid"]), int(row["seat"])): summary_from_row(row)
@@ -260,10 +272,12 @@ def hand_detail(tenant_id: int, hand_uid: str) -> HandDetail | None:
     """One hand with all seats and actions, or None when this tenant has no such hand."""
     client = clickhouse()
     params = {"tenant_id": tenant_id, "hand_uid": hand_uid}
-    scope = "WHERE user_id = {tenant_id:UInt32} AND hand_uid = {hand_uid:String}"
+    scope = "WHERE user_id = {tenant_id:UInt32} AND " + UID_MATCH.format("", "hand_uid")
+    # `hand_uid` is deliberately not projected: the caller already has it, and an alias of
+    # that name would shadow the column in `scope`'s WHERE, which all three queries share.
     hand_rows = list(
         client.query(
-            "SELECT hand_uid, site, site_hand_id, played_at_utc, game_type, stake_level, "
+            "SELECT site, site_hand_id, played_at_utc, game_type, stake_level, "
             "big_blind, board_flop_1, board_flop_2, board_flop_3, board_turn, board_river, "
             f"total_pot, rake FROM {CORE}.hands FINAL {scope} LIMIT 1",
             parameters=params,
@@ -282,4 +296,4 @@ def hand_detail(tenant_id: int, hand_uid: str) -> HandDetail | None:
         f"to_call, is_allin FROM {CORE}.actions FINAL {scope} ORDER BY action_index",
         parameters=params,
     ).named_results()
-    return detail_from_rows(hand_rows[0], list(players), list(actions))
+    return detail_from_rows(hand_uid, hand_rows[0], list(players), list(actions))

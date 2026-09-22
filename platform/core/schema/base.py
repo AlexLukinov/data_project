@@ -20,9 +20,18 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
+from core.ids import uid_bytes
 from core.models import Action, CanonicalHand, HandPlayer, PotWinner
 
 ONE = Decimal(1)
+
+UID = "FixedString(16)"
+"""How `core.*` stores `hand_uid`: the 16 raw bytes of the digest, not its 32 hex characters.
+
+The hex form was 51% of the v1 fact table and does not compress -- it is random. Because the
+column leads every core sort key, changing it was a table rebuild rather than a migration
+(plan B.5b, [ADR-017](../../docs/POKER_DECISIONS.md)).
+"""
 
 
 @dataclass(slots=True, frozen=True)
@@ -80,6 +89,16 @@ class ColumnSpec:
     ch_type: str
     getter: Getter
     staging_expr: str | None = None
+
+
+def hand_uid_column() -> ColumnSpec:
+    """The `hand_uid` column, byte-identical on all four core tables.
+
+    Declared once rather than four times: the canonical model carries hex (`core.ids`) and
+    ClickHouse stores the bytes, and four copies of that rule is exactly the drift this
+    module exists to remove (docs/POKER_AUDIT.md B11).
+    """
+    return ColumnSpec("hand_uid", UID, lambda c: uid_bytes(c.hand.hand_uid))
 
 
 @dataclass(slots=True, frozen=True)

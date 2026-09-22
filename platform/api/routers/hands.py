@@ -36,6 +36,7 @@ from api.ratelimit import tenant_rate_limit
 from api.schemas import HandDetail, HandSummary
 from api.schemas_hand_notes import HandNoteIn, HandNoteOut, HandTagsOut, Tag, TagCount, TagIn
 from api.schemas_hands import HandParseIn
+from core.ids import is_hand_uid
 from stats.errors import ReportError
 from stats.hands import find_hands
 from stats.request import HandSearch
@@ -46,6 +47,17 @@ TagFilter = Annotated[Tag | None, Query(description="Only hands carrying this ta
 NOT_FOUND = "Hand not found"
 
 
+def _readable_uid(hand_uid: str) -> None:
+    """404 on a path segment that cannot be a hand id, before it ever reaches ClickHouse.
+
+    Since plan B.5b the id is matched as `toFixedString(unhex(...), 16)`, which raises
+    `TOO_LARGE_STRING_SIZE` on anything longer -- so without this a URL anyone can type
+    returns 500 rather than the 404 an unknown hand has always returned.
+    """
+    if not is_hand_uid(hand_uid):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+
+
 async def owned_hand(hand_uid: str, user: CurrentUserDep) -> str:
     """The `hand_uid` from the path, once this tenant is known to have that hand -- else 404.
 
@@ -53,6 +65,7 @@ async def owned_hand(hand_uid: str, user: CurrentUserDep) -> str:
     hand the caller cannot see, and the answer for another tenant's hand is the same as for a
     hand that does not exist: the response must not reveal that the hand exists at all.
     """
+    _readable_uid(hand_uid)
     if not await run_in_threadpool(hand_query.hand_exists, user.tenant_id, hand_uid):
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
     return hand_uid
@@ -142,6 +155,7 @@ async def get_hand(hand_uid: str, user: CurrentUserDep) -> HandDetail:
     A hand_uid belonging to another tenant returns 404: the response must not reveal that the
     hand exists at all.
     """
+    _readable_uid(hand_uid)
     detail = await run_in_threadpool(hand_query.hand_detail, user.tenant_id, hand_uid)
     if detail is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)

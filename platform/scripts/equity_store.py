@@ -41,7 +41,7 @@ class Seat:
 class Hand:
     """One stored hand: the board, the seats, and where betting stopped."""
 
-    uid: str
+    uid: bytes  # the 16 raw bytes core.* stores (plan B.5b), read and written back as-is
     big_blind: Decimal
     board: tuple[str, ...]
     last_street: Street
@@ -253,7 +253,7 @@ def write(hands: list[Hand], day: str, dataset: str | None) -> int:
     client = clickhouse()
     client.command(f"drop table if exists {scratch}")
     client.command(
-        f"create table {scratch} (user_id UInt32, hand_uid String, seat UInt8, "
+        f"create table {scratch} (user_id UInt32, hand_uid FixedString(16), seat UInt8, "
         "allin_equity Nullable(Decimal(9, 6)), ev_won_bb Nullable(Decimal(18, 4)), "
         "made_hand_flop LowCardinality(String), made_hand_turn LowCardinality(String), "
         "made_hand_river LowCardinality(String)) engine = Memory"
@@ -287,7 +287,7 @@ def _stored_rows(where: str) -> list[list[Any]]:
     return [list(r) for r in rows.result_rows]
 
 
-def _changed_rows(rows: list[list[Any]], wanted: dict[tuple[str, int], Seat]) -> list[list[Any]]:
+def _changed_rows(rows: list[list[Any]], wanted: dict[tuple[bytes, int], Seat]) -> list[list[Any]]:
     """The seats whose five owned columns differ from what they should be."""
     out = []
     for row in rows:
