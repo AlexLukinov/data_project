@@ -11,10 +11,10 @@
  * the pages below carry almost none of their own.
  */
 
+import { formatN } from '../reports/cell';
 import type { EmptyStateView } from '../reports/emptyState';
 import { COHORT_REBUILD_NOTE } from '../reports/emptyState';
-import type { Stat } from '../stats/api';
-import { PLAYER_STATS } from './stats';
+import type { StatMeta } from '../stats/api';
 
 /** The heading over the left grid when no cohort is chosen in the picker. */
 const WHOLE_FIELD = 'The whole field';
@@ -79,16 +79,43 @@ export function unknownCohortWords(key: string, listFailed: boolean): string {
 const PLAYER_LEAD = 'Every opponent at the tables you uploaded as Pool hands, by screen name. Type any part of one to read their game.';
 
 /**
- * What `/pool/players` is for, with the stats it answers named.
+ * What `/pool/players` is for, with the stats it answers named — once the route has named them.
  *
- * The list is `PLAYER_STATS` read through the registry rather than retyped: those seven codes are
- * the report this page runs, and a label written here would be a second spelling of a word the
- * server already sends.
+ * Those seven codes used to be a `PLAYER_STATS` constant here, because the search was a report
+ * this client assembled and something had to choose the columns. `POST /v1/pool/players` chooses
+ * them now (ADR-062), and it sends their labels back with every answer, so the sentence reads them
+ * off the answer rather than promising a list before anything has been asked. Before the first
+ * search it simply says less: a page that has not asked the server anything knows nothing about
+ * what the server will send, and the whole of ADR-062 is about a screen asserting otherwise.
  */
-export function playerIntroWords(stats: readonly Stat[]): string {
-  const labels = new Map(stats.map((stat) => [stat.code, stat.label]));
-  const named = PLAYER_STATS.filter((code) => labels.has(code)).map((code) => labels.get(code)!);
-  return named.length === 0 ? PLAYER_LEAD : `${PLAYER_LEAD} You get ${list(named)}.`;
+export function playerIntroWords(shown: readonly StatMeta[]): string {
+  return shown.length === 0 ? PLAYER_LEAD : `${PLAYER_LEAD} You get ${list(shown.map((stat) => stat.label))}.`;
+}
+
+/**
+ * How many names matched, when more matched than the answer holds — and nothing at all when the
+ * list on screen *is* every match, which is the common case for a name somebody actually typed.
+ *
+ * **"Matched", never "contain".** The route lower-cases what was typed and, when a real site
+ * precedes a colon, splits the site off and matches only the rest inside the name half. So the
+ * text quoted here is what was *asked*, and it is not in general a substring of anything: typing
+ * `MAN` matches 1,469 names, not one of which contains `MAN`, because every stored key is lowered.
+ * A sentence that said "contain" would be a false claim about the answer below it — the same
+ * shape of untruth ADR-062 removed from the answer itself, moved up into the sentence over it.
+ *
+ * `matched_capped` is the reason this takes three numbers rather than comparing two, and why the
+ * word is **"at least"**. The route counts up to the engine's ceiling and stops (`matched_capped`
+ * is `len(rows) >= MAX_MATCHES`, and the query is capped at exactly that), so a capped answer
+ * counted exactly the ceiling and the truth about the world is "the ceiling or more". "More than"
+ * is the one word that would make the sentence off by one in the very case it exists for.
+ */
+export function matchedWords(searched: string, matched: number, shown: number, capped: boolean): string {
+  if (!capped && matched <= shown) return '';
+  const many = capped ? `At least ${formatN(matched)} names` : `${formatN(matched)} names`;
+  // `shown` is the answer's own row count and the route's default puts 50 of them here, but this
+  // is an exported function taking a number: one row would otherwise read "The 1 … are below".
+  const busiest = shown === 1 ? 'The busiest one is below' : `The ${formatN(shown)} with the most hands are below`;
+  return `${many} matched “${searched}”. ${busiest}, the name typed in full first — type more of it to narrow them.`;
 }
 
 /** `a`, `a and b`, `a, b and c` — the form the rest of the app lists things in. */
@@ -101,9 +128,14 @@ function list(parts: readonly string[]): string {
  * No name matched. The text is the one that was **searched**, not the one in the box: the box is
  * edited while the answer stays on screen, and a sentence that follows the typing describes a
  * search nobody ran.
+ *
+ * "Matched" rather than "contains", for the reason `matchedWords` gives — and the site clause says
+ * what is true of *both* shapes the route accepts. It is not "the site is never searched": paste a
+ * whole key and the site before the colon has to match exactly. What is always true is that the
+ * site is not part of the name, which is the thing a reader gets wrong.
  */
 export function noPlayerWords(searched: string): string {
-  return `No name in the pool contains “${searched}”. It matches any part of a name, in any case, so a shorter piece of it finds more. Only players at tables you uploaded as Pool hands can be found — upload more on the Upload page.`;
+  return `Nothing in the pool matched “${searched}”. Any part of a name matches, in any case, so a shorter piece of it finds more — but the site a key starts with is not part of the name, and searching for one looks for people who have it in theirs. Only players at tables you uploaded as Pool hands can be found: upload more on the Upload page.`;
 }
 
 /** The search found the name in the daily statistics, and the stat report came back with nothing. */

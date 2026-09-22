@@ -81,8 +81,18 @@ export interface Dimension {
   type: DimType;
   tables: Table[];
   description: string;
-  /** The vocabulary of an enum, `[]` otherwise. `''` is a real value meaning "not applicable". */
+  /** The vocabulary of an enum, `[]` otherwise. `''` is a real value, and not the same one twice. */
   values: string[];
+  /**
+   * What each enum value is called on screen; `{}` for every other type.
+   *
+   * Complete by construction (ADR-062): the registry refuses to load an enum that declares a
+   * value it does not label, or labels one it does not declare. That completeness is the whole
+   * point — a client with a fallback has to guess, and guessing is what once rewrote `5bet_plus`
+   * as `5bet+` for a pool player called `a_plus_b`, and gave ten dimensions' `''` one word when
+   * they mean seven different things.
+   */
+  value_labels: Record<string, string>;
   /** Set only where the registry narrows the type's defaults; read `allowed_ops` instead. */
   ops: Op[] | null;
   group_by: boolean;

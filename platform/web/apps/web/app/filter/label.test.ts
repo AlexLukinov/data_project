@@ -5,12 +5,12 @@ import type { Clause } from './clause';
 import { clauseLabel, filterSentence, valueLabel } from './label';
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type' | 'label'>): Dimension {
-  return { tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
+  return { tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
 }
 
 const STREET = dim({ code: 'street', type: 'enum', label: 'Street', values: ['flop'] });
-const OPENER = dim({ code: 'opener_position', type: 'enum', label: "Opener's position", values: ['', 'UTG'] });
-const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['5bet_plus', 'bet'] });
+const OPENER = dim({ code: 'opener_position', type: 'enum', label: "Opener's position", values: ['', 'UTG'], value_labels: { '': 'Nobody has raised yet', UTG: 'UTG' } });
+const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['5bet_plus', 'bet'], value_labels: { '5bet_plus': '5-bet or more', bet: 'Bet' } });
 const IS_IP = dim({ code: 'is_ip', type: 'bool', label: 'In position' });
 const SPR = dim({ code: 'spr', type: 'number', label: 'Stack-to-pot ratio', buckets: { '1-3': [1, 3], '13+': [13, null] } });
 const STREET_LINE = dim({ code: 'street_line', type: 'line', label: 'My line this street' });
@@ -26,9 +26,9 @@ describe('clauseLabel', () => {
     expect(clauseLabel(c('street', 'in', 'flop', 'turn'), STREET)).toBe('Street is one of flop, turn');
   });
 
-  it('writes 5bet_plus the way a player does', () => {
-    expect(clauseLabel(c('facing', 'eq', '5bet_plus'), FACING)).toBe('Facing is 5bet+');
-    expect(valueLabel('5bet_plus', FACING)).toBe('5bet+');
+  it('writes an enum value in the word the registry gives it', () => {
+    expect(clauseLabel(c('facing', 'eq', '5bet_plus'), FACING)).toBe('Facing is 5-bet or more');
+    expect(valueLabel('5bet_plus', FACING)).toBe('5-bet or more');
   });
 
   /**
@@ -53,8 +53,10 @@ describe('clauseLabel', () => {
     expect(clauseLabel(c('player_key', 'in', '__proto__', 'toString'), PLAYER)).toBe('Player is one of __proto__, toString');
   });
 
-  it("says what '' means on an enum", () => {
-    expect(clauseLabel(c('opener_position', 'eq', ''), OPENER)).toBe("Opener's position is not applicable");
+  /* And what it means *here*: ten dimensions declare `''` and mean seven different things by it
+     (ADR-062). One word for all of them was the client's own invention. */
+  it("says what '' means on this enum, in this enum's words", () => {
+    expect(clauseLabel(c('opener_position', 'eq', ''), OPENER)).toBe("Opener's position is Nobody has raised yet");
   });
 
   /**

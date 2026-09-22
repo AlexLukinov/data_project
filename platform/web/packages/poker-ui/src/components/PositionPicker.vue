@@ -21,29 +21,64 @@ const props = withDefaults(
     /** The seats to offer, in the order they should read. Values are the registry's own. */
     seats: readonly string[];
     selected: readonly string[];
+    /**
+     * What each seat is called on screen, when the caller has words for it (ADR-067). The registry
+     * names every enum value where it declares it, and `''` means something different on each
+     * dimension that carries it — "Nobody has raised yet" on `opener_position`, "No bet or raise
+     * yet" on `last_raiser_position`. Without this the picker invented one phrase for both, which
+     * is the rewrite ADR-062 removed from the rest of the client. Optional, because a caller with
+     * no registry to hand (a `NodeKey` editor, a story) still gets readable seats.
+     */
+    labels?: Readonly<Record<string, string>>;
     /** Several seats at once (an `in` filter), or exactly one. */
     multiple?: boolean;
     label?: string;
     disabled?: boolean;
   }>(),
-  { multiple: false, label: 'position', disabled: false },
+  { multiple: false, label: 'position', disabled: false, labels: undefined },
 );
 
 const emit = defineEmits<{ 'update:selected': [seats: string[]] }>();
 
 const chosen = computed(() => new Set(props.selected));
 
-/** `''` is a real registry value; it needs words, not an empty button. */
+/** The caller's word for a value, when it has one. Own properties only: a value may be `toString`. */
+function given(seat: string): string | undefined {
+  const labels = props.labels;
+  return labels !== undefined && Object.hasOwn(labels, seat) ? labels[seat] : undefined;
+}
+
+/**
+ * `''` is a real registry value; it needs something on the button, not an empty one.
+ *
+ * One rule, and it is a layout rule rather than a vocabulary one: a seat chip is 2.6rem wide and
+ * sits in a ring of them, so the button carries the short form and the *meaning* goes on the hover,
+ * which is where every other seat's meaning already is. "Nobody has raised yet" does not go on a
+ * chip. So `seatLabel` stays this component's, `seatTitle` becomes the caller's wherever the
+ * caller has a word — and the phrase the client used to invent for `''` is gone from both.
+ */
 function seatLabel(seat: string): string {
   if (seat === '') return 'none';
   if (seat === 'UNKNOWN') return '?';
   return seat;
 }
 
+/**
+ * The hover is where a reader asks what a seat *means*, so it carries a definition — and the
+ * caller's word wins exactly where this component would otherwise be **guessing**.
+ *
+ * That is `''` and nothing else. `''` is the only value whose meaning depends on which dimension
+ * it sits on ("Nobody has raised yet" on `opener_position`, "No bet or raise yet" on
+ * `last_raiser_position`), so any single phrase here is wrong on at least one of them — which is
+ * what the deleted one was. Every other value already has something better than a label: the ten
+ * real seats have `POSITION_WORDS`, and `UNKNOWN` has a sentence saying why it is unknown, where
+ * the registry has only the word "Unknown". Binding a label over a definition would have made the
+ * hover less useful, which the browser showed and the unit test could not.
+ */
 function seatTitle(seat: string): string {
-  if (seat === '') return 'Not applicable — nobody in that role';
+  if (seat === '') return given(seat) ?? 'Not applicable — nobody in that role';
   if (seat === 'UNKNOWN') return 'An anonymised seat the export does not name';
-  return isPosition(seat) ? POSITION_WORDS[seat].definition : seat;
+  return isPosition(seat) ? POSITION_WORDS[seat].definition : (given(seat) ?? seat);
 }
 
 function toggle(seat: string): void {

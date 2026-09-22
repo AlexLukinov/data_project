@@ -13,7 +13,7 @@ function stat(code: string, over: Partial<Stat> = {}): Stat {
 }
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
-  return { label: over.code, tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
+  return { label: over.code, tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
 }
 
 function cell(over: Partial<Cell> = {}): Cell {
@@ -25,7 +25,10 @@ function row(over: Partial<ReportRow> = {}): ReportRow {
 }
 
 const VPIP = stat('vpip');
-const POSITION = dim({ code: 'position', type: 'enum', label: 'Position', values: ['BTN', '5bet_plus'] });
+const POSITION = dim({ code: 'position', type: 'enum', label: 'Position', values: ['BTN', 'CO'], value_labels: { BTN: 'BTN', CO: 'CO' } });
+/* A column that really declares this value: `position` does not, and a fixture the registry would
+   refuse teaches a reader a contract the server does not have. */
+const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['bet', '5bet_plus'], value_labels: { bet: 'Bet', '5bet_plus': '5-bet or more' } });
 const SIZE = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37] } });
 
 /*
@@ -50,7 +53,7 @@ type GridSlots = { empty?: () => VNode };
 
 function grid(over: Partial<ReportResult> = {}, slots: GridSlots = {}) {
   return mount(StatGrid, {
-    props: { result: result(over), stats: [VPIP], dimensions: new Map([POSITION, SIZE].map((d) => [d.code, d])), minN: 100 },
+    props: { result: result(over), stats: [VPIP], dimensions: new Map([POSITION, FACING, SIZE].map((d) => [d.code, d])), minN: 100 },
     slots,
   });
 }
@@ -124,8 +127,8 @@ describe('StatGrid — registry words on the headings', () => {
   });
 
   it('reads a grouped value through the column it belongs to', () => {
-    const enums = grid({ group_by: ['position'], rows: [row({ group: { position: '5bet_plus' } })] });
-    expect(find(enums, 'grid-row-5bet_plus').text()).toContain('5bet+');
+    const enums = grid({ group_by: ['facing'], rows: [row({ group: { facing: '5bet_plus' } })] });
+    expect(find(enums, 'grid-row-5bet_plus').text()).toContain('5-bet or more');
     const buckets = grid({ group_by: ['size_pct'], rows: [row({ group: { size_pct: 'small' } })] });
     expect(find(buckets, 'grid-row-small').text()).toContain('small (under 0.37 of the pot)');
   });

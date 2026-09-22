@@ -8,7 +8,7 @@ function stat(over: Partial<Stat> & Pick<Stat, 'code'>): Stat {
 }
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
-  return { label: over.code, tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
+  return { label: over.code, tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over } as Dimension;
 }
 
 function cell(over: Partial<Cell> = {}): Cell {
@@ -132,14 +132,18 @@ describe('cellView — direction is only coloured where the registry commits', (
 /* The column is now an argument (ADR-057): the same string reads one way as an enum value and
    another way as somebody's screen name, and only the dimension says which of the two it is. */
 describe('formatGroupValue', () => {
-  const FACING = dim({ code: 'facing', type: 'enum', values: ['5bet_plus', ''] });
+  const FACING = dim({ code: 'facing', type: 'enum', values: ['5bet_plus', 'none'], value_labels: { '5bet_plus': '5-bet or more', none: 'Nothing' } });
+  /* `''` is asserted on a dimension that really declares it. `facing` does not: its word for
+     "nothing in front" is `none`, and ten other dimensions mean ten different things by `''`. */
+  const OPENER = dim({ code: 'opener_position', type: 'enum', values: ['', 'BTN'], value_labels: { '': 'Nobody has raised yet', BTN: 'BTN' } });
   const PLAYER = dim({ code: 'player_key', type: 'string', tables: ['stats_daily'] });
   const SIZE = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37], overbet: [1.1, null] } });
 
-  it("words the registry's two conventions the way the filter chips do", () => {
-    expect(formatGroupValue('5bet_plus', FACING)).toBe('5bet+');
-    expect(formatGroupValue('', FACING)).toBe('not applicable');
-    expect(formatGroupValue('BTN', FACING)).toBe('BTN');
+  it('words a value the way the filter chips do — out of the registry, not out of a rule here', () => {
+    expect(formatGroupValue('5bet_plus', FACING)).toBe('5-bet or more');
+    expect(formatGroupValue('none', FACING)).toBe('Nothing');
+    expect(formatGroupValue('', OPENER)).toBe('Nobody has raised yet');
+    expect(formatGroupValue('BTN', OPENER)).toBe('BTN');
     expect(formatGroupValue(null)).toBe('—');
     expect(formatGroupValue(1000)).toBe('1,000');
   });
@@ -147,6 +151,17 @@ describe('formatGroupValue', () => {
   it('leaves a value alone off an enum, so a player called a_plus_b keeps their name', () => {
     expect(formatGroupValue('a_plus_b', PLAYER)).toBe('a_plus_b');
     expect(formatGroupValue('a_plus_b')).toBe('a_plus_b');
+  });
+
+  /*
+   * All four line dimensions are offered as group-bys, so this is the first column of a report
+   * grouped by `street_line` — and `''` there is not a missing value but "no action yet", which
+   * only `@poker/ui` knows. It used to read "not applicable" and `x-c` read as itself.
+   */
+  it('spells an action line out, and does not read an empty one as a missing value', () => {
+    const line = dim({ code: 'street_line', type: 'line' });
+    expect(formatGroupValue('', line)).toBe('no action yet');
+    expect(formatGroupValue('x-c', line)).toBe('check-call');
   });
 
   it('prints what a bucket covers, because “small” on its own says nothing', () => {

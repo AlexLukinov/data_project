@@ -9,14 +9,27 @@
  * `components/reports/RegistryTerm.vue`, and nowhere else.
  *
  * What a tip says is deliberately short: the registry's own sentence, the band the stat usually
- * falls in, and where the number is counted. What it does **not** say is `notes` — 42 of the 65
- * stats carry one and 40 of those are v1-parity arithmetic written for whoever ported the stat.
- * Those stay in `DefinitionPanel`'s "Caveat" line, which is where someone asking what a number
- * counts is already reading. A tip is one sentence and a band.
+ * falls in, and where the number is counted. What it does **not** say is `notes`, and that was
+ * re-decided when the reason for it changed.
+ *
+ * ADR-057 §3 kept `notes` off the tip because it was not written for a reader: 40 of the 42 were
+ * v1-parity arithmetic addressed to whoever ported the stat. ADR-062 rewrote all of them for the
+ * person reading the number and moved the porting record to `v1_parity`, which is not on the wire
+ * at all — so that reason has gone, and the tip could now show them. It still does not, for a
+ * measured one: over the 43 stats that carry one, the median `notes` is **136 characters** against
+ * a median `description` of **49**, and the longest is **550** (`ev_bb_per_100`). Putting one on
+ * the tip roughly quadruples it for two thirds of the stats, on a surface that is a hover over a
+ * column header — and `RegistryTerm` places that tip from a constant assumption of a five-line box
+ * (`TIP_HEIGHT_PX`), which a paragraph quietly breaks, so the tip would start flipping to the
+ * wrong side of the word. The caveat now earns its place; the place it earns is
+ * `DefinitionPanel`'s "Caveat" line, which a reader opens on purpose to ask what a number counts.
+ * A tip is one sentence and a band.
  *
  * Everything here is pure text from registry data, so the wording is tested as text rather than
  * through a rendered component.
  */
+
+import { lineWords } from '@poker/ui';
 
 import type { BucketRange, Category, Dimension, Grain, Stat, StatFormat, StatMeta } from './api';
 
@@ -131,21 +144,37 @@ export function bucketWords(dim: Dimension, name: string): string {
 /**
  * One value of a grouped or filtered column, as it reads.
  *
- * Two registry conventions need translating, and **only for an enum**: `5bet_plus` is written
- * `5bet+`, and `''` — "not applicable / unknown" on nine dimensions — is written out rather than
- * rendered as nothing. The enum guard is the point: `filter/label.ts#valueLabel` runs on every
- * type, so a pool player named `a_plus_b` currently reads `a+b`. A bucket name goes through
- * `bucketWords`; anything else, an action line included, is the caller's own business and comes
- * back untouched. "Is it a bucket" asks the object itself, never the prototype behind it: a pool
- * player may be called `constructor`, and `'constructor' in {}` is true.
+ * **Nothing here rewrites a value any more** (ADR-062 §7). The client used to carry two rules of
+ * its own — `5bet_plus` → `5bet+`, and one global `''` → "not applicable" — and both were guesses
+ * standing in for words the registry had never been asked to write. The first ran on every string
+ * and turned a pool player called `a_plus_b` into `a+b`; the second gave one word to the ten
+ * dimensions that declare `''`, which mean seven different things by it ("Before the flop",
+ * "Nobody has raised yet", "Not shown"…). The registry now names all 171 enum values where it
+ * declares them and refuses to load an unlabelled one, so the rule is simply: ask the dimension.
+ *
+ * What is left is what no label can answer. A bucket name goes through `bucketWords`, which prints
+ * its bounds. An action line goes through `@poker/ui`'s `lineWords`, the one place that knows `''`
+ * on a line is "no action yet" rather than a missing value. With no dimension at all — a saved
+ * report naming a column this server no longer serves — the value stands as it is, and a `''` that
+ * nothing can name reads as a dash rather than as an empty cell nobody can see.
+ *
+ * "Is it a bucket / does it have a label" asks the object itself, never the prototype behind it:
+ * a pool player may be called `constructor`, and `'constructor' in {}` is true.
  */
 export function valueWords(dim: Dimension | undefined, value: string | number | null): string {
   if (value === null) return DASH;
   if (typeof value === 'number') return value.toLocaleString(LOCALE);
-  if (value === '') return 'not applicable';
-  if (dim === undefined) return value;
+  if (dim === undefined) return value === '' ? DASH : value;
   if (Object.hasOwn(dim.buckets, value)) return bucketWords(dim, value);
-  return dim.type === 'enum' ? value.replace('_plus', '+') : value;
+  /* `?? {}` because the field's only source is a live `/v1/definitions`, and an API process older
+     than this build does not send it — `Object.hasOwn(undefined, …)` throws, and this runs inside
+     `StatGrid`, `ClauseValue` and `filter/label.ts` during render, so the throw would take out the
+     whole component tree where the old code merely showed a raw code. The type says required; the
+     type is a statement about the server, not a guarantee about the process answering today. */
+  const labels = dim.value_labels ?? {};
+  if (Object.hasOwn(labels, value)) return labels[value]!;
+  if (dim.type === 'line') return lineWords(value);
+  return value === '' ? DASH : value;
 }
 
 /** `Usually 18–28%.` · `Usually 0–10 bb/100.` — the band as a sentence, never as a gate. */

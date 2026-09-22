@@ -22,6 +22,7 @@ function dim(code: string, over: Partial<Dimension> = {}): Dimension {
     tables: ['decisions'],
     description: '',
     values: ['a'],
+    value_labels: {},
     ops: null,
     group_by: true,
     buckets: {},

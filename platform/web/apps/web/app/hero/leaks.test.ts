@@ -16,7 +16,7 @@ import type { Leak } from './api';
 import { handsQuery, isDrillable, leakDrill, leakRows, ranked } from './leaks';
 
 function dim(code: string, label: string, type: Dimension['type'], tables: Dimension['tables'], values: string[] = []): Dimension {
-  return { code, label, type, tables, description: '', values, ops: null, group_by: true, buckets: {}, allowed_ops: type === 'bool' ? ['eq', 'ne'] : ['eq', 'in', 'ne', 'not_in'] };
+  return { code, label, type, tables, description: '', values, value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: type === 'bool' ? ['eq', 'ne'] : ['eq', 'in', 'ne', 'not_in'] };
 }
 
 const DIMS: ReadonlyMap<string, Dimension> = new Map([

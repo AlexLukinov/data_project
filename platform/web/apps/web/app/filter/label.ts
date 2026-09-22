@@ -7,9 +7,11 @@
  * not extend to 79, and a half-worded builder reads worse than a uniformly worded one.
  *
  * How a single value reads is not decided here. `stats/vocabulary.ts` owns that (ADR-057), because
- * the same `5bet_plus` appears in a chip, in a report heading and in a select, and three copies of
- * one rewrite drift apart — the `_plus` → `+` one did, and ran on `player_key` too, where a player
- * named `a_plus_b` came out as `a+b`.
+ * the same value appears in a chip, in a report heading and in a select, and three copies of one
+ * rule drift apart — the `_plus` → `+` rewrite that used to live there did, and ran on
+ * `player_key` too, where a player named `a_plus_b` came out as `a+b`. There is no rewrite left to
+ * copy: the registry names every enum value where it declares it (ADR-062), and one module reads
+ * those names.
  */
 
 import { lineWords } from '@poker/ui';
@@ -34,11 +36,12 @@ const OP_WORDS: Record<string, string> = {
 };
 
 /**
- * `5bet_plus` → `5bet+`; `''` → the words for "the column does not apply here".
+ * The word the registry gives this value — `5bet_plus` → "5-bet or more", `''` → whichever of the
+ * seven things it means on *this* dimension.
  *
  * The dimension is optional only because a caller may have lost it (a saved report naming a column
- * this server no longer serves); with none, the value comes back as it is, since `_plus` is a
- * convention of the registry's enums and of nothing else.
+ * this server no longer serves); with none there is nothing to ask, so the value comes back as it
+ * is. That is the whole of the rule now: there is no vocabulary here to apply without one.
  */
 export function valueLabel(value: string, dim?: Dimension): string {
   return valueWords(dim, value);
@@ -60,8 +63,8 @@ export function clauseLabel(clause: Clause, dim: Dimension | undefined): string 
 }
 
 function values(clause: Clause, dim: Dimension): string {
-  // A number keeps the digits it was typed as: `valueWords` would read an emptied box as "not
-  // applicable", and an unfinished clause already has `clauseProblem` to say what is missing.
+  // A number keeps the digits it was typed as: an emptied box is `''`, which `valueWords` renders
+  // as a dash, and an unfinished clause already has `clauseProblem` to say what is missing.
   const shown = clause.values.map(dim.type === 'number' ? (v) => v : (v) => valueLabel(v, dim));
   if (clause.op === 'between') return `${shown[0]} and ${shown[1]}`;
   return shown.join(', ');

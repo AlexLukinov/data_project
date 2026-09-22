@@ -6,8 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { Stat } from '../stats/api';
-import { PLAYER_STATS } from './stats';
+import type { StatMeta } from '../stats/api';
 import {
   LIST_NOT_REREAD,
   NO_STATS_FOR_RULES,
@@ -15,6 +14,7 @@ import {
   cohortsEmptyView,
   emptyMembersView,
   gridHeading,
+  matchedWords,
   noPlayerWords,
   playerIntroWords,
   savedCohortsErrorWords,
@@ -23,7 +23,8 @@ import {
   unknownCohortWords,
 } from './words';
 
-const stat = (code: string, label: string): Stat => ({ code, label }) as Stat;
+/** A stat as a *result* carries it: the lookup sends these back with every answer. */
+const shown = (code: string, label: string): StatMeta => ({ code, label }) as StatMeta;
 
 describe('gridHeading', () => {
   it('names the cohort the picker chose', () => {
@@ -91,26 +92,64 @@ describe('unknownCohortWords', () => {
 });
 
 describe('playerIntroWords', () => {
-  it('names the stats this page answers, in the registry’s own labels', () => {
-    const words = playerIntroWords([stat('vpip', 'VPIP'), stat('bb_per_100', 'bb/100')]);
-    expect(words).toContain('VPIP and bb/100');
+  it('names the stats the lookup answered with, in the labels it sent', () => {
+    expect(playerIntroWords([shown('vpip', 'VPIP'), shown('bb_per_100', 'bb/100')])).toContain('VPIP and bb/100');
   });
 
-  it('leaves out a stat this page does not ask for', () => {
-    expect(playerIntroWords([stat('vpip', 'VPIP'), stat('cbet_flop', 'C-bet flop')])).not.toContain('C-bet flop');
+  /* The order asserted as one string, not label by label: the answer arrives ranked by the route
+     and `toContain` per label passes just as happily on a list read backwards. */
+  it('names every one of them, in the order the answer lists them', () => {
+    const seven = ['Hands', 'VPIP', 'PFR', '3-bet', 'WTSD', 'WWSF', 'bb/100'];
+    const words = playerIntroWords(seven.map((label) => shown(label.toLowerCase(), label)));
+    expect(words).toContain('You get Hands, VPIP, PFR, 3-bet, WTSD, WWSF and bb/100.');
   });
 
-  /* The registry can fail to load; the page still has to say what it is for. */
-  it('still says what the page is for with no registry at all', () => {
+  /*
+   * Before a search there is no answer, so there is no list — and the page says less rather than
+   * promising seven stats it has not been told about. ADR-062 is about a screen asserting what it
+   * had not asked; a hard-coded list here would be the same shape of claim, just a quieter one.
+   */
+  it('claims no stats before the route has named any', () => {
     const words = playerIntroWords([]);
     expect(words).toContain('by screen name');
     expect(words).not.toContain('You get');
   });
+});
 
-  it('lists every stat the report actually runs when the registry is whole', () => {
-    const whole = PLAYER_STATS.map((code) => stat(code, code.toUpperCase()));
-    const words = playerIntroWords(whole);
-    for (const code of PLAYER_STATS) expect(words).toContain(code.toUpperCase());
+describe('matchedWords', () => {
+  /* The common case: a name somebody typed matches a handful, and all of them are on screen. */
+  it('says nothing when every match is already listed', () => {
+    expect(matchedWords('mango', 4, 4, false)).toBe('');
+  });
+
+  it('says how many matched, and how many of them are shown', () => {
+    const words = matchedWords('man', 1966, 50, false);
+    expect(words).toBe('1,966 names matched “man”. The 50 with the most hands are below, the name typed in full first — type more of it to narrow them.');
+  });
+
+  /*
+   * Past the engine's ceiling the route stops counting, so `matched` is a floor. "10,000 names
+   * matched" would be a precise-looking number that is not one (ADR-062 decision 4).
+   */
+  it('says “at least” when the count is a floor rather than a count', () => {
+    expect(matchedWords('a', 10000, 50, true)).toContain('At least 10,000 names matched');
+    expect(matchedWords('man', 1966, 50, false)).not.toContain('At least');
+  });
+
+  /* The route caps its own query at the ceiling, so a capped answer counted *exactly* the ceiling
+     and the truth is "the ceiling or more". "More than 10,000" is false when 10,000 matched. */
+  it('does not turn that floor into a strict inequality', () => {
+    expect(matchedWords('a', 10000, 50, true)).not.toContain('More than');
+  });
+
+  /* `shown` is an answer's row count and the route's default makes it 50, but this is an exported
+     function taking a number, and "The 1 with the most hands are below" is not a sentence. */
+  it('reads as English when only one name is shown', () => {
+    expect(matchedWords('man', 1966, 1, false)).toContain('The busiest one is below');
+  });
+
+  it('still says so when the cap is reached and the list is not short', () => {
+    expect(matchedWords('a', 200, 200, true)).toContain('At least 200 names matched');
   });
 });
 
@@ -121,6 +160,21 @@ describe('noPlayerWords', () => {
 
   it('says where the names come from, so an empty answer is not read as a broken search', () => {
     expect(noPlayerWords('mang')).toContain('Pool hands');
+  });
+
+  /* The one way a search fails that nobody guesses: every key is `<site>:<name>` and only the
+     name half is matched, so the site a reader can *see* in every result is not what is searched
+     (ADR-062). Measured on the real pool: "ggpoker" matches 27 players who have it in their own
+     name, not the 94,276 who play there. */
+  it('says the site is not part of what is searched', () => {
+    expect(noPlayerWords('ggpoker')).toContain('the site a key starts with is not part of the name');
+  });
+
+  /* "Matched", not "contains": the route lower-cases what was typed and splits a pasted key, so
+     the quoted text is what was asked and is not in general a substring of anything. */
+  it('does not claim the text it quotes is inside any name', () => {
+    expect(noPlayerWords('MAN')).not.toContain('contains');
+    expect(noPlayerWords('MAN')).toContain('Nothing in the pool matched “MAN”');
   });
 });
 

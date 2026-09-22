@@ -9,6 +9,7 @@ function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimen
     tables: ['decisions'],
     description: '',
     values: [],
+    value_labels: {},
     ops: null,
     group_by: true,
     buckets: {},
@@ -132,10 +133,10 @@ describe('describeDimension', () => {
   /* The values go through `stats/vocabulary.ts` now (ADR-057): this panel is where someone comes to
      find out what `5bet_plus` means, and `'' (not applicable)` answered half in code, half in words. */
   it('lists the values in the words the rest of the app reads them in', () => {
-    const values = describeDimension(dim({ code: 'opener_position', type: 'enum', values: ['', 'UTG', 'BTN'] })).find((l) => l.term === 'Values');
-    expect(values?.detail).toBe('not applicable, UTG, BTN');
-    const facing = describeDimension(dim({ code: 'facing', type: 'enum', values: ['raise', '5bet_plus'] })).find((l) => l.term === 'Values');
-    expect(facing?.detail).toBe('raise, 5bet+');
+    const values = describeDimension(dim({ code: 'opener_position', type: 'enum', values: ['', 'UTG', 'BTN'], value_labels: { '': 'Nobody has raised yet', UTG: 'UTG', BTN: 'BTN' } })).find((l) => l.term === 'Values');
+    expect(values?.detail).toBe('Nobody has raised yet, UTG, BTN');
+    const facing = describeDimension(dim({ code: 'facing', type: 'enum', values: ['raise', '5bet_plus'], value_labels: { raise: 'Raise', '5bet_plus': '5-bet or more' } })).find((l) => l.term === 'Values');
+    expect(facing?.detail).toBe('Raise, 5-bet or more');
   });
 
   it('says buckets are half-open, which is the trap they carry', () => {

@@ -30,7 +30,7 @@ vi.mock('~/stores/filter', () => ({ useFilterStore: () => filter }));
 vi.mock('~/stores/definitions', () => ({ useDefinitionsStore: () => registry }));
 
 function dim(code: string, label: string, description: string): Dimension {
-  return { code, label, type: 'string', tables: ['decisions', 'player_hands'], description, values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [] };
+  return { code, label, type: 'string', tables: ['decisions', 'player_hands'], description, values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [] };
 }
 
 const NuxtLink = defineComponent({ props: { to: { type: [String, Object], required: true } }, setup: (props, { slots }) => () => h('a', { href: String(props.to) }, slots.default?.()) });

@@ -191,10 +191,16 @@ async function run(): Promise<void> {
   failure.value = '';
   try {
     const request = columns.request();
+    const asked = questionKey();
     const first = await pool.run(request, scope.cohortOf(primary.value));
     const second = against.value === null ? null : await pool.run(request, scope.cohortOf(against.value));
     [left.value, right.value] = second !== null && sameShape(first, second) ? align(first, second) : [first, second];
-    stale.value = false;
+    /* Not `false` unconditionally: the boxes can be edited *while* a report runs, and then this
+       answer is already about a question nobody is asking. The watcher below cannot catch that —
+       on a first run `left` is still null when it fires, so it says nothing, and on a later one
+       this line would clear the flag it had just set. Either way the grid would claim to answer
+       the question on screen. */
+    stale.value = questionKey() !== asked;
   } catch (error) {
     left.value = null;
     right.value = null;
@@ -202,6 +208,15 @@ async function run(): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+/**
+ * What "the same question" means on this page: the columns, the situation and the two cohorts —
+ * the same tuple the watcher below follows. Serialized rather than compared by identity because
+ * every part of it is a reactive object that is replaced wholesale.
+ */
+function questionKey(): string {
+  return JSON.stringify([columns.state.value, filter.state, primary.value, against.value]);
 }
 
 /* A result on screen is about the question that was asked, not the one now in the boxes. */
@@ -256,7 +271,11 @@ watch(
       own hands, use <NuxtLink to="/reports" class="underline underline-offset-2">Reports</NuxtLink>.
     </p>
 
-    <div class="flex flex-wrap gap-2">
+    <!-- The row is named as well as its buttons: `PresetMenu`'s `report-library` is what the help
+         layer anchors "Presets and saved reports" on, and this page composes `PresetButton`s
+         instead of mounting that menu, so without an anchor of its own the loudest control here
+         was the one the page explainer could not list (ADR-059). -->
+    <div class="flex flex-wrap gap-2" data-testid="pool-presets">
       <PresetButton v-for="preset in scope.presets.value" :key="preset.code" :preset="preset" :disabled="busy" :testid="`pool-preset-${preset.code}`" size="md" @open="scope.apply(preset)" />
     </div>
 

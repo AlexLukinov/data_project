@@ -11,6 +11,7 @@ function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimen
     tables: ['decisions'],
     description: '',
     values: [],
+    value_labels: {},
     ops: null,
     group_by: true,
     buckets: {},

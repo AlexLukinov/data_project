@@ -18,12 +18,12 @@
  * The account is registered over the API — signing up is not the flow under test — with an email
  * no earlier run used, so the same file uploads as new every time.
  */
-import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { expect, test } from '@playwright/test';
-import type { APIRequestContext, Locator, Page, Response } from '@playwright/test';
+import type { Locator, Page, Response } from '@playwright/test';
 
+import { fillSignIn, registerAccount } from './account';
 import { LANDED_MS, REPORT_MS } from './budgets';
 import { API_URL } from './stack';
 
@@ -32,9 +32,6 @@ const SEED_FILE = fileURLToPath(new URL('../../seeds/hands/pokerstars/cash_6max_
 const SEED_SITE = 'pokerstars';
 const SEED_SCREEN_NAME = 'Hero';
 const SEED_HANDS = 2;
-
-/** The API's minimum is ten characters. */
-const PASSWORD = 'e2e-browser-test';
 
 /** What `MetricValue` prints where there is no number. */
 const NO_NUMBER = '—';
@@ -57,19 +54,6 @@ test('a seed file uploaded through /upload is counted by My game with no command
 });
 
 /**
- * A tenant of this run's own, over the API. The 500 hint is the likeliest operator error: the
- * integration suite drops the test databases when its session ends, so a `make test-all` before
- * this leaves nothing to sign in to.
- */
-async function registerAccount(request: APIRequestContext): Promise<string> {
-  const email = `e2e-${randomUUID()}@example.com`;
-  const response = await request.post(`${API_URL}/v1/auth/register`, { data: { email, password: PASSWORD } });
-  const said = await response.text();
-  expect(response.status(), `${said} — a 500 here usually means the test databases are gone: run \`make seed\` (\`make test-all\` drops them)`).toBe(201);
-  return email;
-}
-
-/**
  * My game's report request, awaited before its tiles are read: a tile prints "—" while the report
  * is still in flight as well, so without this the "no hands yet" step could pass on a pending page
  * and leave the server's cache unwarmed. The response is not filtered by status — a report that
@@ -90,10 +74,7 @@ async function signIn(page: Page, email: string): Promise<void> {
     await page.goto('/');
     await expect(page).toHaveURL(/\/login\?next=/);
     const report = reportRequested(page);
-    // pages/login.vue has no data-testid on its fields or its button; these are its own labels.
-    await page.getByLabel('Email', { exact: true }).fill(email);
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await fillSignIn(page, email);
     await expect(page.getByTestId('nav-account')).toHaveText(email);
     await expectReportAnswered(report);
   });

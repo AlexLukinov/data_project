@@ -32,15 +32,20 @@ vi.mock('~/stores/definitions', () => ({ useDefinitionsStore: () => mocks.defini
 vi.mock('~/stores/filter', () => ({ useFilterStore: () => mocks.filter }));
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type' | 'label'>): Dimension {
-  return { tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over };
+  return { tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over };
 }
 
+/* The registry's own shape for this dimension, `''` included: the loader refuses an enum that
+   declares a value it does not label (`stats/definitions.py`), so `values` without `value_labels`
+   is a dimension no server can serve — and a fixture in that shape exercises `valueWords`'
+   fallback rather than its label lookup, which is the branch this surface depends on. */
 const OPENER = dim({
   code: 'opener_position',
   type: 'enum',
   label: "Opener's position",
   description: 'The seat that raised first in.',
-  values: ['BTN', 'CO'],
+  values: ['', 'BTN', 'CO'],
+  value_labels: { '': 'Nobody has raised yet', BTN: 'BTN', CO: 'CO' },
 });
 
 function stat(code: string, label: string, grain: Stat['grain']): Stat {
@@ -61,6 +66,14 @@ describe('FilterBar — the chips', () => {
     expect(chip.text()).toContain("Opener's position is BTN");
     expect(chip.get('[role="tooltip"]').text()).toContain('The seat that raised first in.');
     expect(chip.get('[data-testid="chip-remove-opener_position"]').attributes('aria-label')).toBe("remove Opener's position");
+  });
+
+  /* The one value whose word is not its code: `BTN` reads the same whether the label was found or
+     the raw value fell through, so the chip's vocabulary is only actually asserted here. */
+  it('reads a blank in the words of the column it is a value of', () => {
+    mocks.filter.clauses = [{ dim: 'opener_position', op: 'eq', values: [''] }];
+    const chip = mount(FilterBar).get('[data-testid="chip-opener_position"]');
+    expect(chip.text()).toContain("Opener's position is Nobody has raised yet");
   });
 
   it('removes the clause it sits on, by index', async () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CohortPreset } from '../reports/api';
-import type { CohortSpec, FilterNode, Leaf, Stat } from '../stats/api';
-import { PLAYER_LIMIT, cohortChoices, createPoolStatsApi, describeRules, playerReport, poolRequest, searchPlayers } from './stats';
+import type { CohortSpec, Stat, StatMeta } from '../stats/api';
+import { cohortChoices, createPoolStatsApi, describeRules, playerReport, poolRequest } from './stats';
 
 const REGS: CohortPreset = {
   code: 'regs',
@@ -126,6 +126,26 @@ describe('createPoolStatsApi', () => {
     expect((spy.calls[0]?.init as { body: { cohort: CohortSpec } }).body.cohort).toEqual({ rules: REGS.rules });
   });
 
+  /*
+   * A screen name is personal data and a query string is written into every access log the
+   * request passes through, which is why the lookup is a POST and not the `?prefix=` it replaced
+   * (ADR-062, ADR-058). The name must therefore be in the body and nowhere in the path.
+   */
+  it('looks a player up by POSTing the name, never by putting it in the path', async () => {
+    const spy = recorder();
+    await createPoolStatsApi(spy.fetch).findPlayers('mango');
+    expect(spy.calls[0]?.path).toBe('/v1/pool/players');
+    expect(spy.calls[0]?.init).toEqual({ method: 'POST', body: { name: 'mango' } });
+  });
+
+  /* No `limit`: how many matches come back is the route's default, and the answer says how many
+     matched in all — a number chosen here could only disagree with it. */
+  it('sends the name alone, leaving how many come back to the route', async () => {
+    const spy = recorder();
+    await createPoolStatsApi(spy.fetch).findPlayers('mango');
+    expect(Object.keys((spy.calls[0]?.init as { body: Record<string, unknown> }).body)).toEqual(['name']);
+  });
+
   /* The write half (plan D.6b): the body is `CohortIn` exactly, and the id travels in the path. */
   it('creates a cohort with a POST of the name and the rules', async () => {
     const spy = recorder();
@@ -149,49 +169,28 @@ describe('createPoolStatsApi', () => {
   });
 });
 
-/** The one leaf a player search compiles to — `FilterNode` is a union, so it is narrowed once here. */
-function onlyLeaf(node: FilterNode | undefined): Leaf {
-  if (node === undefined || !('all' in node)) throw new Error('expected an all-node');
-  const [leaf] = node.all;
-  if (leaf === undefined || !('dim' in leaf)) throw new Error('expected a leaf');
-  return leaf;
-}
-
-describe('searchPlayers', () => {
-  /* Every key in the corpus is `ggpoker:<name>`, so a prefix match finds no opponent by name. */
-  it('matches a fragment anywhere in the key, so a namespaced key is still found', () => {
-    const leaf = onlyLeaf(searchPlayers('mango').filter);
-    expect(leaf).toEqual({ dim: 'player_key', op: 'like', value: '%mango%' });
-  });
-
-  it('lowers what was typed, because every stored key is already lower-case', () => {
-    expect(onlyLeaf(searchPlayers('Villain').filter).value).toBe('%villain%');
-  });
-
-  it('trims, so a stray space does not become part of the name', () => {
-    expect(onlyLeaf(searchPlayers('  mango  ').filter).value).toBe('%mango%');
-  });
-
-  it('treats a typed wildcard as text: % and _ are LIKE syntax and were meant literally', () => {
-    expect(onlyLeaf(searchPlayers('50%_off').filter).value).toBe('%50\\%\\_off%');
-  });
-
-  it('escapes a backslash before it can escape something else', () => {
-    expect(onlyLeaf(searchPlayers('a\\b').filter).value).toBe('%a\\\\b%');
-  });
-
-  it('groups by player so each match is its own row, and caps the list', () => {
-    const request = searchPlayers('a');
-    expect(request.group_by).toEqual(['player_key']);
-    expect(request.limit).toBe(PLAYER_LIMIT);
-  });
-});
+/** What the lookup answered with: the headline stats, as `StatMeta`s on the result it returned. */
+const SHOWN: StatMeta[] = [
+  { code: 'hands', label: 'Hands', format: 'count', grain: 'hand', description: '' },
+  { code: 'vpip', label: 'VPIP', format: 'percent', grain: 'hand', description: '' },
+];
 
 describe('playerReport', () => {
   /* `player_key` lives on `stats_daily` alone: grouping a report by it is a 400 by design. */
   it('scopes by player rather than grouping by it', () => {
-    const request = playerReport('ggpoker:example_reg');
+    const request = playerReport('ggpoker:example_reg', SHOWN);
     expect(request.player_key).toBe('ggpoker:example_reg');
     expect(request.group_by).toEqual([]);
+  });
+
+  /*
+   * The seven were a `PLAYER_STATS` constant here, from when the search was a report this client
+   * assembled and something had to choose the columns. `POST /v1/pool/players` chooses them now
+   * (ADR-062) and sends them back with every answer, so the row that was clicked carries the
+   * columns it was already showing — and a list kept here could only be the same seven, or
+   * quietly the wrong ones.
+   */
+  it('asks for the stats the lookup answered with, and holds no list of its own', () => {
+    expect(playerReport('ggpoker:example_reg', SHOWN).stats).toEqual(['hands', 'vpip']);
   });
 });

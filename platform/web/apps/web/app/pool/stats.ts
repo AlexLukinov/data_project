@@ -17,9 +17,11 @@
  *     `request.model_copy(update={'cohort': cohort})`, silently discarding whatever `cohort` the
  *     body carried. Send the saved cohort's id **or** an inline spec, never both — `run()` takes
  *     them as one argument so that is not expressible.
- *  3. **`POST /v1/pool/players` is the purpose-built route and it now works** (ADR-062). It could
- *     not answer a typed name until then, which is why the search here still goes through the
- *     ordinary report path; moving it over is plan step F.14. See `searchPlayers`.
+ *  3. **A player is looked up by name through `POST /v1/pool/players`, and by nothing else**
+ *     (ADR-062). It is a POST because a screen name is personal data and a query string is written
+ *     into every access log the request passes through (ADR-058). What it matches, how short a
+ *     name it refuses and how the matches are ranked are all the server's, measured on the real
+ *     pool; nothing here holds a second copy of any of it. See `findPlayers`.
  *  4. **A refused write is the server's sentence, not ours** (plan D.6b). A duplicate name is a 409
  *     whose detail names the cohort (`uq_cohorts_user_name`); a rule on an uncached stat is a 400 at
  *     *create* (`stats/query.py`), never at query time; an eleventh rule is a 422. Nothing here
@@ -28,17 +30,24 @@
 
 import type { Fetcher } from '../auth/api';
 import type { CohortPreset, PoolPresets } from '../reports/api';
-import type { CohortSpec, ReportRequest, ReportResult, Stat } from '../stats/api';
+import type { CohortSpec, ReportRequest, ReportResult, Stat, StatMeta } from '../stats/api';
 import { OPS } from './rules';
-
-/** How many matching players a search shows. */
-export const PLAYER_LIMIT = 200;
-
-/** The headline stats a player is read by — all hand-grain, because the report is `stats_daily`. */
-export const PLAYER_STATS: readonly string[] = ['hands', 'vpip', 'pfr', 'threebet', 'wtsd', 'wwsf', 'bb_per_100'];
 
 /** What `analysis/pool/cohorts.py` allows for a cohort's member list. */
 export const MEMBER_LIMIT = 1000;
+
+/**
+ * Who a typed name matched (`analysis/pool/service.py#PlayerMatches`).
+ *
+ * A `ReportResult` with the two facts a list of names needs and a grid of numbers does not, so
+ * `StatGrid` and `reports/cell.ts` bind to it unchanged: `rows` is the busiest of the matches,
+ * `matched` is how many there were in all, and `matched_capped` says that count is a floor rather
+ * than a count. All three are the server's own — the page reports them and computes none of them.
+ */
+export interface PlayerMatches extends ReportResult {
+  matched: number;
+  matched_capped: boolean;
+}
 
 /** A saved cohort (`api/schemas_pool.py#CohortOut`). */
 export interface PoolCohort {
@@ -77,6 +86,12 @@ export interface CohortChoice {
 export interface PoolStatsApi {
   presets(): Promise<PoolPresets>;
   run(request: ReportRequest, cohort?: CohortChoice | null): Promise<ReportResult>;
+  /**
+   * Players matching part of a screen name, or a whole key pasted back (`<site>:<part of a name>`).
+   * The route lower-cases what it is given and matches inside the name half, so this is not a
+   * substring test on the text as typed; too short a name is a 400 whose detail is the reason.
+   */
+  findPlayers(name: string): Promise<PlayerMatches>;
   cohorts(): Promise<PoolCohort[]>;
   cohort(id: string): Promise<PoolCohortDetail>;
   members(id: string, limit?: number): Promise<ReportResult>;
@@ -100,47 +115,22 @@ export function poolRequest(request: ReportRequest, cohort?: CohortChoice | null
 }
 
 /**
- * The report that finds a player by a fragment of their name.
+ * One player's own numbers: scoped by `player_key`, never grouped by it (it is `stats_daily`-only).
  *
- * **Why not the purpose-built route.** It answers this question as of ADR-062; until then it could
- * not, and this is the workaround that stood in for it. Moving the page onto `POST /v1/pool/players`
- * is plan step F.14, and it deletes this function and `likeLiteral` with it.
- *
- * What was wrong with it, kept because it is why the dimension's own description changed: it
- * compiled to `startsWith(player_key, …)`, but a `player_key` is **namespaced** —
- * every one of the 94,276 in the corpus reads `ggpoker:<name>`. So a prefix search for "Vill"
- * matches nothing, for any real opponent, and the page would answer "no such player" to every name
- * the founder typed — an assertion of absence that is not true, which is the §17 failure wearing
- * its least obvious disguise. Measured, not assumed: `prefix=A`, `V`, `Vill`, `P` and `1` each
- * returned 0 rows from the live route, while `player_key LIKE '%mango%'` returned five real names.
- *
- * So the search is a `like` over the same dimension, through the ordinary report path. That keeps
- * the site namespace out of the client — nothing here knows the string "ggpoker", and a second
- * site would need no change — and the wildcards are the engine's own `like` semantics rather than
- * vocabulary invented for poker.
- *
- * **The lower-casing is a fact about the data, not a guess.** Of all 94,276 distinct keys, **none**
- * contains an upper-case character: the pipeline stores them lowered. `LIKE` is case-sensitive, so
- * lowering what was typed makes the search case-insensitive *in effect* — and would simply stop
- * matching, rather than match wrongly, if that ever changed.
+ * **The stats are the ones the lookup answered with, not a list kept here.** They used to be a
+ * `PLAYER_STATS` constant, written when the search was a hand-rolled report and the client had to
+ * choose the columns; the route chooses them now (`analysis/pool/service.py#PLAYER_STATS`), and a
+ * second copy here could only ever be the same seven or the wrong seven. So the row that was
+ * clicked brings its own `StatMeta`s with it, and this report asks for exactly what that row was
+ * already showing.
  */
-export function searchPlayers(text: string, limit = PLAYER_LIMIT): ReportRequest {
-  return {
-    filter: { all: [{ dim: 'player_key', op: 'like', value: `%${likeLiteral(text.trim().toLowerCase())}%` }] },
-    group_by: ['player_key'],
-    stats: [...PLAYER_STATS],
-    limit,
-  };
-}
-
-/** A typed fragment as a literal: `%`, `_` and `\` are wildcards to `LIKE` and are meant as text. */
-function likeLiteral(text: string): string {
-  return text.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
-
-/** One player's own numbers: scoped by `player_key`, never grouped by it (it is `stats_daily`-only). */
-export function playerReport(key: string): ReportRequest {
-  return { player_key: key, stats: [...PLAYER_STATS], group_by: [] };
+export function playerReport(key: string, shown: readonly StatMeta[]): ReportRequest {
+  /* Refused rather than sent empty: `stats/resolve.py` reads `request.stats or DEFAULT_STATS`, so
+     an empty list is not an error there — it silently becomes five other stats, and the grid would
+     show numbers the lookup never named while `playerIntroWords` promised the seven it did. A
+     silent fallback on a value this client no longer chooses is the thing F.14 set out to remove. */
+  if (shown.length === 0) throw new Error('the lookup named no stats to read this player by');
+  return { player_key: key, stats: shown.map((stat) => stat.code), group_by: [] };
 }
 
 /**
@@ -197,6 +187,9 @@ export function createPoolStatsApi(fetch: Fetcher): PoolStatsApi {
       const path = cohort?.id == null ? '/v1/pool/stats' : `/v1/pool/stats?cohort_id=${encodeURIComponent(cohort.id)}`;
       return fetch<ReportResult>(path, { method: 'POST', body: poolRequest(request, cohort) });
     },
+    /* No `limit`: how many of the matches come back is the route's own default, and the answer
+       says how many matched in all, so a number chosen here could only disagree with it. */
+    findPlayers: (name) => fetch<PlayerMatches>('/v1/pool/players', { method: 'POST', body: { name } }),
     cohorts: () => fetch<PoolCohort[]>('/v1/pool/cohorts'),
     cohort: (id) => fetch<PoolCohortDetail>(`/v1/pool/cohorts/${id}`),
     members: (id, limit = 100) => fetch<ReportResult>(`/v1/pool/cohorts/${id}/members?limit=${limit}`),

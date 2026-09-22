@@ -5,7 +5,7 @@ import type { Clause } from '../filter/clause';
 import { unsearchableLabels, unsearchableReason } from './searchable';
 
 function dim(code: string, label: string, tables: Dimension['tables']): Dimension {
-  return { code, label, type: 'bool', tables, description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: ['eq', 'ne'] };
+  return { code, label, type: 'bool', tables, description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: ['eq', 'ne'] };
 }
 
 // The real registry entries this guard exists for: `street` is on both marts, `saw_flop` and

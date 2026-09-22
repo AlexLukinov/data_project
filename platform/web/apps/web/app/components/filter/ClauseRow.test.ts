@@ -13,7 +13,7 @@ import type { Dimension } from '~/stats/api';
 import ClauseRow from './ClauseRow.vue';
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
-  return { label: over.code, tables: ['decisions'], description: '', values: [], ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over };
+  return { label: over.code, tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: true, buckets: {}, allowed_ops: [], ...over };
 }
 
 const STREET = dim({

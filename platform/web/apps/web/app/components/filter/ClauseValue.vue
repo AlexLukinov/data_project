@@ -87,6 +87,7 @@ function putList(text: string): void {
   <PositionPicker
     v-else-if="isSeat"
     :seats="dim.values"
+    :labels="dim.value_labels"
     :selected="clause.values"
     :multiple="listOp"
     :label="dim.label"

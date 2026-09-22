@@ -61,6 +61,16 @@ export interface FilterAccess {
  * report may name one player and a saved report may carry inline custom stats; dropping either on
  * the way through would answer a different question under the same name.
  */
+/**
+ * The request fields the builder never edits and must not lose: a report opened and saved again
+ * has to come back the same document.
+ *
+ * `confidence` and `order_by` are deliberately **not** members, and neither is preserved. Nothing
+ * client-side sets either — `SaveReportDialog` sends `columns.request()`, which builds from the
+ * slots above — so no saved report can currently carry one, and adding them here would be a guess
+ * about a shape nothing produces. Recorded rather than fixed (ADR-067): if a ranking ever becomes
+ * something a reader can save, both belong here, with a round-trip test.
+ */
 export interface Carried {
   playerKey: string | null;
   custom: CustomStatSpec[];

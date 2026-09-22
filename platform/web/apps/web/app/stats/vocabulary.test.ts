@@ -61,6 +61,30 @@ function bucketsOf(entry: string): Record<string, BucketRange> {
   return buckets;
 }
 
+/**
+ * The nested `value_labels:` mapping — `value: word` per line, either side possibly quoted.
+ *
+ * Parsed rather than hand-copied for the reason the whole file is: these are the words the client
+ * stopped inventing (ADR-062), and a fixture spelling them itself would go on passing the day the
+ * registry reworded one.
+ */
+function labelsOf(entry: string): Record<string, string> {
+  const start = entry.search(/^ {2}value_labels:$/m);
+  if (start < 0) return {};
+  const labels: Record<string, string> = {};
+  for (const line of entry.slice(start).split('\n').slice(1)) {
+    const match = /^ {4}(?:'(.*?)'|([^:]+)): (.*)$/.exec(line);
+    if (match === null) break;
+    labels[match[1] ?? match[2]!] = match[3]!.trim().replace(/^'(.*)'$/, '$1');
+  }
+  return labels;
+}
+
+/** Every dimension code the file declares, in the order it declares them. */
+function dimensionCodes(): string[] {
+  return [...DIMENSIONS.matchAll(/^- code: (\S+)$/gm)].map((match) => match[1]!);
+}
+
 /** A stat as `/v1/definitions` serves it, with the server's own defaults for what YAML omits. */
 function registryStat(code: string): Stat {
   const entry = block(STATS, code);
@@ -86,6 +110,7 @@ function registryDim(code: string): Dimension {
     tables: list(field(entry, 'tables')) as Table[],
     description: field(entry, 'description'),
     values: list(field(entry, 'values', '[]')),
+    value_labels: labelsOf(entry),
     ops: null,
     group_by: true,
     buckets: bucketsOf(entry),
@@ -154,7 +179,7 @@ describe('statEntry — what a known stat says', () => {
   it('calls the registry’s EV what it is — the all-in adjusted result, not a solver’s', () => {
     const entry = statEntry(EV100, 'ev_bb_per_100');
     expect(entry.term).toBe('All-in adjusted bb/100');
-    expect(entry.definition).toBe('All-in adjusted big blinds won per 100 hands. Usually 0–10 bb/100.');
+    expect(entry.definition).toBe('Big blinds won per 100 hands, all-in adjusted; each all-in pot is shared out by expected share rather than awarded to whoever won it. Usually 0–10 bb/100.');
   });
 
   it('leaves a stat with no typical band at its sentence, with no dangling "Usually"', () => {
@@ -198,8 +223,8 @@ describe('dimensionEntry', () => {
 });
 
 describe('valueWords', () => {
-  it('writes the empty value out, because nothing on screen reads as nothing', () => {
-    expect(valueWords(SHAPE, '')).toBe('not applicable');
+  it('writes the empty value out in the dimension’s own words, not in one word for all of them', () => {
+    expect(valueWords(SHAPE, '')).toBe('Not shown');
   });
 
   it('has a dash for a missing value and groups the digits of a number', () => {
@@ -207,13 +232,28 @@ describe('valueWords', () => {
     expect(valueWords(STACK, 12345)).toBe('12,345');
   });
 
-  it('writes 5bet_plus the way a player does', () => {
-    expect(valueWords(POT_TYPE, '5bet_plus')).toBe('5bet+');
+  it('writes 5bet_plus the way the registry names it, not the way the client used to', () => {
+    expect(valueWords(POT_TYPE, '5bet_plus')).toBe('5-bet or more');
   });
 
-  /** The reason the enum guard exists: a pool player is a name, and names contain anything. */
+  /**
+   * The reason the client's own `_plus` → `+` rewrite had to go: a pool player is a name, names
+   * contain anything, and `player_key` is a string column the registry cannot label. There is now
+   * no rule left to run on it — which is the fix, not a special case.
+   */
   it('leaves a player named sun_plus_moon alone', () => {
     expect(valueWords(PLAYER, 'sun_plus_moon')).toBe('sun_plus_moon');
+  });
+
+  /**
+   * On a line `''` is not a missing value at all — it is "no action yet", which is `@poker/ui`'s
+   * to say. Reachable from a report: all four line dimensions are offered as group-bys, and this
+   * is what `StatGrid` prints in the first column of such a row (it used to print "not applicable").
+   */
+  it('sends an action line through the words that know what an empty line is', () => {
+    const line = { ...POSITION, code: 'street_line', type: 'line' as const, values: [], value_labels: {} };
+    expect(valueWords(line, '')).toBe('no action yet');
+    expect(valueWords(line, 'b-c')).toBe('bet-call');
   });
 
   /**
@@ -234,6 +274,56 @@ describe('valueWords', () => {
 
   it('sends a bucket through the bucket words', () => {
     expect(valueWords(SIZE, 'small')).toBe('small (under 0.37 of the pot)');
+  });
+});
+
+/**
+ * The guard on the change that made this file's fixtures parse `value_labels` at all.
+ *
+ * `''` is a real value on ten dimensions and it means something different on nearly every one of
+ * them: the board columns are blank before the flop, `opener_position` is blank when nobody has
+ * raised, `hand_shape` is blank when the cards were never shown. The client used to render all ten
+ * as one phrase, "not applicable", which is true of none of them and says nothing about any.
+ *
+ * So the ten are pinned by name, through `valueWords` rather than off the YAML, because the thing
+ * that must not come back is a client-side rule that collapses them again — and a rule like that
+ * would still leave the registry file correct. A new dimension declaring `''` fails the sweep
+ * below until it is listed here with what it means.
+ */
+const BLANK_MEANS: Readonly<Record<string, string>> = {
+  hand_shape: 'Not shown',
+  made_hand: 'Preflop or not shown',
+  flop_suitedness: 'Before the flop',
+  flop_pairing: 'Before the flop',
+  flop_high_card: 'Before the flop',
+  flop_connectedness: 'Before the flop',
+  opener_position: 'Nobody has raised yet',
+  last_raiser_position: 'No bet or raise yet',
+  turn_rank: 'Before the turn',
+  river_rank: 'Before the river',
+};
+
+describe('the empty value', () => {
+  it('says what it means on each of the ten dimensions that declare it', () => {
+    for (const [code, word] of Object.entries(BLANK_MEANS)) {
+      expect(valueWords(registryDim(code), ''), code).toBe(word);
+    }
+  });
+
+  /* Off the registry through `valueWords`, not off the table above: a set built from this file's
+     own constant is the one assertion here that no source or registry change can make fail —
+     re-introducing `if (value === '') return 'not applicable'` would leave it green. */
+  it('does not collapse into one word for all of them', () => {
+    const words = Object.keys(BLANK_MEANS).map((code) => valueWords(registryDim(code), ''));
+    expect(new Set(words).size).toBe(7);
+  });
+
+  /* Swept off `value_labels` rather than `values`: the loader holds the two to the same set, and
+     a flow list of twenty hand classes wraps onto a second line, which this file's one-line YAML
+     reader would read as a shorter list. The nested mapping never wraps. */
+  it('is listed here for every dimension the registry declares it on, and no others', () => {
+    const declared = dimensionCodes().filter((code) => Object.hasOwn(labelsOf(block(DIMENSIONS, code)), ''));
+    expect(declared.sort()).toEqual(Object.keys(BLANK_MEANS).sort());
   });
 });
 

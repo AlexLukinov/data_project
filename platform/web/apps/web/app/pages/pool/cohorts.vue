@@ -117,12 +117,18 @@ async function show(choice: CohortChoice): Promise<void> {
   busy.value = true;
   try {
     const [detail, rows] = await Promise.all([pool.cohort(choice.id), pool.members(choice.id, MEMBERS_SHOWN)]);
+    /* An answer that is no longer the question is dropped. Nothing disables these rows while one
+       is loading, a cohort read a moment ago is served from the report cache while a cold one
+       waits, and the panel is keyed on `openKey` alone — so the slower answer would render its
+       size and its **member list**, which is real opponents by name, under the other cohort's
+       heading. Same guard as `pages/pool/players.vue#read`, and the same reason. */
+    if (openKey.value !== choice.key) return;
     size.value = detail.players;
     members.value = rows;
   } catch (error) {
-    failure.value = describeApiError(error);
+    if (openKey.value === choice.key) failure.value = describeApiError(error);
   } finally {
-    busy.value = false;
+    if (openKey.value === choice.key) busy.value = false;
   }
 }
 

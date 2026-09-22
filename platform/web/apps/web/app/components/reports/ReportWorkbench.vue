@@ -151,8 +151,11 @@ async function run(): Promise<void> {
   busy.value = true;
   failure.value = '';
   try {
+    const asked = questionKey();
     result.value = await api.runReport(columns.request());
-    stale.value = false;
+    /* See `pages/pool/index.vue#run`: the boxes can be edited while the report runs, and clearing
+       the flag unconditionally would present that answer as the one now on screen. */
+    stale.value = questionKey() !== asked;
   } catch (error) {
     result.value = null;
     failure.value = describeApiError(error);
@@ -212,6 +215,11 @@ watch(
     if (id !== null && id !== openId.value) openSaved(id);
   },
 );
+
+/** What "the same question" means here: the columns and the situation, as the watcher below reads them. */
+function questionKey(): string {
+  return JSON.stringify([columns.state.value, filter.state]);
+}
 
 /* A result on screen is about the question that was asked, not the one now in the boxes. */
 watch(

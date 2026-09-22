@@ -8,14 +8,16 @@ import type { Dimension } from '~/stats/api';
 import ClauseValue from './ClauseValue.vue';
 
 function dim(over: Partial<Dimension> & Pick<Dimension, 'code' | 'type'>): Dimension {
-  return { label: over.code, tables: ['decisions'], description: '', values: [], ops: null, group_by: false, buckets: {}, allowed_ops: [], ...over };
+  return { label: over.code, tables: ['decisions'], description: '', values: [], value_labels: {}, ops: null, group_by: false, buckets: {}, allowed_ops: [], ...over };
 }
 
 const SPR = dim({ code: 'spr', type: 'number', label: 'SPR', allowed_ops: ['between', 'gte', 'lte'] });
 const STAKE = dim({ code: 'stake_level', type: 'string', label: 'Stake', allowed_ops: ['eq', 'prefix'] });
 const BIG_BLIND = dim({ code: 'big_blind', type: 'number', label: 'Big blind', allowed_ops: ['in', 'not_in', 'eq'] });
 const SIZE = dim({ code: 'size_pct', type: 'number', label: 'Bet size (fraction of pot)', buckets: { small: [0, 0.37], mid: [0.37, 0.7] }, allowed_ops: ['gte', 'lte'] });
-const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['bet', '5bet_plus', ''], allowed_ops: ['eq', 'in'] });
+/* The registry's own `facing`, three of its seven values: it declares no `''` — `none` is its word
+   for "nothing in front" — and the loader refuses a label for a value a dimension does not declare. */
+const FACING = dim({ code: 'facing', type: 'enum', label: 'Facing', values: ['bet', '5bet_plus', 'none'], value_labels: { bet: 'Bet', '5bet_plus': '5-bet or more', none: 'Nothing' }, allowed_ops: ['eq', 'in'] });
 
 /** The component with its clause kept in step with what it emits, as `ClauseRow` does. */
 function render(clause: Clause, dimension: Dimension) {
@@ -105,14 +107,36 @@ describe('ClauseValue — what a choice shows against what it sends', () => {
   it('writes an enum value as a player writes it, and sends the registry code', async () => {
     const w = render({ dim: 'facing', op: 'eq', values: ['bet'] }, FACING);
     const options = box(w, 'clause-enum').findAll('option');
-    expect(options.map((o) => o.text())).toEqual(['bet', '5bet+', 'not applicable']);
+    expect(options.map((o) => o.text())).toEqual(['Bet', '5-bet or more', 'Nothing']);
     await box(w, 'clause-enum').setValue('5bet_plus');
     expect(w.emitted('update:values')!.at(-1)).toEqual([['5bet_plus']]);
   });
 
+  /*
+   * The last client-side rewrite, and the one that hid from the earlier sweep: `opener_position`
+   * and `last_raiser_position` both list BTN and SB, so they route to `PositionPicker`, which had
+   * its own `'' → "Not applicable — nobody in that role"` — the exact phrase ADR-062 deleted from
+   * `valueWords`, and wrong on at least one of the two dimensions whatever it said. The chip keeps
+   * its short text (a 2.6rem button in a ring); the meaning on the hover is the registry's.
+   */
+  it('gives the seat picker the registry’s own word for a blank, not a phrase of its own', () => {
+    const OPENER = dim({
+      code: 'opener_position',
+      type: 'enum',
+      label: "Opener's position",
+      values: ['', 'BTN', 'SB'],
+      value_labels: { '': 'Nobody has raised yet', BTN: 'BTN', SB: 'SB' },
+      allowed_ops: ['eq', 'in'],
+    });
+    const w = render({ dim: 'opener_position', op: 'eq', values: [''] }, OPENER);
+    const none = w.get('[data-testid="seat-none"]');
+    expect(none.attributes('title')).toBe('Nobody has raised yet');
+    expect(none.attributes('title')).not.toContain('Not applicable');
+  });
+
   it('writes the same words on the many-value buttons', () => {
     const w = render({ dim: 'facing', op: 'in', values: [] }, FACING);
-    expect(box(w, 'clause-enum-many').findAll('button').map((b) => b.text())).toEqual(['bet', '5bet+', 'not applicable']);
+    expect(box(w, 'clause-enum-many').findAll('button').map((b) => b.text())).toEqual(['Bet', '5-bet or more', 'Nothing']);
   });
 });
 

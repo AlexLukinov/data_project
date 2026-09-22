@@ -4,8 +4,8 @@ import type { DefinitionsResponse, Dimension, StatsApi } from './api';
 import { createDefinitions } from './definitions';
 
 const DIMENSIONS: Dimension[] = [
-  { code: 'site', label: 'Site', type: 'enum', tables: ['decisions'], description: '', values: ['ggpoker'], ops: null, group_by: true, buckets: {}, allowed_ops: ['eq'] },
-  { code: 'street', label: 'Street', type: 'enum', tables: ['decisions'], description: '', values: ['flop'], ops: null, group_by: true, buckets: {}, allowed_ops: ['eq'] },
+  { code: 'site', label: 'Site', type: 'enum', tables: ['decisions'], description: '', values: ['ggpoker'], value_labels: { ggpoker: 'GGPoker' }, ops: null, group_by: true, buckets: {}, allowed_ops: ['eq'] },
+  { code: 'street', label: 'Street', type: 'enum', tables: ['decisions'], description: '', values: ['flop'], value_labels: { flop: 'Flop' }, ops: null, group_by: true, buckets: {}, allowed_ops: ['eq'] },
 ];
 
 function fakeApi(answer: DefinitionsResponse | Error): StatsApi & { calls: number } {

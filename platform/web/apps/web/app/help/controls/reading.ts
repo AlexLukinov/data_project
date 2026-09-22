@@ -120,10 +120,22 @@ export const READING_CONTROLS: readonly ControlHelp[] = [
     // The box, not the Search button: the button is disabled until something is typed, and a
     // disabled control takes no focus, so its sentence would be unreachable from a keyboard.
     id: 'player-search',
-    anchor: '[data-testid="player-prefix"]',
+    // Was `player-prefix`, which is what the search was before ADR-062 and never what it did.
+    anchor: '[data-testid="player-name"]',
     source: `${APP}/pages/pool/players.vue`,
     control: 'Player search',
-    does: 'Looks for your text anywhere inside a pool player’s name, not only at the start, and the report below is then that one player alone.',
+    does: 'Looks for your text anywhere inside a pool player’s screen name, not only at the start, and shows the name typed in full first, then whoever has the most hands. Picking one reports that player alone.',
     where: 'Player lookup.',
+  },
+  {
+    // `/pool` composes `PresetButton`s directly rather than mounting `PresetMenu`, so it renders
+    // no `report-library` and `preset-menu` above never attaches here (ADR-059): the loudest
+    // control on the page was the one control the explainer could not list.
+    id: 'pool-presets',
+    anchor: '[data-testid="pool-presets"]',
+    source: `${APP}/pages/pool/index.vue`,
+    control: 'The standard pool reports',
+    does: 'Opens a question the platform ships, replacing the stats, the grouping and the situation on screen — including a rule about which players it measures, which the note under the pickers then spells out. It fills the form; it does not run it.',
+    where: 'The Pool, above the situation.',
   },
 ];

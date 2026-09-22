@@ -2,8 +2,9 @@
  * The Pool: what the field does, sliced any way, for any slice of players.
  *
  * Read from `analysis/pool/service.py`, `analysis/pool/cohorts.py` and, for the per-player
- * screen, `~/pool/stats.ts#searchPlayers` and `#playerReport`. The gating rule is
- * `analysis/pool/node_query.py`'s `MIN_N` and the client's `~/reports/cell.ts`.
+ * screen, that same module's `players()` — which is where the lookup's rules live now, the client
+ * holding none of them (ADR-062) — with `~/pool/stats.ts#findPlayers` and `#playerReport` as the
+ * two calls. The gating rule is `analysis/pool/node_query.py`'s `MIN_N` and `~/reports/cell.ts`.
  */
 import type { Tool } from './types';
 
@@ -23,7 +24,7 @@ export const POOL_TOOLS: readonly Tool[] = [
       'Every cell carries its own sample size and a thin one is dimmed and left uncompared — the same rule, in the same file, as My game.',
     ],
     steps: [
-      'Pick the stats, then narrow the situation in the filter bar.',
+      'Open one of the standard reports above the filter bar to see the shape of a question, or pick the stats yourself and narrow the situation.',
       'Choose what to group by — position, board texture, bet size, anything the registry knows.',
       'Optionally pick a cohort, and a second one to compare against.',
       'Run it, then raise the reading threshold until only the rows you would act on are left undimmed.',
@@ -68,8 +69,9 @@ export const POOL_TOOLS: readonly Tool[] = [
     example: 'top-pair-dry-board',
     account: 'required',
   },
-  // `~/pool/stats.ts#searchPlayers` — a substring over `player_key` through the ordinary report
-  // path; `#playerReport` scopes by `player_key` rather than grouping by it.
+  // `analysis/pool/service.py#players` — the match, the minimum and the ranking, all measured on
+  // the real pool; `~/pool/stats.ts#playerReport` then scopes by `player_key` rather than
+  // grouping by it.
   {
     id: 'players',
     area: AREA,
@@ -77,9 +79,9 @@ export const POOL_TOOLS: readonly Tool[] = [
     name: 'Player lookup',
     what: 'Find one opponent in the pool and read their game.',
     how: [
-      'The search is a substring match over the player column, run through the ordinary report path, because the keys in the corpus are namespaced by site and a prefix search answers “no such player” to everyone.',
+      'Your text is matched against the screen name rather than against the site a key starts with, so typing a site’s own name looks for people who have it in their name instead of listing everyone who plays there; paste a whole key back out of an answer and the site before the colon has to match too.',
+      'A name that matches thousands is ranked rather than truncated: the name you typed in full comes first, then whoever has the most hands, and the page says how many matched when it is showing you only the busiest of them.',
       'A player report scopes the query to that one key rather than grouping by it — grouping by player is a question the decision tables cannot answer, and the engine refuses it by design.',
-      'This exists for the population corpus only. Your own hands carry session-scoped aliases for opponents, so there is nothing stable to look up there.',
     ],
     steps: [
       'Type part of a screen name and search.',
@@ -89,7 +91,8 @@ export const POOL_TOOLS: readonly Tool[] = [
     ],
     needs: ['Sign in.', 'Pool hands that carry screen names, which the population corpus does.'],
     limits: [
-      'Anonymised tables give you nothing here: no stable name, no cross-session player.',
+      'This exists for the population corpus only: your own hands carry session-scoped aliases for opponents, and an anonymised table gives no stable name to look up at all.',
+      'Too short a name is refused rather than answered: the server says how much of one it needs, because a couple of letters name thousands of players and no ranking makes that a lookup.',
       'There is no filter bar — the search and the member routes take no situation.',
       'A single opponent’s numbers are thin almost always; treat them as a hint, not a read.',
     ],
