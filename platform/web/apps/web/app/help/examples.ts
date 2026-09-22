@@ -17,8 +17,10 @@
  *
  * **Every spot is the button against the big blind in a single-raised pot**, because `btn_rfi`
  * against `bb_call_vs_btn` is the only pair of reference charts in which the caller's chart is the
- * range that actually reaches the flop. The three flops are chosen so the same two ranges tell
- * three different stories.
+ * range that actually reaches the flop (`HONEST_PAIRS`). That binds the seats and the preflop
+ * line; it does not bind how many spots there are (ADR-072). The four flops are chosen so the same
+ * two ranges tell four different stories — between them they reach all four of `roleOf`'s answers,
+ * and the fourth is the one where the board belongs to the seat that called.
  */
 import type { NodeKey } from '@poker/core';
 import { nodeKey, step } from '@poker/core';
@@ -68,9 +70,19 @@ export const EXAMPLE_STEPS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
  */
 export const EXAMPLE_OPENS_AT = 3;
 
+/**
+ * The chart pairs in which both seats' charts really are the ranges that reach the flop
+ * (ADR-050 fact 4). `train/charts.ts` has one continuing range — `bb_call_vs_btn` — and seven
+ * ranges somebody opened or raised with, so there is exactly one pair. `examples.test.ts` checks
+ * every example against this list: the seat guard alone would pass `utg_rfi` against
+ * `bb_call_vs_btn`, which is a range the big blind never calls an under-the-gun open with.
+ */
+export const HONEST_PAIRS: readonly (readonly [string, string])[] = [['btn_rfi', 'bb_call_vs_btn']];
+
 const SEED_STACK_BB = 108;
 const SEED_BET = 0.462;
 const TWO_THIRDS = 0.66;
+const HALF = 0.5;
 const QUARTER = 0.25;
 
 /** The button bets the flop after the big blind checks: the node every example is about. */
@@ -122,6 +134,20 @@ export const EXAMPLES: readonly Example[] = [
     board: 'Ad As 3h',
     heroCards: '7c6c',
     sizePct: QUARTER,
+  },
+  {
+    id: 'their-board-second-pair',
+    title: 'A board that belongs to the caller',
+    teaches:
+      'A flop can hit the range that called harder than the range that raised; and a hand that is neither the top of your range nor a draw is betting to protect itself, not for value.',
+    story: 'The button opens to 3bb, the big blind calls. On 8♠ 6♦ 5♣ the big blind checks and the button weighs a half-pot bet with Q♥ 6♥.',
+    source: 'A spot made up for this example.',
+    node: buttonBets(HALF),
+    heroChart: 'btn_rfi',
+    villainChart: 'bb_call_vs_btn',
+    board: '8s 6d 5c',
+    heroCards: 'Qh6h',
+    sizePct: HALF,
   },
 ];
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { exampleById } from '../help/examples';
 import type { EmptyStateView } from '../reports/emptyState';
 import type { HandsEmptyFacts } from './emptyState';
 import { handsEmptyView } from './emptyState';
@@ -20,7 +21,20 @@ describe('handsEmptyView — My hands', () => {
     expect(view.actions).toEqual([
       { key: 'upload', label: 'Upload hand histories', to: '/upload' },
       { key: 'paste', label: 'Paste a hand', to: '/hands/paste' },
+      { key: 'example', label: 'Try an example', to: '/examples/top-pair-dry-board' },
     ]);
+  });
+
+  /*
+   * ADR-073. The other two ways in both need something the reader with an empty list does not
+   * have — a file to upload, or hand-history text to paste. The example needs neither, and it is
+   * the spot the `hands` tool already declares, so an id that stops existing fails here.
+   */
+  it('offers a worked example, at a spot that exists, only while nothing is stored', () => {
+    expect(exampleById('top-pair-dry-board')).not.toBeNull();
+    expect(handsEmptyView(facts()).body).toContain('open a worked example');
+    expect(keys(handsEmptyView(facts({ tag: 'bluff' })))).not.toContain('example');
+    expect(keys(handsEmptyView(facts({ dataset: 'population' })))).not.toContain('example');
   });
 
   it('answers "uploaded already and still nothing" with the warning the Upload page actually shows', () => {

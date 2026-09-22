@@ -61,4 +61,43 @@ describe('Format A (combo notation)', () => {
   it('serializes an empty range as an empty string', () => {
     expect(serializeComboFormat(parseComboFormat('').range)).toBe('');
   });
+
+  /*
+   * ADR-067. The weights are float32 and `parseFloat` is a double, so a literal past 3.4e38 used
+   * to round to Infinity, sit in the range unremarked, and serialize as `AsKh: Infinity` — text
+   * our own serializer wrote and the API then refused as "not combo notation". A weight under
+   * ~1.4e-45 has the opposite problem: it rounds to zero and the combo disappears from the text.
+   */
+  it('refuses a weight too large for a float32 rather than serializing it as Infinity', () => {
+    expect(() => parseComboFormat('AsKh: 1e999')).toThrow(/entry 1: `AsKh:1e999` has a weight too large to hold/);
+    expect(() => parseComboFormat('AsKh: 1, AsKd: 3.5e38')).toThrow(/entry 2/);
+    // The largest weight a float32 does hold still parses and still round-trips.
+    expect(serializeComboFormat(parseComboFormat('AsKh: 3.4e38').range)).toBe('AsKh: 3.4e+38');
+  });
+
+  it('says when a weight is too small to hold, rather than dropping the combo in silence', () => {
+    const { range, warnings } = parseComboFormat('AsKh: 1, AsKd: 1e-46');
+    expect(range.weights[parseCombo('AsKd')]).toBe(0);
+    expect(warnings).toEqual(['1 weight is too small to hold and round to zero; those combos are not in the range']);
+    expect(serializeComboFormat(range)).toBe('AsKh: 1');
+  });
+});
+
+/*
+ * The one contract this package shares with a language it cannot typecheck against: the API
+ * stores a range's body without parsing it and refuses anything that is not the canonical text
+ * this serializer writes (`platform/api/schemas_ranges.py#COMBO_ENTRY`). The regex below is that
+ * one, transliterated. It is the reason `AsAh: 1, AsAd: 1` is refused by the server while this
+ * parser accepts it: the server's contract is with the *serializer*, not with what a human types,
+ * and every client sends `serializeRange(range, 'combo')` for exactly that reason.
+ */
+describe('what the server will accept', () => {
+  const COMBO_ENTRY = /^[2-9TJQKA][cdhs][2-9TJQKA][cdhs]: (?:[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)$/;
+
+  it('emits only entries `platform/api/schemas_ranges.py` accepts', () => {
+    const fixture = serializeComboFormat(parseComboFormat(readFileSync(FIXTURE, 'utf8')).range);
+    const odd = serializeComboFormat(parseComboFormat('AsKh: 1e-7,AsKd: 0.333,AsKc: 1.005,AhKs: 3.4e38,AhKd: 1').range);
+    const rejected = [...fixture.split(','), ...odd.split(',')].filter((entry) => !COMBO_ENTRY.test(entry));
+    expect(rejected).toEqual([]);
+  });
 });

@@ -13,14 +13,14 @@ definePageMeta({ public: true }); // an example needs no backend and no account 
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold">Examples</h1>
       <p class="text-sm text-zinc-500">
-        The same two ranges — the button opens, the big blind calls — on three flops. Each one opens all nine of the
+        The same two ranges — the button opens, the big blind calls — on four flops. Each one opens all nine of the
         analyzer's steps on a spot that is already set up: commit your answer, then see what is true. The four steps that
         read your pool say so instead, because an example has no pool. Nothing is uploaded, and nothing you do in an
         example is saved.
       </p>
     </div>
 
-    <ul class="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="examples-list">
+    <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="examples-list">
       <li v-for="example in EXAMPLES" :key="example.id" class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <NuxtLink :to="`/examples/${example.id}`" class="block space-y-2" :data-testid="`example-${example.id}`">
           <h2 class="font-medium">{{ example.title }}</h2>

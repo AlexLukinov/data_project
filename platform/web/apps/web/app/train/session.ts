@@ -17,15 +17,12 @@ import { dueFirst, nextReview, randomSeed } from '@poker/core';
 import type { Ref } from 'vue';
 import { ref, shallowRef } from 'vue';
 
-import { describeApiError } from '../auth/api';
-
 import type { ReviewRow, TrainingCache } from './cache';
+import { CANNOT_ANSWER, localProblem } from './problems';
 import { answersOf, generateSpot } from './spot';
 import type { ScoreRow, SpotAnswers, TrainMode, TrainSpot } from './types';
 
 export type TrainerStatus = 'idle' | 'asking' | 'checking' | 'revealed';
-
-const CANNOT_ANSWER = 'That answer could not be worked out here — skip on to the next spot.';
 
 export interface TrainerDeps {
   readonly cache: TrainingCache;
@@ -114,7 +111,9 @@ async function reveal(ctx: Context, spot: TrainSpot): Promise<void> {
     ctx.state.truth.value = answers;
   } catch (error) {
     if (ctx.state.spot.value?.hash === spot.hash) {
-      ctx.state.unavailable.value = describeApiError(error, CANNOT_ANSWER);
+      // Never `describeApiError`: this page makes no HTTP call, so its wording would send the
+      // reader to a terminal running `make api` for a failure that never left the tab (ADR-069).
+      ctx.state.unavailable.value = localProblem(CANNOT_ANSWER, error);
     }
   } finally {
     if (ctx.state.spot.value?.hash === spot.hash) ctx.state.status.value = 'revealed';

@@ -38,13 +38,36 @@ describe('topPairOrBetterShare', () => {
   it('is zero for an empty range rather than a division by nothing', () => {
     expect(topPairOrBetterShare(range(''), FLOP)).toBe(0);
   });
+
+  /*
+   * ADR-071. A combo holding a board card is not a hand anybody can have, so it counts neither
+   * way. The old denominator was the whole range while the numerator was already only the live
+   * part, which made this answer smaller the more of the range the board blocked — and put it
+   * out of step with the distribution panel the same step draws beside the question.
+   */
+  it('leaves out the combos the board has already made impossible', () => {
+    // On Ah7d2c, AhKh and Ah7h cannot be held. What is left is AsKs (top pair) and KdQd (king
+    // high): one of two, not one of four.
+    const combos = range('AsKs: 1,KdQd: 1,AhKh: 1,Ah7h: 1');
+    expect(topPairOrBetterShare(combos, FLOP)).toBeCloseTo(0.5, 6);
+  });
+
+  it('is zero when the board has blocked the whole range rather than dividing by it', () => {
+    expect(topPairOrBetterShare(range('AhKh: 1,Ah7h: 1'), FLOP)).toBe(0);
+  });
 });
 
 describe('combosRemoved', () => {
   it('counts what two cards make impossible', () => {
-    // Holding AsKh kills AsKs, AsQs and AhKh; AdQd survives.
+    // Of AsKs, AsQs, AdQd — AhKh is already gone, the board holds Ah — holding AsKh kills the
+    // two with As in them. Two, not three: the board's own removal is not your hand's doing.
     const villain = range('AsKs: 1,AsQs: 1,AhKh: 1,AdQd: 1');
-    expect(combosRemoved(villain, parseCards('AsKh'))).toBe(3);
+    expect(combosRemoved(villain, FLOP, parseCards('AsKh'))).toBe(2);
+  });
+
+  it('counts against the whole range while there is no board to remove anything', () => {
+    const villain = range('AsKs: 1,AsQs: 1,AhKh: 1,AdQd: 1');
+    expect(combosRemoved(villain, parseCards('Ah'), parseCards('AsKh'))).toBe(3);
   });
 });
 
@@ -73,6 +96,12 @@ describe('classPercentile and roleOf', () => {
   it('has no answer for a hand that is not in the range', () => {
     expect(classPercentile(range('AsKs: 1'), FLOP, parseCards('2h'))).toBeNull();
     expect(classPercentile(range('AsKs: 1'), FLOP, parseCards('3h3d'))).toBeNull();
+  });
+
+  it('measures against the range the board leaves, not the one that was written down (ADR-071)', () => {
+    // AhKh holds a board card, so AsKs beats one of the two hands still possible, not one of three.
+    const mine = range('AsKs: 1,KdQd: 1,AhKh: 1');
+    expect(classPercentile(mine, FLOP, parseCards('AsKs'))).toBeCloseTo(0.5, 6);
   });
 
   it('reads the top of a range as value and a draw below it as a semi-bluff', () => {

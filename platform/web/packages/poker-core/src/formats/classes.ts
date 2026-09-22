@@ -26,7 +26,7 @@ import { ACE, HAND_CLASS_COMBOS, RANK_CHARS, RANK_COUNT, handClassName, isPairCl
 import { formatWeight } from '../numbers';
 import type { WeightedRange } from '../range';
 import { createRange, toHandClassMatrix } from '../range';
-import { splitEntries } from './combo';
+import { NOT_FINITE, splitEntries } from './combo';
 import { RangeParseError } from './errors';
 
 type Kind = 'pair' | 's' | 'o' | 'both';
@@ -163,6 +163,9 @@ export function parseClassFormat(text: string): ParsedClassFormat {
     const term = m[1]!;
     if (term === '') throw new RangeParseError(i + 1, entry, 'has a weight but no hand');
     const weight = m[2] === undefined ? 1 : Math.fround(Number.parseFloat(m[2]));
+    // Both notations write into the same float32 weights and both are serialized as combo text
+    // before they are stored, so an overflowing weight has to be refused here too (ADR-070).
+    if (!Number.isFinite(weight)) throw new RangeParseError(i + 1, entry, NOT_FINITE);
     for (const cls of expandTerm(term, i + 1, entry, warnings)) {
       if (seen.has(cls)) repeated++;
       seen.add(cls);

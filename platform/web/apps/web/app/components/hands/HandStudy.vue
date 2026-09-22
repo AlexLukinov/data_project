@@ -2,7 +2,7 @@
 // One hand, stepped through, with every panel bound to the node the hand is currently at
 // (spec §9.3). The panels ask the range library what is written down for this situation and for
 // what the other seat just did, so stepping forward walks both the hand and my own charts.
-import type { Axis, EquityResult, HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
+import type { Axis, ComboIndex, EquityResult, HandState, NodeKey, ReplayHand, WeightedRange } from '@poker/core';
 import { NO_RAKE, canonicalNodeKey, nodeKeyLabel, parseCards, parseRange } from '@poker/core';
 import { ComboDistributionPanel, EQRPanel, EquityCalculator, HandReplayer, MDFPanel, PoolDataBadge, PoolRealizationPanel, PotOddsPanel, RangeMatrix, poolEqr } from '@poker/ui';
 import { computed, reactive, ref } from 'vue';
@@ -64,8 +64,10 @@ async function onNode(next: NodeKey | null, at: HandState): Promise<void> {
   poolFailure.value = '';
   realizedFailure.value = '';
   // The axes are the reader's choice and survive the step; the exported text is about the range
-  // at the step it was taken from, so it must not sit under the next one's heading.
+  // at the step it was taken from, so it must not sit under the next one's heading. The same is
+  // true of the defending set: it is the answer to this bet, not to the next one.
   exported.value = '';
+  defending.value = [];
   // The charts are marked with the same `asked` situation as the pool's answers, and for the same
   // reason: stepping quickly, an earlier step's lookup can settle last, and its charts — or its
   // `failed` flag, which prints "your range library could not be read" — would land under the
@@ -148,6 +150,33 @@ const both = computed<WeightedRange[]>(() => (mine.value !== null && villain.val
 const watched = computed(() => props.hand.seats.find((s) => s.seat === props.watchSeat) ?? props.hand.seats.find((s) => s.isHero) ?? null);
 
 /**
+ * Who has to answer the bet the two panels are priced from, and with what (ADR-068).
+ *
+ * MDF is the *defender's* obligation, and on this screen the defender is not the seat `mine`
+ * describes. `toCall` is reckoned for the seat of the next action (`HandState`), while
+ * `nodeKeyAt` ends its sequence with the action just taken — so at every step where anything is
+ * faced, `mine` is the seat that made the bet and `ranges.villain` is the seat that must answer
+ * it. The panel was handed `mine`, which is why the defending set never had equities to work
+ * from that would have meant anything.
+ *
+ * The pairing is only safe while the other seat's own last node *is* the seat now to act: three
+ * handed, a fold can sit between the bet and the defender, and `villain` is then a third player's
+ * range. Rather than compute a stranger's defending set, the panel keeps its MDF and alpha —
+ * which are pot arithmetic and always true — and says which chart it would need.
+ */
+const defenderPosition = computed(() => props.hand.seats.find((s) => s.seat === state.value?.toAct)?.position ?? null);
+const defenderRange = computed<WeightedRange | null>(() =>
+  defenderPosition.value !== null && ranges.value.villainNode?.hero_position === defenderPosition.value ? villain.value : null,
+);
+/**
+ * The defender's per-combo equity against the betting range. `both` goes into the calculator as
+ * `[mine, villain]`, so villain's own array is the second one — the same pairing `/lab` makes.
+ */
+const defenderEquities = computed(() => (defenderRange.value === null ? null : (equity.value?.perComboEquityVillain ?? null)));
+/** The combos "Show on the matrix" asked for; a new step is a new question, so it is dropped. */
+const defending = ref<ComboIndex[]>([]);
+
+/**
  * Take this exact situation into the 9-step analyzer (spec §15). A pasted hand carries its own
  * text, because nothing on the server has stored it (ADR-029) and the analysis must reopen.
  */
@@ -221,7 +250,26 @@ async function analyzeThisNode(): Promise<void> {
       <div class="space-y-4">
         <div v-if="noOdds === ''" class="space-y-4">
           <PotOddsPanel v-model:pot="odds.pot" v-model:bet="odds.bet" v-model:call="odds.call" v-model:implied-extra="odds.impliedExtra" v-model:rake-config="odds.rakeConfig" data-testid="study-pot-odds" />
-          <MDFPanel v-model:pot="odds.pot" v-model:bet="odds.bet" :rake-config="odds.rakeConfig" :range="mine" />
+          <p class="text-sm text-zinc-500" data-testid="study-mdf-whose">
+            What {{ defenderPosition ?? 'the seat facing this bet' }} has to defend against it — not what the seat that bet is holding.
+          </p>
+          <MDFPanel
+            v-model:pot="odds.pot"
+            v-model:bet="odds.bet"
+            :rake-config="odds.rakeConfig"
+            :range="defenderRange"
+            :equities="defenderEquities"
+            @defend-click="defending = $event"
+          />
+          <p v-if="defenderRange === null" class="text-sm text-zinc-500" data-testid="study-mdf-no-chart">
+            The MDF and alpha above stand on the pot alone. Naming the combos that make them up needs your chart for
+            {{ defenderPosition ?? 'the seat facing this bet' }} here —
+            <NuxtLink to="/ranges/import" class="underline">import your charts</NuxtLink> and it appears as you step.
+          </p>
+          <div v-if="defenderRange && defending.length" class="space-y-1" data-testid="study-defend-matrix">
+            <p class="text-sm">The {{ defending.length }} combos {{ defenderPosition }} continues with at exactly this MDF</p>
+            <RangeMatrix :range="defenderRange" mode="view" :blocked-cards="board" :highlight-combos="defending" />
+          </div>
           <p v-if="odds.edited" class="text-sm text-zinc-500" data-testid="study-odds-edited">
             These are no longer the hand's numbers.
             <button type="button" class="underline" data-testid="study-odds-reset" @click="odds.reset()">Back to the hand's numbers</button>
@@ -247,6 +295,8 @@ async function analyzeThisNode(): Promise<void> {
         <EquityCalculator v-if="both.length === 2" :ranges="both" :board="board" :service="service" @result="equity = $event" />
         <p v-else-if="mine && ranges.villainNode" class="text-sm text-zinc-500" data-testid="study-no-villain-range">
           No stored range for {{ nodeKeyLabel(ranges.villainNode) }}, so there is nothing to run the equity against yet.
+          <NuxtLink to="/ranges/import" class="underline">Import your charts</NuxtLink> and the equity, the defending set and the
+          realization below all follow.
         </p>
 
         <p v-if="realizedFailure" role="alert" class="text-sm text-red-600 dark:text-red-400" data-testid="study-realization-error">{{ realizedFailure }}</p>

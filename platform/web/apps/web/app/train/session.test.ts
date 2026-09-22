@@ -128,6 +128,26 @@ describe('a training run', () => {
     expect(trainer.unavailable.value).not.toBe('');
     expect(trainer.truth.value).toEqual({});
   });
+
+  /*
+   * ADR-069. `not.toBe('')` passed while the gate read "Error: the equity service was asked for
+   * nothing" — a class name and a developer's sentence, and before that a function whose silent
+   * fallback tells the reader to start an API this page never calls. The sentence itself is
+   * asserted here, because it is the only thing on screen when a trainer cannot answer.
+   */
+  it('words it as this browser’s failure: a sentence, the reason, and never the API', async () => {
+    const trainer = trainerFor('equity', fakeCache());
+    await trainer.start();
+
+    trainer.commit('', '50');
+    await vi.waitUntil(() => trainer.status.value === 'revealed');
+    const said = trainer.unavailable.value;
+    expect(said).toContain('That answer could not be worked out — skip on to the next spot.');
+    expect(said).toContain('worked out in this browser rather than on the server');
+    expect(said).toContain('the equity service was asked for nothing.');
+    expect(said).not.toContain('make api');
+    expect(said).not.toMatch(/^[A-Za-z]+Error:/);
+  });
 });
 
 describe('recording an answer', () => {

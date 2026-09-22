@@ -107,6 +107,34 @@ describe('the tool catalogue', () => {
   });
 });
 
+/**
+ * The README's route table (ADR-050 follow-up 4, ADR-068).
+ *
+ * It had drifted nineteen routes behind the app, and said `/` was a health check that needed no
+ * account when it is My game and needs one. Nothing read it, which is how. This does: the
+ * enumeration is the same `readdirSync` the catalogue is checked against, so a page added without
+ * a row here fails beside the page added without an entry there.
+ */
+describe('the README’s route table', () => {
+  const README = readFileSync(join(APP, '..', 'README.md'), 'utf8');
+  /** `[id]`/`[[id]]` are how Nuxt spells a parameter; `:id` is how a reader does. */
+  const asWritten = (route: string): string => route.replace(/\[+([a-z]+)\]+/gi, ':$1');
+
+  it('lists every route the app serves, including the ones that are not tools', () => {
+    const missing = [...pageRoutes(), ...NOT_TOOLS].map(asWritten).filter((route) => !README.includes(`\`${route}\``));
+    expect(missing).toEqual([]);
+  });
+
+  it('says of each route what its page says about needing an account', () => {
+    for (const route of [...pageRoutes(), ...NOT_TOOLS]) {
+      const row = README.split('\n').find((line) => line.startsWith(`| \`${asWritten(route)}\``));
+      if (row === undefined) continue; // the test above owns the missing-row failure
+      const isPublic = /definePageMeta\(\{[^)]*public: true/.test(code(readFileSync(pageFileOf(route), 'utf8')));
+      expect(row.split('|').at(-2)?.trim().startsWith(isPublic ? 'no' : 'yes'), route).toBe(true);
+    }
+  });
+});
+
 describe('toolForPath', () => {
   it('finds the tool a live path is on', () => {
     expect(toolForPath('/')?.id).toBe('my-game');

@@ -2,10 +2,10 @@
 // Step 8 — mark your own value and your own bluffs, and see the ratio you are actually playing
 // against the one the size balances at (spec §15.8). Then the bluffs you should be picking,
 // ranked by blocker score.
-import type { WeightedRange } from '@poker/core';
+import type { ComboIndex, WeightedRange } from '@poker/core';
 import { alpha, createRange, parseRange } from '@poker/core';
 import { BlockerPanel } from '@poker/ui';
-import { computed } from 'vue';
+import { computed, shallowRef } from 'vue';
 
 import type { AnalysisStep } from '~/analyze/api';
 import type { StepContext } from '~/analyze/context';
@@ -66,6 +66,14 @@ const unavailable = computed(() => (ratio.value === null ? 'Mark the value half 
  * (ADR-061). Marking the halves is the work; putting a number on them before looking is the step.
  */
 const reveal = computed(() => (props.ctx.step.prediction === null ? null : ratio.value));
+
+/**
+ * `BlockerPanel`'s rows are clickable and say so with a pointer and a hover (ADR-074); mounted
+ * with no listener the whole ranking was a control that did nothing. A clicked row is pinned, so
+ * a reader picking bluffs can hold one candidate still while reading the rest. It changes no
+ * input and nothing graded — the marked halves above are the step's own work.
+ */
+const pinned = shallowRef<ComboIndex | null>(null);
 </script>
 
 <template>
@@ -82,7 +90,14 @@ const reveal = computed(() => (props.ctx.step.prediction === null ? null : ratio
 
     <div v-if="ctx.spot.hero && ctx.spot.villain">
       <p class="mb-1 text-sm font-medium">Which bluffs to pick</p>
-      <BlockerPanel :hero-range="ctx.spot.hero" :villain-call="ctx.spot.villain" :villain-fold="NOTHING" :board="ctx.spot.board" />
+      <BlockerPanel
+        :hero-range="ctx.spot.hero"
+        :villain-call="ctx.spot.villain"
+        :villain-fold="NOTHING"
+        :board="ctx.spot.board"
+        :selected-combo="pinned"
+        @combo-select="pinned = $event"
+      />
     </div>
   </StepShell>
 </template>

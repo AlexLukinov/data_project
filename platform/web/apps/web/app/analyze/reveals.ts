@@ -43,21 +43,42 @@ function weightOf(range: WeightedRange, combo: ComboIndex): number {
   return range.weights[combo] ?? 0;
 }
 
+/**
+ * A range as it can exist on this board (ADR-071).
+ *
+ * Every count below is a count of *hands somebody can be holding*, so the combos a board card
+ * makes impossible are not in it — neither in what is counted nor in what it is counted out of.
+ * `classifyCombos` already refuses to classify a blocked combo, so a denominator taken from the
+ * whole range divided a live numerator by a dead total: on the shipped examples that understated
+ * step 3's answer by 2 to 3 points, and on a range full of board cards by nine. It is also what
+ * `distribute` does for the distribution panel the step draws beside the question, which is how
+ * the two came to disagree on one screen.
+ */
+function onBoard(range: WeightedRange, board: readonly Card[]): WeightedRange {
+  return removeCards(range, board);
+}
+
 /** The weighted share of a range that is top pair or better on this board. */
 export function topPairOrBetterShare(range: WeightedRange, board: readonly Card[]): number {
-  const total = weightedCombos(range);
-  if (total === 0 || !isDealt(board)) return 0;
+  if (!isDealt(board)) return 0;
+  const live = onBoard(range, board);
+  const total = weightedCombos(live);
+  if (total === 0) return 0;
   let strong = 0;
-  classifyCombos(range, board).forEach((classification, combo) => {
+  classifyCombos(live, board).forEach((classification, combo) => {
     if (classification === undefined) return;
-    if (MADE_HAND_CLASSES.indexOf(classification.made) <= TOP_PAIR) strong += weightOf(range, combo);
+    if (MADE_HAND_CLASSES.indexOf(classification.made) <= TOP_PAIR) strong += weightOf(live, combo);
   });
   return strong / total;
 }
 
-/** How many of a range's weighted combos two cards make impossible. */
-export function combosRemoved(range: WeightedRange, cards: readonly Card[]): number {
-  return weightedCombos(range) - weightedCombos(removeCards(range, cards));
+/**
+ * How many of a range's weighted combos two cards make impossible — of the combos it could still
+ * hold. A combo the board had already killed is not one your hand removes.
+ */
+export function combosRemoved(range: WeightedRange, board: readonly Card[], cards: readonly Card[]): number {
+  const live = isDealt(board) ? onBoard(range, board) : range;
+  return weightedCombos(live) - weightedCombos(removeCards(live, cards));
 }
 
 /** How many flush-draw combos a range still holds once the dead cards are gone. */
@@ -79,16 +100,17 @@ export function flushDrawCombos(range: WeightedRange, board: readonly Card[], de
 export function classPercentile(range: WeightedRange, board: readonly Card[], hole: readonly Card[]): number | null {
   if (hole.length !== 2 || !isDealt(board)) return null;
   const mine = comboIndex(hole[0]!, hole[1]!);
-  const classes = classifyCombos(range, board);
+  const live = onBoard(range, board);
+  const classes = classifyCombos(live, board);
   const own = classes[mine];
   if (own === undefined) return null;
   const rank = MADE_HAND_CLASSES.indexOf(own.made);
-  const total = weightedCombos(range);
+  const total = weightedCombos(live);
   if (total === 0) return null;
   let weaker = 0;
   classes.forEach((classification, combo) => {
     if (classification !== undefined && MADE_HAND_CLASSES.indexOf(classification.made) > rank) {
-      weaker += weightOf(range, combo);
+      weaker += weightOf(live, combo);
     }
   });
   return weaker / total;

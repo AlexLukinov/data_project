@@ -7,8 +7,8 @@
  * refusals may reach the screen as "there is nothing here".
  */
 import type { HandState, NodeKey } from '@poker/core';
-import { nodeKey, nodeKeyEquals, step } from '@poker/core';
-import { ComboDistributionPanel, HandReplayer } from '@poker/ui';
+import { COMBO_COUNT, comboIndex, nodeKey, nodeKeyEquals, parseCard, step } from '@poker/core';
+import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel } from '@poker/ui';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
@@ -41,10 +41,10 @@ const NODE: NodeKey = nodeKey('BB', {
 });
 
 /** A chart of mine at this node, so the panels that need one mount at all. */
-function storedRange(): StoredRange {
+function storedRange(name = 'BB defence vs CO'): StoredRange {
   return {
     id: 'r1',
-    name: 'BB defence vs CO',
+    name,
     node_key: NODE,
     source: 'own',
     source_tool: '',
@@ -64,8 +64,45 @@ const NuxtLink = defineComponent({
   setup: (props, { slots }) => () => h('a', { 'data-to': JSON.stringify(props.to) }, slots.default?.()),
 });
 
-function at(pot: number, toCall: number): HandState {
-  return { index: 7, street: 'flop', board: ['Kh', '7d', '2c'], pot, actor: 0, toAct: 0, toCall } as unknown as HandState;
+function at(pot: number, toCall: number, extra: Partial<HandState> = {}): HandState {
+  return { index: 7, street: 'flop', board: ['Kh', '7d', '2c'], pot, actor: 0, toAct: 0, toCall, ...extra } as unknown as HandState;
+}
+
+/**
+ * The two steps of `GG_HAND` the defending set turns on (ADR-068).
+ *
+ * At state 10 the flop bet has been made by the small blind and the button is the seat to act:
+ * `nodeKeyAt(hand, 10)` is the SB's bet, `villainStep` lands on the button's own last node, and
+ * those two agree — so the button's chart is the range that faces the bet. At state 7 the small
+ * blind has 3-bet, the big blind is the seat to act, and the other seat's last node is the
+ * *button's* open: a third player's range, which must never be presented as the defender's.
+ */
+const DEFENDER_KNOWN = { index: 10, toAct: 1, actor: 1 } as const;
+const DEFENDER_IS_A_THIRD_SEAT = { index: 7, toAct: 3, actor: 3 } as const;
+
+/** One chart per seat, named after it, so a test can say *whose* range a panel was handed. */
+function chartPerSeat(): void {
+  library.lookup.mockImplementation((key: NodeKey) => Promise.resolve([storedRange(`chart for ${key.hero_position}`)]));
+}
+
+/** Villain's per-combo equities, distinct enough that the defending set is a real subset. */
+const VILLAIN_EQUITIES = new Float32Array(COMBO_COUNT).fill(Number.NaN);
+for (const [combo, equity] of [
+  ['AsAh', 0.9],
+  ['KsKh', 0.6],
+  ['QsQh', 0.3],
+] as const) {
+  VILLAIN_EQUITIES[comboIndex(parseCard(combo.slice(0, 2)), parseCard(combo.slice(2)))] = equity;
+}
+
+/** What the calculator beside the panels emits; only the two per-combo arrays matter here. */
+function equityResult(): Record<string, unknown> {
+  return {
+    heroEquity: 0.55,
+    exact: true,
+    perComboEquity: new Float32Array(COMBO_COUNT).fill(Number.NaN),
+    perComboEquityVillain: VILLAIN_EQUITIES,
+  };
 }
 
 async function study() {
@@ -249,6 +286,61 @@ describe('HandStudy — a question that came back refused', () => {
 
     await reach(wrapper, NODE, at(21, 8));
     expect(has(wrapper, 'study-dist-export')).toBe(false);
+  });
+
+  /*
+   * ADR-068. MDF is the obligation of the seat that faces the bet, and on this screen that is
+   * never the seat `mine` describes: `toCall` belongs to the next action, while `nodeKeyAt` ends
+   * its sequence with the action just taken. The panel used to be handed `mine` — the bettor —
+   * with no equities at all, so "the defending set appears when the equities have been computed"
+   * was permanent and `mdf-show` could not exist.
+   */
+  it('hands the defending seat its own chart and its own equities, never the bettor’s', async () => {
+    chartPerSeat();
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(19.5, 7, DEFENDER_KNOWN));
+
+    const panel = wrapper.findComponent(MDFPanel);
+    // The bettor at this step is SB and the defender BTN; the panel must hold the second.
+    expect(panel.props('range')?.label).toBe('chart for BTN');
+    expect(wrapper.find('[data-testid="study-my-range"]').text()).toBe('chart for SB');
+    expect(said(wrapper, 'study-mdf-whose')).toContain('What BTN has to defend against it');
+    expect(has(wrapper, 'study-mdf-no-chart')).toBe(false);
+
+    wrapper.findComponent(EquityCalculator).vm.$emit('result', equityResult());
+    await flushPromises();
+    expect(wrapper.findComponent(MDFPanel).props('equities')).toBe(VILLAIN_EQUITIES);
+    expect(has(wrapper, 'mdf-show')).toBe(true);
+  });
+
+  it('refuses the defending set, and says which chart it would need, when a third seat is the one to act', async () => {
+    chartPerSeat();
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(8, 5.5, DEFENDER_IS_A_THIRD_SEAT));
+
+    const panel = wrapper.findComponent(MDFPanel);
+    expect(panel.props('range')).toBeNull();
+    expect(panel.props('equities')).toBeNull();
+    // The pot arithmetic is always true and stays on screen; only the named combos go.
+    expect(has(wrapper, 'mdf-value')).toBe(true);
+    expect(has(wrapper, 'mdf-show')).toBe(false);
+    expect(said(wrapper, 'study-mdf-no-chart')).toContain('needs your chart for BB here');
+  });
+
+  it('rings the defending set on the defender’s own matrix, and drops it at the next step', async () => {
+    chartPerSeat();
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(19.5, 7, DEFENDER_KNOWN));
+    wrapper.findComponent(EquityCalculator).vm.$emit('result', equityResult());
+    await flushPromises();
+
+    expect(has(wrapper, 'study-defend-matrix')).toBe(false);
+    await wrapper.find('[data-testid="mdf-show"]').trigger('click');
+    await flushPromises();
+    expect(said(wrapper, 'study-defend-matrix')).toContain('combos BTN continues with');
+
+    await reach(wrapper, NODE, at(19.5, 7, DEFENDER_KNOWN));
+    expect(has(wrapper, 'study-defend-matrix')).toBe(false);
   });
 
   it('answers a failed "Analyze this node" on the page, not in the console', async () => {

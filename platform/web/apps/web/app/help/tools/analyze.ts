@@ -81,12 +81,12 @@ export const ANALYZE_TOOLS: readonly Tool[] = [
     how: [
       'Each example is a situation that ships with the app as data: the two reference charts, the flop, the hand and the bet. It opens in the analyzer’s own step components over a copy that lives in this tab only.',
       'It opens all nine steps. Five are answered by arithmetic in this browser; the four scored against your pool say, where the number would be, that an example has no pool.',
-      'The three spots share one pair of ranges — the button opens, the big blind calls — so the same two ranges tell three different stories on three flops.',
+      'The four spots share one pair of ranges — the button opens, the big blind calls — so the same two ranges tell four different stories on four flops.',
     ],
     steps: [
       'Pick the spot whose lesson you want.',
       'Work the steps in order and commit each answer before looking.',
-      'Compare the three examples: the ranges never change, only the board does.',
+      'Compare the four examples: the ranges never change; the board and the hand you hold do.',
       'Done when you can say why the same two ranges behave differently on each flop.',
     ],
     needs: [],

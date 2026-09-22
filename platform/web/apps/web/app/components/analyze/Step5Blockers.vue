@@ -47,7 +47,7 @@ const actual = computed(() => {
   if (villain === null || hole.value.length !== HOLE_CARDS) return null;
   const count = asksAboutDraws.value
     ? flushDrawCombos(villain, props.ctx.spot.board, hole.value)
-    : combosRemoved(villain, hole.value);
+    : combosRemoved(villain, props.ctx.spot.board, hole.value);
   return count.toFixed(0);
 });
 const unavailable = computed(() =>

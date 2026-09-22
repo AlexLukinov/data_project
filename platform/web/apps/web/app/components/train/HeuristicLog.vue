@@ -86,10 +86,15 @@ function shortDate(iso: string): string {
       </ul>
     </div>
 
+    <!--
+      ADR-057 decision 7: the way in has to be a route, not a noun. "Finish an analysis" named one
+      and linked nowhere. It is `/analyze`, never an example — nothing an example does is saved,
+      so its ninth step cannot put a line here (ADR-073).
+    -->
     <p v-if="items.length === 0" class="rounded border border-dashed border-zinc-300 p-6 text-sm dark:border-zinc-700" data-testid="heuristics-empty">
       Nothing written down yet. The ninth step of an analysis ends in one line worth keeping — write
-      it here, or finish an analysis and adopt it from the list above. Fourteen days later this page
-      asks whether it is still true.
+      it here, or finish <NuxtLink to="/analyze" class="underline" data-testid="heuristics-empty-analyze">an analysis</NuxtLink>
+      and adopt it from the list above. Fourteen days later this page asks whether it is still true.
     </p>
 
     <ul v-else class="space-y-2">

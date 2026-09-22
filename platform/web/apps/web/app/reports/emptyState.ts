@@ -38,6 +38,13 @@ export interface EmptyStateView {
 export const EMPTY_ACTIONS = {
   upload: { key: 'upload', label: 'Upload hand histories', to: '/upload' },
   paste: { key: 'paste', label: 'Paste a hand', to: '/hands/paste' },
+  /**
+   * The one way out that needs neither an account nor a hand (ADR-050, ADR-073). It names a
+   * particular spot rather than the index, because `/examples` is already a permanent nav item
+   * and an empty state repeating it would be offering the chrome. `top-pair-dry-board` is the
+   * example the `hands` and `analyses` tools already declare, so the two agree.
+   */
+  example: { key: 'example', label: 'Try an example', to: '/examples/top-pair-dry-board' },
   clearSituation: { key: 'clear-situation', label: 'Clear the situation' },
   clearDates: { key: 'clear-dates', label: 'Clear the dates' },
   clearTag: { key: 'clear-tag', label: 'Any tag' },

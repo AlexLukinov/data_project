@@ -8,6 +8,10 @@ import { computed, ref } from 'vue';
 import { createAnalysesApi } from '~/analyze/api';
 import { LAST_STEP } from '~/analyze/steps';
 import { describeApiError } from '~/auth/api';
+import { toolById } from '~/help/tools';
+
+/** The worked spot this page's own tool entry declares, so the two cannot point at different ones. */
+const EXAMPLE = toolById('analyses')!.example;
 
 const api = createAnalysesApi(useApi());
 const { data, error, refresh } = await useAsyncData('analyses', () => api.list(), { server: false });
@@ -54,13 +58,20 @@ async function remove(id: string): Promise<void> {
       </li>
     </ul>
 
+    <!--
+      Both ways in ask for a hand, and an account with no analyses usually has no hands either
+      (ADR-073) — so the third clause is the only one that works from here, and it is the same
+      spot the `analyses` tool declares in `help/tools/analyze.ts`.
+    -->
     <div v-else class="space-y-2 rounded border border-dashed border-zinc-300 p-6 text-sm dark:border-zinc-700" data-testid="analyses-empty">
       <p class="font-medium">No analyses yet.</p>
       <p class="text-zinc-500">
         An analysis starts at a hand: open one from
         <NuxtLink to="/hands" class="underline">your hands</NuxtLink>, step to the decision you want to understand, and press
         <em>Analyze this node</em>. You can also
-        <NuxtLink to="/hands/paste" class="underline">paste a hand</NuxtLink> you played somewhere else.
+        <NuxtLink to="/hands/paste" class="underline">paste a hand</NuxtLink> you played somewhere else — or, with no hand at
+        all, work all nine steps on
+        <NuxtLink :to="`/examples/${EXAMPLE}`" class="underline" data-testid="analyses-empty-example">a spot that ships with the app</NuxtLink>.
       </p>
     </div>
   </section>

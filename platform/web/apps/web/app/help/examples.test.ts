@@ -2,16 +2,17 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { classifyHand, comboIndex, parseCards, parseRange } from '@poker/core';
+import { EVEN_HIT_MARGIN } from '@poker/ui';
 import { describe, expect, it } from 'vitest';
 
 import { workOf } from '~/analyze/context';
-import { classPercentile, isDealt, roleOf } from '~/analyze/reveals';
+import { classPercentile, isDealt, roleOf, topPairOrBetterShare } from '~/analyze/reveals';
 import { spotFrom } from '~/analyze/spot';
 import { blockerQuestion, stepDef } from '~/analyze/steps';
 import { chartById } from '~/train/charts';
 
 import type { Example } from './examples';
-import { EXAMPLES, EXAMPLE_STEPS, exampleById, exampleSteps } from './examples';
+import { EXAMPLES, EXAMPLE_STEPS, HONEST_PAIRS, exampleById, exampleSteps } from './examples';
 
 const SEED = fileURLToPath(new URL('../../../../../seeds/hands/pokerstars/cash_6max_nl50.txt', import.meta.url));
 const FLUSH_DRAWS = 'How many flush draws can villain still have?';
@@ -38,6 +39,19 @@ describe('the examples', () => {
     for (const example of EXAMPLES) {
       expect(chartById(example.heroChart).position, example.id).toBe(example.node.hero_position);
       expect(chartById(example.villainChart).position, example.id).toBe(example.node.villain_position);
+    }
+  });
+
+  /*
+   * ADR-050 fact 4, as a check rather than as prose. The seat guard above is not it: `utg_rfi`
+   * against `bb_call_vs_btn` gives each seat a chart written for that seat and is still a lie,
+   * because the big blind does not call an under-the-gun open with the range it calls a button
+   * open with. Only a pair in which the caller's chart is the range that reaches the flop is
+   * honest, and there is one of those in the set.
+   */
+  it('are built on a pair of charts in which both are the ranges that reach the flop', () => {
+    for (const example of EXAMPLES) {
+      expect(HONEST_PAIRS.some(([hero, villain]) => hero === example.heroChart && villain === example.villainChart), example.id).toBe(true);
     }
   });
 
@@ -87,8 +101,8 @@ describe('exampleSteps', () => {
 describe('what each example teaches is what the analyzer will reveal', () => {
   // Pinned so that a change to a reference chart or to a reveal rule which makes a lesson untrue
   // fails here, and the lesson is reread — not discovered by a reader.
-  it('top pair on the dry flop: a rainbow board asks what the hand removes, and top pair is protection', () => {
-    expect(lesson(exampleById('top-pair-dry-board')!)).toEqual({ question: stepDef(5).question, role: 'protection' });
+  it('top pair on the dry flop: a rainbow board asks what the hand removes, and top kicker is the top of the range', () => {
+    expect(lesson(exampleById('top-pair-dry-board')!)).toEqual({ question: stepDef(5).question, role: 'value' });
   });
 
   it('the flush draw: a two-tone board asks about flush draws, and the draw is a semi-bluff', () => {
@@ -97,6 +111,22 @@ describe('what each example teaches is what the analyzer will reveal', () => {
 
   it('range ahead, hand behind: seven-six on a paired ace is a give-up', () => {
     expect(lesson(exampleById('range-ahead-hand-behind')!)).toEqual({ question: stepDef(5).question, role: 'give-up' });
+  });
+
+  it('the caller’s board: second pair is protection, and the board really does favour them', () => {
+    const example = exampleById('their-board-second-pair')!;
+    expect(lesson(example)).toEqual({ question: stepDef(5).question, role: 'protection' });
+    const spot = spotFrom(exampleSteps(example), example.node);
+    // `explainHitShares` takes hero first, so the gap that makes it say "the board hits their
+    // range harder" is villain minus hero. Measured 4.9 points against a 3-point margin: a chart
+    // edit that drops it under the margin flips the sentence, and fails here rather than in front
+    // of a reader.
+    const gap = topPairOrBetterShare(spot.villain!, spot.board) - topPairOrBetterShare(spot.hero!, spot.board);
+    expect(gap).toBeGreaterThan(EVEN_HIT_MARGIN);
+  });
+
+  it('between them reach all four of what a hand can be for', () => {
+    expect(new Set(EXAMPLES.map((example) => lesson(example).role))).toEqual(new Set(['value', 'semi-bluff', 'give-up', 'protection']));
   });
 
   it('the seed example is the committed hand it names: the cards, the flop and the bet', () => {

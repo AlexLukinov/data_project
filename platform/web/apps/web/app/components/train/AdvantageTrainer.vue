@@ -9,8 +9,8 @@ import type { WeightedEquities } from '@poker/core';
 import { RangeComparisonPanel, RangeMatrix } from '@poker/ui';
 import { computed, ref, shallowRef, watch } from 'vue';
 
-import { describeApiError } from '~/auth/api';
 import { CHART_PROVENANCE } from '~/train/charts';
+import { NO_COMPARISON, localProblem } from '~/train/problems';
 import { sides } from '~/train/spot-advantage';
 import type { AdvantageSpot } from '~/train/types';
 import { boardOf, rangeOf } from '~/train/view';
@@ -26,8 +26,6 @@ const board = computed(() => boardOf(props.spot.boardText));
 const equities = shallowRef<{ hero: WeightedEquities; villain: WeightedEquities; exact: boolean } | null>(null);
 /** Why the comparison is not here. A failure used to leave "Working out…" on screen for good. */
 const problem = ref('');
-
-const LEAD = 'Both ranges’ equities could not be worked out, so there is no comparison to show.';
 
 /**
  * The reveal's own numbers. Only asked for once the answer has been revealed — before that there
@@ -46,9 +44,9 @@ async function load(): Promise<void> {
     const both = await sides(spot, service);
     if (props.spot.hash === spot.hash) equities.value = both;
   } catch (error) {
-    // A browser-local failure rarely ends in a full stop, and Try again follows it on the line.
-    const detail = describeApiError(error, 'The calculation did not finish.');
-    if (props.spot.hash === spot.hash) problem.value = `${LEAD} ${/[.!?…]$/.test(detail) ? detail : `${detail}.`}`;
+    // Worded as the browser-local failure it is (ADR-069): no class name, and no mention of an
+    // API this page never calls. Try again follows the sentence on the same line.
+    if (props.spot.hash === spot.hash) problem.value = localProblem(NO_COMPARISON, error);
   }
 }
 
