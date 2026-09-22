@@ -16,9 +16,10 @@ from stats.request import (
     DATASET_POPULATION,
     MAX_LIMIT,
     CohortSpec,
+    OrderKey,
+    OrderMatch,
     ReportRequest,
     ReportResult,
-    ReportRow,
 )
 from stats.service import Cache, Runner, run_report
 
@@ -114,9 +115,10 @@ def players(
 
     `name` is part of a screen name, or a whole key pasted back out of an answer
     (`<site>:<part of a name>`). Either way the match is on the **name half** of the key and
-    never on the site, so typing the site's own name finds nobody rather than all 94,276 of
-    them -- which is the bug this route had: it matched the start of the whole key, and no
-    screen name is that (ADR-062). Lower-cased because the pipeline stores keys lowered and
+    never on the site, so typing the site's own name looks for the people who have it *in their
+    name* -- 27 of them on the real pool -- rather than handing back all 94,276 keys that are on
+    it. The bug this route had was the reverse of that: it matched the start of the whole key,
+    and no screen name is that (ADR-062). Lower-cased because the pipeline stores keys lowered and
     `LIKE` is case-sensitive: were that to change the search would stop matching rather than
     match the wrong player, and the anonymized seat `''` carries no separator to match past.
     """
@@ -127,8 +129,7 @@ def players(
     # what makes the ranking exact, and three characters on the real pool measure 1,966 rows
     # and 1.6 MiB of JSON -- which would evict the blocks a screen really does read twice.
     found = run_report(_request(site, fragment), tenant_id, run=run, reg=reg)
-    ranked = sorted(found.rows, key=lambda row: _rank(row, fragment))
-    shown = found.model_copy(update={"rows": ranked[: min(limit, MAX_PLAYERS)]})
+    shown = found.model_copy(update={"rows": found.rows[: min(limit, MAX_PLAYERS)]})
     return PlayerMatches(
         **shown.model_dump(),
         matched=len(found.rows),
@@ -137,15 +138,55 @@ def players(
 
 
 def _request(site: str | None, fragment: str) -> ReportRequest:
-    """The report behind a lookup: every match on the rollup, with the headline stats."""
+    """The report behind a lookup: every match on the rollup, ranked, with the headline stats.
+
+    The database does the ranking (ADR-065). The rows arrive in the order a reader wants them
+    in, so `players()` above takes a slice rather than sorting a second time -- and at the cap
+    the rows counted are the busiest `MAX_MATCHES`, not an arbitrary `MAX_MATCHES`.
+    """
     return ReportRequest(
         dataset=DATASET_POPULATION,
         hero_only=False,
         stats=list(PLAYER_STATS),
         group_by=["player_key"],
         filter=Leaf(dim="player_key", op="like", value=_pattern(site, fragment)),
+        order_by=_ranking(site, fragment),
         limit=MAX_MATCHES,
     )
+
+
+def _ranking(site: str | None, fragment: str) -> list[OrderKey | OrderMatch]:
+    """The exact name first, then the busiest, then alphabetically (ADR-062 decision 3).
+
+    What happens to a name that is a substring of many. The player meant is either the one
+    whose name was typed in full or one there are hands on -- never the alphabetically first
+    of two thousand, which is what a bare `ORDER BY player_key` and a cap would have shown.
+
+    "Whose name was typed in full" is the whole key against one candidate per site, not a
+    pattern: `core.ids.player_key` builds every key as `<site>:<screen name>`, so the name
+    half IS the fragment exactly when the key is one of those -- while a trailing-anchored
+    `LIKE` would also match a name that merely *ends* `:<fragment>`. Equality, not `LIKE`,
+    is also why these values are the typed text unescaped: `%` and `_` are LIKE's own and
+    are nobody else's.
+
+    The last term breaks a tie on **the whole key**, so it is the site's name and then the
+    player's. On a single-site pool -- the only kind there has ever been here, and 94,276 of
+    the 94,277 keys today -- that is the same order as by screen name alone, which is what
+    this ranking did in Python. Import a second site and two equally busy matches sort by site
+    first. Ordering on the name half would mean cutting the key up in SQL, and an expression
+    around a column is exactly what `stats/order.py` exists to keep out (ADR-065).
+    """
+    exact = Leaf(dim="player_key", op="in", value=_exact_keys(site, fragment))
+    return [
+        OrderMatch(match=exact, direction="desc"),
+        OrderKey(key="hands", direction="desc"),
+        OrderKey(key="player_key", direction="asc"),
+    ]
+
+
+def _exact_keys(site: str | None, fragment: str) -> list[str]:
+    """Every `player_key` whose screen name is exactly `fragment`: one per site in play."""
+    return sorted(f"{one}{SITE_SEPARATOR}{fragment}" for one in ([site] if site else SITES))
 
 
 def _split(text: str) -> tuple[str | None, str]:
@@ -177,24 +218,6 @@ _WILDCARD = re.compile(r"[\\%_]")
 def _literal(text: str) -> str:
     r"""Typed text as itself: `%`, `_` and `\` are LIKE's own and were typed as characters."""
     return _WILDCARD.sub(lambda match: "\\" + match.group(), text)
-
-
-def _rank(row: ReportRow, fragment: str) -> tuple[bool, int, str]:
-    """Sort key: the name itself first, then the most hands, then alphabetically.
-
-    What happens to a name that is a substring of many. The player meant is either the one
-    whose name was typed in full or one there are hands on -- never the alphabetically first
-    of two thousand, which is what a bare `ORDER BY player_key` and a cap would have shown.
-    """
-    name = _name_of(row.group.get("player_key"))
-    return name != fragment, -row.hands, name
-
-
-def _name_of(key: object) -> str:
-    """The screen-name half of a `player_key`; the whole of it if it carries no site."""
-    text = key if isinstance(key, str) else ""
-    _, separator, name = text.partition(SITE_SEPARATOR)
-    return name if separator else text
 
 
 def presets(reg: Registry | None = None) -> list[Preset]:

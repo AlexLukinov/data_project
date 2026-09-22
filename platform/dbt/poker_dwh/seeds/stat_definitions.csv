@@ -1,7 +1,7 @@
 code,label,category,grain,format,higher_is_better,typical_low,typical_high,cached,description,notes
 hands,Hands,money,hand,count,,,,1,Hands dealt in.,
 bb_per_100,bb/100,money,hand,per100,1,0.0,10.0,1,Big blinds won per 100 hands.,
-ev_bb_per_100,All-in adjusted bb/100,money,hand,per100,1,0.0,10.0,1,All-in adjusted big blinds won per 100 hands.,
+ev_bb_per_100,All-in adjusted bb/100,money,hand,per100,1,0.0,10.0,1,"Big blinds won per 100 hands, all-in adjusted; each all-in pot is shared out by expected share rather than awarded to whoever won it.","Where the site settled an all-in without dealing the rest of the board, nothing is adjusted: nobody gambled, so the actual result stands. Read the number against your own bb/100 to see how you ran; against the field it says what bb/100 says. The adjustment only moves chips between the seats of one hand and the pool holds every seat of it, so on any comparison covering whole hands the field's two rates are one number; they part company only where a comparison picks one seat out of a hand, and grouped by position they differ by up to 0.26 bb/100."
 sd_bb_per_100,Showdown bb/100,money,hand,per100,1,0.0,30.0,1,Big blinds won at showdown per 100 hands.,
 nsd_bb_per_100,Non-showdown bb/100,money,hand,per100,1,-30.0,0.0,1,Big blinds won without showdown per 100 hands.,
 cbet_flop,C-bet flop,postflop,decision,percent,,50.0,75.0,1,Bet the flop as the preflop aggressor when checked to or first to act.,"An opportunity is a flop decision with nothing in front, so a flop someone has already led into, and a flop reached all-in preflop where there is no decision to make, are left out rather than counted as a missed c-bet."

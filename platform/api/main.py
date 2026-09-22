@@ -24,6 +24,7 @@ from api.routers import (
     hero,
     heuristics,
     pool,
+    pool_nodes,
     ranges,
     reports,
     saved,
@@ -87,6 +88,7 @@ app.include_router(reports.router)
 app.include_router(saved.router)
 app.include_router(hero.router)
 app.include_router(pool.router)
+app.include_router(pool_nodes.router)
 app.include_router(ranges.router)
 app.include_router(analyses.router)
 app.include_router(heuristics.router)

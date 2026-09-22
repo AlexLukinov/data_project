@@ -1,0 +1,91 @@
+Poker Hand #RC9000000021: Hold'em No Limit ($0.10/$0.25) - 2025/05/14 11:04:17
+Table 'RushAndCash19175498' 6-max Seat #1 is the button
+Seat 1: Onlooker ($63.21 in chips)
+Seat 2: Onlooker9 ($22.47 in chips)
+Seat 3: PreOnlooker ($19.29 in chips)
+Seat 4: Bystander1 ($25.35 in chips)
+Seat 5: Bystander2 ($35.56 in chips)
+Seat 6: Bystander3 ($33.55 in chips)
+Onlooker9: posts small blind $0.10
+PreOnlooker: posts big blind $0.25
+*** HOLE CARDS ***
+Dealt to Onlooker
+Dealt to Onlooker9
+Dealt to PreOnlooker
+Dealt to Bystander1
+Dealt to Bystander2
+Dealt to Bystander3
+Bystander1: raises $0.50 to $0.75
+Bystander2: folds
+Bystander3: folds
+Onlooker: folds
+Onlooker9: folds
+PreOnlooker: calls $0.50
+*** FLOP *** [5c 4c Jd]
+PreOnlooker: checks
+Bystander1: bets $0.53
+PreOnlooker: calls $0.53
+*** TURN *** [5c 4c Jd] [4d]
+PreOnlooker: checks
+Bystander1: bets $1.87
+PreOnlooker: calls $1.87
+*** RIVER *** [5c 4c Jd 4d] [6h]
+PreOnlooker: checks
+Bystander1: checks
+*** SHOWDOWN ***
+PreOnlooker collected $6.08 from pot
+*** SUMMARY ***
+Total pot $6.40 | Rake $0.32 | Jackpot $0.00 | Bingo $0 | Fortune $0 | Tax $0
+Board [5c 4c Jd 4d 6h]
+Seat 1: Onlooker (button) folded before Flop (didn't bet)
+Seat 2: Onlooker9 (small blind) folded before Flop
+Seat 3: PreOnlooker (big blind) showed [Qd Js] and won ($6.08)
+Seat 4: Bystander1 showed [Qs Kd] and lost
+Seat 5: Bystander2 folded before Flop (didn't bet)
+Seat 6: Bystander3 folded before Flop (didn't bet)
+
+Poker Hand #RC9000000022: Hold'em No Limit ($0.10/$0.25) - 2025/05/14 11:07:52
+Table 'RushAndCash19175499' 6-max Seat #1 is the button
+Seat 1: Onlooker9 ($48.10 in chips)
+Seat 2: PreOnlooker ($31.62 in chips)
+Seat 3: Bystander1 ($27.04 in chips)
+Seat 4: Bystander2 ($55.90 in chips)
+Seat 5: Bystander3 ($18.83 in chips)
+Seat 6: Bystander4 ($40.11 in chips)
+PreOnlooker: posts small blind $0.10
+Bystander1: posts big blind $0.25
+*** HOLE CARDS ***
+Dealt to Onlooker9
+Dealt to PreOnlooker
+Dealt to Bystander1
+Dealt to Bystander2
+Dealt to Bystander3
+Dealt to Bystander4
+Bystander2: raises $0.50 to $0.75
+Bystander3: folds
+Bystander4: folds
+Onlooker9: folds
+PreOnlooker: folds
+Bystander1: calls $0.50
+*** FLOP *** [8s 2h Tc]
+Bystander1: checks
+Bystander2: bets $0.53
+Bystander1: calls $0.53
+*** TURN *** [8s 2h Tc] [3d]
+Bystander1: checks
+Bystander2: bets $1.87
+Bystander1: calls $1.87
+*** RIVER *** [8s 2h Tc 3d] [9h]
+Bystander1: checks
+Bystander2: checks
+*** SHOWDOWN ***
+Bystander1 collected $6.08 from pot
+*** SUMMARY ***
+Total pot $6.40 | Rake $0.32 | Jackpot $0.00 | Bingo $0 | Fortune $0 | Tax $0
+Board [8s 2h Tc 3d 9h]
+Seat 1: Onlooker9 (button) folded before Flop (didn't bet)
+Seat 2: PreOnlooker (small blind) folded before Flop
+Seat 3: Bystander1 (big blind) showed [Ah Kc] and won ($6.08)
+Seat 4: Bystander2 showed [Qs Jd] and lost
+Seat 5: Bystander3 folded before Flop (didn't bet)
+Seat 6: Bystander4 folded before Flop (didn't bet)

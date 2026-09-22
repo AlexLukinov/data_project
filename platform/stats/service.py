@@ -20,12 +20,13 @@ from typing import Any, Protocol
 
 from ingestion.clickhouse import clickhouse
 from stats import tenancy
+from stats.errors import ReportError
 from stats.interval import DISPERSION_SUFFIX, Level, for_cell
 from stats.query import HANDS_ALIAS, build_query
 from stats.registry import Registry, registry
 from stats.request import Cell, ReportRequest, ReportResult, ReportRow, StatMeta
 from stats.resolve import ResolvedStat, dimensions_used, resolve_stats
-from stats.router import plan
+from stats.router import Plan, plan
 from stats.tenancy import Rows as Rows
 from stats.tenancy import Runner as Runner
 
@@ -62,9 +63,27 @@ def validate_request(request: ReportRequest, reg: Registry | None = None) -> Non
     """
     reg = reg or registry()
     stats = resolve_stats(request, reg)
-    wants = request.confidence is not None
-    for one in plan(stats, dimensions_used(request), reg, dispersion=wants):
+    for one in plans_for(request, stats, reg):
         build_query(request, 0, one, reg)
+
+
+def plans_for(request: ReportRequest, stats: Sequence[ResolvedStat], reg: Registry) -> list[Plan]:
+    """The queries this request runs as -- and the one thing ordering cannot survive.
+
+    A report whose stats split by grain runs two queries and is merged here, row by row, on
+    the group key: the database ranks each half and nothing ranks the whole. So an ordered
+    report that splits is refused by name rather than answered in an order the caller cannot
+    read off the request (plan F.15). Every other report is one query, which the database
+    orders itself.
+    """
+    made = plan(stats, dimensions_used(request), reg, dispersion=request.confidence is not None)
+    if request.order_by and len(made) > 1:
+        grains = " and ".join(sorted({one.table for one in made}))
+        raise ReportError(
+            f"order_by needs one table: these stats split across {grains}. "
+            "Ask for the hand-grain and decision-grain stats in separate reports."
+        )
+    return made
 
 
 def run_report(
@@ -85,7 +104,7 @@ def run_report(
             return ReportResult.model_validate(hit).model_copy(update={"cached": True})
 
     stats = resolve_stats(request, reg)
-    plans = plan(stats, dimensions_used(request), reg, dispersion=request.confidence is not None)
+    plans = plans_for(request, stats, reg)
     merged: dict[GroupKey, ReportRow] = {}
     for one in plans:
         columns, rows = runner(*build_query(request, tenant_id, one, reg))

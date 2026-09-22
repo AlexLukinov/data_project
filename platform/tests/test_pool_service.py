@@ -13,6 +13,7 @@ from analysis.pool.service import (
     MAX_PLAYERS,
     MIN_NAME,
     PLAYER_STATS,
+    SITES,
     players,
     pool_report,
 )
@@ -62,11 +63,19 @@ def test_pool_report_scopes_one_opponent_inside_the_cohort() -> None:
     assert params["player_key"] == "villain42"
 
 
-class Pool:
-    """A runner answering one lookup with the players it is given, `ORDER BY player_key`."""
+RANKING = "ORDER BY (s.player_key IN {p1:Array(String)}) DESC, hands DESC, player_key ASC"
+"""What the lookup's three-part ranking is, once ClickHouse does it (ADR-065)."""
 
-    def __init__(self, hands: dict[str, int]) -> None:
-        self.hands = hands
+
+class Pool:
+    """A runner answering one lookup with the rows it is given, in the order it is given them.
+
+    The database ranks now, so a fake that sorted would be testing itself. These rows arrive
+    in a deliberate order and the service must hand it back untouched.
+    """
+
+    def __init__(self, ranked: list[tuple[str, int]]) -> None:
+        self.ranked = ranked
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def __call__(
@@ -77,8 +86,7 @@ class Pool:
         for code in PLAYER_STATS:
             columns += [code, f"{code}__n"]
         return [*columns, "__hands"], [
-            (key, *[v for _ in PLAYER_STATS for v in (1.0, n)], n)
-            for key, n in sorted(self.hands.items())
+            (key, *[v for _ in PLAYER_STATS for v in (1.0, n)], n) for key, n in self.ranked
         ]
 
 
@@ -88,10 +96,38 @@ def test_a_typed_name_is_matched_inside_the_name_half_and_never_against_the_site
     players("vill", 7, limit=10_000, run=db)
     sql, params = db.calls[0]
     # The rollup arrives as the union of its two producers (ADR-047), aliased `s` as before.
-    assert "GROUP BY player_key ORDER BY player_key" in sql and "marts.stats_daily AS r" in sql
+    assert f"GROUP BY player_key {RANKING}" in sql and "marts.stats_daily AS r" in sql
     assert "s.player_key LIKE {p0:String}" in sql and "startsWith" not in sql
     assert params["p0"] == "%:%vill%" and "s.is_hero = 1" not in sql
     assert params["limit"] == MAX_MATCHES, "every match is counted; the cut is made after"
+
+
+def test_the_exact_name_is_one_whole_key_per_site_and_never_a_pattern() -> None:
+    """A name half IS the typed text exactly when the key is `<site>:<text>` (ADR-065).
+
+    Equality against one candidate per site, not a trailing `LIKE`, which would also match a
+    name that merely ends with it -- and equality is why these values are unescaped: `%` and
+    `_` are LIKE's own and nobody else's.
+    """
+    db = Recorder()
+    players(r"a_b%c", 7, run=db)
+    sql, params = db.calls[0]
+    assert params["p0"] == r"%:%a\_b\%c%", "the filter escapes what a person typed"
+    assert params["p1"] == sorted(f"{site}:a_b%c" for site in SITES), "the ranking does not"
+    assert len(params["p1"]) == len(SITES) and f"{RANKING} LIMIT" in sql
+
+
+def test_a_site_typed_before_the_name_narrows_the_exact_key_to_that_site() -> None:
+    db = Recorder()
+    players("GGPoker:ViLL", 7, run=db)
+    assert db.calls[0][1]["p1"] == ["ggpoker:vill"]
+
+
+def test_the_service_does_not_re_rank_what_the_database_ranked() -> None:
+    """The one behaviour the move into SQL asks for: the answer's order is the query's."""
+    ranked = [("ggpoker:vill", 269), ("ggpoker:villain42", 56_761), ("ggpoker:avilla", 900)]
+    answer = players("vill", 7, run=Pool(ranked))
+    assert [row.group["player_key"] for row in answer.rows] == [key for key, _ in ranked]
 
 
 def test_a_site_typed_before_the_name_must_match_the_site_exactly() -> None:
@@ -128,32 +164,23 @@ def test_a_name_under_the_minimum_is_refused_rather_than_answered(typed: str) ->
     assert db.calls == [], "nothing that wide should reach ClickHouse"
 
 
-def test_the_name_typed_ranks_above_a_busier_one_that_merely_contains_it() -> None:
-    db = Pool({"ggpoker:vill": 269, "ggpoker:villain42": 56_761, "ggpoker:avilla": 900})
-    answer = players("vill", 7, run=db)
-    assert [row.group["player_key"] for row in answer.rows] == [
-        "ggpoker:vill",
-        "ggpoker:villain42",
-        "ggpoker:avilla",
-    ]
-
-
-def test_the_rest_are_the_busiest_first_and_the_answer_says_how_many_matched() -> None:
-    db = Pool({f"ggpoker:vill{i:03}": i for i in range(300)})
+def test_the_shown_rows_are_a_slice_and_the_counts_are_over_everyone_matched() -> None:
+    """`matched` and `hands` stay over the whole match set, however few rows are shown."""
+    db = Pool([(f"ggpoker:vill{i:03}", 300 - i) for i in range(300)])
     answer = players("vill", 7, limit=10, run=db)
     assert answer.matched == 300 and len(answer.rows) == 10
-    assert [row.hands for row in answer.rows] == list(range(299, 289, -1))
+    assert [row.hands for row in answer.rows] == list(range(300, 290, -1))
     assert answer.matched_capped is False
-    assert answer.hands == sum(range(300)), "the total is over everyone who matched"
+    assert answer.hands == sum(range(1, 301)), "the total is over everyone who matched"
 
 
 def test_a_limit_above_the_ceiling_is_the_ceiling() -> None:
-    db = Pool({f"ggpoker:vill{i:04}": i for i in range(MAX_PLAYERS + 5)})
+    db = Pool([(f"ggpoker:vill{i:04}", i) for i in range(MAX_PLAYERS + 5)])
     assert len(players("vill", 7, limit=10_000, run=db).rows) == MAX_PLAYERS
 
 
 def test_a_lookup_that_counts_all_it_will_count_says_the_count_is_a_floor() -> None:
-    db = Pool({f"ggpoker:vill{i:05}": i for i in range(MAX_MATCHES)})
+    db = Pool([(f"ggpoker:vill{i:05}", i) for i in range(MAX_MATCHES)])
     answer = players("vill", 7, run=db)
     assert answer.matched == MAX_MATCHES and answer.matched_capped is True
 

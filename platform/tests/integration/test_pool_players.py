@@ -70,7 +70,12 @@ async def test_a_whole_key_pasted_back_finds_exactly_the_one_player() -> None:
 
 
 async def test_the_site_is_not_part_of_anybody_s_name() -> None:
-    """The bug wearing its other face: matching the whole key would return the entire pool."""
+    """The bug wearing its other face: matching the whole key would return the entire pool.
+
+    Zero here because no watcher has the site's name inside their own. On a pool where somebody
+    does -- 27 players on the founder's -- they match, and that is the route working: the search
+    is over the name half, so the site's name is only ever somebody's name.
+    """
     async with http() as c:
         token = await _pool(c, await register(c))
 
@@ -102,3 +107,31 @@ async def test_another_tenant_finds_none_of_them() -> None:
         theirs = await _find(c, stranger, "atcher")
         assert theirs.status_code == 200, theirs.text
         assert theirs.json()["matched"] == 0
+
+
+RANKED = "ranked_nl25.txt"
+"""Two hands: `Onlooker` sat in one of them, `Onlooker9` and `PreOnlooker` in both."""
+
+RANKED_ORDER = [f"{SITE}:onlooker", f"{SITE}:onlooker9", f"{SITE}:preonlooker"]
+"""What a search for "onlooker" must return, in this order: the name typed in full first
+though it has the fewest hands, then the two that merely contain it, the tie between them
+broken alphabetically. All three ranking terms of ADR-062 decision 3, in one answer."""
+
+
+async def test_the_database_ranks_the_exact_name_first_then_the_busiest() -> None:
+    """The ranking ADR-062 decided, run by ClickHouse rather than by Python (ADR-065)."""
+    async with http() as c:
+        token = await register(c)
+        accepted = await upload(c, token, SITE, RANKED, dataset="population")
+        assert accepted.status_code == 202, accepted.text
+        worker.drain()
+
+        res = await _find(c, token, "onlooker")
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["matched"] == 3 and body["matched_capped"] is False
+        assert [row["group"]["player_key"] for row in body["rows"]] == RANKED_ORDER
+        rows = body["rows"]
+        counted = {r["group"]["player_key"]: r["cells"]["hands"]["value"] for r in rows}
+        assert counted == {RANKED_ORDER[0]: 1, RANKED_ORDER[1]: 2, RANKED_ORDER[2]: 2}
+        assert body["hands"] == 5, "the total is over everyone who matched, not the busiest"

@@ -19,6 +19,8 @@ from stats.ast import CODE, All, Expr, Node, _Strict
 from stats.definitions import Format, Grain
 from stats.interval import Interval, Level
 
+Direction = Literal["asc", "desc"]
+
 Dataset = Literal["hero", "population"]
 DATASET_HERO: Dataset = "hero"
 DATASET_POPULATION: Dataset = "population"
@@ -32,6 +34,8 @@ MAX_LIMIT = 10_000
 MAX_COHORT_RULES = 10
 MAX_HANDS = 200
 """Hands one search returns. A replayer list is browsed, not exported."""
+
+MAX_ORDER_BY = 4
 
 CohortOp = Literal["lt", "lte", "gt", "gte"]
 
@@ -74,6 +78,35 @@ class CustomStatSpec(_Strict):
         return self
 
 
+class OrderKey(_Strict):
+    """Order by a column the answer already has.
+
+    A group-by dimension or a stat of this same request -- named, so a client reading the
+    result can see what it was ranked by.
+    """
+
+    key: str = Field(pattern=CODE)
+    direction: Direction = "asc"
+
+
+class OrderMatch(_Strict):
+    """Order by whether a condition holds: the rows where it does sort together.
+
+    Because a ranking is not always a column -- "the exact name first, then the busiest"
+    (ADR-062 decision 3, ADR-065) has no column to name. It is the ordinary filter grammar
+    (ADR-022) over the request's own group-by dimensions, and goes through the ordinary
+    compiler, so its identifiers are the registry's and every value it carries is bound.
+    """
+
+    match: Node
+    direction: Direction = "asc"
+
+
+OrderBy = OrderKey | OrderMatch
+"""One ORDER BY term. Two shapes, told apart by the field they carry -- so a term that is
+neither, or both, does not exist to be handled."""
+
+
 class ReportRequest(_Strict):
     """One report: which hands, sliced how, measured by what."""
 
@@ -85,6 +118,12 @@ class ReportRequest(_Strict):
     player_key: str | None = None
     filter: Node = Field(default_factory=lambda: All(all=[]))
     group_by: list[str] = Field(default_factory=list, max_length=MAX_GROUP_BY)
+    order_by: list[OrderBy] = Field(default_factory=list, max_length=MAX_ORDER_BY)
+    """How to rank the groups. Empty is the group key itself, which is what a grid wants.
+
+    Only meaningful with a `group_by`: a report without one has a single row. Every term is
+    allowlisted in `stats.order` against this request's own group-by and stats, so a rank can
+    only be over a column of the answer (ADR-065)."""
     stats: list[str] = Field(default_factory=list, max_length=MAX_STATS)
     custom: list[CustomStatSpec] = Field(default_factory=list, max_length=MAX_CUSTOM)
     compare_to: Literal["population"] | None = None
@@ -111,6 +150,8 @@ class ReportRequest(_Strict):
             raise ValueError("a cohort applies to the population dataset, or to a baseline")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("date_from is after date_to")
+        if self.order_by and not self.group_by:
+            raise ValueError("order_by needs a group_by: a report without one has a single row")
         return self
 
     def canonical(self) -> str:

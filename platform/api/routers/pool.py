@@ -3,6 +3,11 @@
 Thin: tenancy from the token, cohort rows from Postgres, and the work handed to
 `analysis.pool` in the thread pool (the ClickHouse client is blocking). Every cohort row is
 scoped by `user_id` in the WHERE clause: another tenant's cohort must 404, never 200.
+
+The pool's *node* tiers -- `/v1/pool/node/*`, the three-tier read of one situation -- are
+`api/routers/pool_nodes.py`, mounted under this module's own `PREFIX` and `TAG` so the split
+is invisible from outside (ADR-065). They share this module's cohort helpers; it imports
+nothing from them.
 """
 
 from __future__ import annotations
@@ -19,14 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from analysis.pool import cohorts as cohort_service
-from analysis.pool.node_service import NodeFrequencies, NodeShowdownRange
-from analysis.pool.node_service import frequencies as node_frequencies
-from analysis.pool.node_service import showdown_range as node_showdown_range
-from analysis.pool.nodes import NodeKey
-from analysis.pool.realization import NodeRealization
-from analysis.pool.realization import realization as node_realization
-from analysis.pool.reconstruct import NodeEstimatedRange
-from analysis.pool.reconstruct import estimated_range as node_estimate
 from analysis.pool.service import PlayerMatches, PlayerSearch, pool_report, presets
 from analysis.pool.service import players as player_lookup
 from api import cache, hand_query
@@ -36,12 +33,16 @@ from api.models_pg import Cohort
 from api.ratelimit import tenant_rate_limit
 from api.routers.hands import TagFilter
 from api.schemas import HandSummary
-from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, EstimateIn, PoolPresetsOut
+from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
 from stats.request import CohortSpec, ReportRequest, ReportResult
 from stats.service import Cache, validate_request
 
-router = APIRouter(prefix="/v1/pool", tags=["pool"], dependencies=[Depends(tenant_rate_limit)])
+PREFIX = "/v1/pool"
+TAG = "pool"
+"""The Pool area's one prefix and tag, shared with `pool_nodes.py` so a URL cannot drift."""
+
+router = APIRouter(prefix=PREFIX, tags=[TAG], dependencies=[Depends(tenant_rate_limit)])
 
 Limit = Annotated[int, Query(ge=1, le=cohort_service.MAX_MEMBERS)]
 
@@ -185,78 +186,6 @@ def find_players(body: PlayerSearch, user: CurrentUserDep) -> PlayerMatches:
     try:
         return player_lookup(body.name, user.tenant_id, limit=body.limit)
     except ReportError as exc:
-        raise _bad_request(exc) from exc
-
-
-@router.post("/node/frequencies", response_model=NodeFrequencies)
-async def node_frequencies_at(
-    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
-) -> NodeFrequencies:
-    """Tier 1: what the field does at this situation (spec §10.2).
-
-    The key's last step is not part of the question — it is one of the answers. Under `min_n`
-    observations the answer carries the count and nothing else: no number here may be invented.
-    """
-    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
-    try:
-        return await run_in_threadpool(
-            node_frequencies, body, user.tenant_id, cohort=cohort, cache=report_cache()
-        )
-    except (ReportError, RegistryError) as exc:
-        raise _bad_request(exc) from exc
-
-
-@router.post("/node/showdown-range", response_model=NodeShowdownRange)
-async def node_showdown_range_at(
-    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
-) -> NodeShowdownRange:
-    """Tier 2: the hands the field turned over at this situation (spec §10.3).
-
-    `covers` says what share of the node's decisions were ever revealed, so the caller can
-    show the range for what it is: the hands shown here, not the hands played here.
-    """
-    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
-    try:
-        return await run_in_threadpool(
-            node_showdown_range, body, user.tenant_id, cohort=cohort, cache=report_cache()
-        )
-    except (ReportError, RegistryError) as exc:
-        raise _bad_request(exc) from exc
-
-
-@router.post("/node/estimated-range", response_model=NodeEstimatedRange)
-async def node_estimated_range_at(
-    body: EstimateIn, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
-) -> NodeEstimatedRange:
-    """Tier 3: the prior reweighted by what the field does with each class (spec §10.3).
-
-    The key's last step is the action being explained. `implied_frequency` against
-    `observed_frequency` is the reconstruction checking its own work: they agree only if the
-    per-class rates really do produce the frequency tier 1 measured directly.
-    """
-    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
-    asked = (body.node, body.prior, user.tenant_id)
-    try:
-        return await run_in_threadpool(node_estimate, *asked, cohort=cohort, cache=report_cache())
-    except ValueError as exc:
-        raise _bad_request(exc) from exc
-
-
-@router.post("/node/eqr", response_model=NodeRealization)
-async def node_realization_at(
-    body: NodeKey, user: CurrentUserDep, session: SessionDep, cohort_id: uuid.UUID | None = None
-) -> NodeRealization:
-    """What the field won from this node onwards, overall and by holding (spec §10.4).
-
-    The pool's half of EQR only: `realized` is EV as a share of the pot, and the caller divides
-    it by the equity its own engine computed against the range it is holding (ADR-035).
-    """
-    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
-    try:
-        return await run_in_threadpool(
-            node_realization, body, user.tenant_id, cohort=cohort, cache=report_cache()
-        )
-    except ValueError as exc:
         raise _bad_request(exc) from exc
 
 

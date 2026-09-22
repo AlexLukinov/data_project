@@ -21,6 +21,7 @@ from stats.compiler import COMPARISONS, Compiler, Params, quote
 from stats.definitions import ROUNDING, Dimension, Format, Stat, Table
 from stats.errors import RegistryError, ReportError
 from stats.interval import DISPERSION_SUFFIX
+from stats.order import order_by
 from stats.registry import Registry
 from stats.request import DATASET_POPULATION, CohortSpec, ReportRequest
 from stats.resolve import ResolvedStat
@@ -78,6 +79,7 @@ def build_query(
         for stat in plan.stats:
             select.extend(stat_columns(stat, plan.table, compiler, dispersion=wants))
         filter_sql = compiler.node(request.filter)
+        ranking = order_by(request, plan, compiler, reg)
     except RegistryError as exc:
         raise ReportError(str(exc)) from exc
     select.append(f"{HANDS_EXPR[plan.table]} AS {HANDS_ALIAS}")
@@ -93,7 +95,7 @@ def build_query(
     sql = f"{prologue}SELECT {', '.join(select)} FROM {table} AS s WHERE {' AND '.join(where)}"
     if request.group_by:
         keys = ", ".join(request.group_by)
-        sql += f" GROUP BY {keys} ORDER BY {keys}"
+        sql += f" GROUP BY {keys} ORDER BY {ranking or keys}"
     else:
         sql += " GROUP BY ()"
     sql += " LIMIT {limit:UInt32}"

@@ -44,3 +44,17 @@ def test_ev_is_not_the_name_of_two_different_numbers() -> None:
     """The registry's is the all-in adjusted result, not a solver EV (ADR-057 §5)."""
     label = registry().stat("ev_bb_per_100").label
     assert "EV" not in label and "adjusted" in label.lower(), label
+
+
+def test_the_all_in_adjusted_rate_explains_its_own_population_baseline() -> None:
+    """Its field column is the field's bb/100 exactly, and the caveat says so (ADR-066).
+
+    The all-in adjustment moves chips between the seats of one hand and both datasets hold
+    every seat, so a whole-hand comparison gives the pool the same number twice. A reader who
+    is not told that reads a broken screen; a client told it by special case learns the
+    registry's job (ADR-057).
+    """
+    stat = registry().stat("ev_bb_per_100")
+    assert "bb/100" in stat.notes, "name the number this one cannot differ from"
+    assert "whole hands" in stat.notes, "and the condition that makes them equal"
+    assert "position" in stat.notes, "and the case where they part"

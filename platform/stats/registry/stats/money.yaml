@@ -5,6 +5,12 @@
 # `ev_bb_per_100` is labelled "All-in adjusted bb/100" and not "EV bb/100" on purpose: "EV" in
 # this product already means a solver's expected value for a line, which is a different number
 # from an all-in adjusted result. One name per number (ADR-057 §5, ADR-062).
+#
+# Its population baseline is the field's own all-in adjusted rate, and that number equals the
+# field's actual bb/100 wherever the comparison covers whole hands -- by construction, not by
+# coincidence (ADR-039's redistribution is between the seats of one hand; the pool holds every
+# seat of it). The caveat below says so, because it is a reader's fact and not a client's
+# special case (ADR-066).
 
 - code: hands
   label: Hands
@@ -37,7 +43,15 @@
   higher_is_better: true
   typical: [0, 10]
   cached: true
-  description: All-in adjusted big blinds won per 100 hands.
+  description: Big blinds won per 100 hands, all-in adjusted; each all-in pot is shared out by expected share rather than awarded to whoever won it.
+  notes: >-
+    Where the site settled an all-in without dealing the rest of the board, nothing is
+    adjusted: nobody gambled, so the actual result stands. Read the number against your own
+    bb/100 to see how you ran; against the field it says what bb/100 says. The adjustment
+    only moves chips between the seats of one hand and the pool holds every seat of it, so on
+    any comparison covering whole hands the field's two rates are one number; they part company
+    only where a comparison picks one seat out of a hand, and grouped by position they differ
+    by up to 0.26 bb/100.
 
 - code: sd_bb_per_100
   label: Showdown bb/100

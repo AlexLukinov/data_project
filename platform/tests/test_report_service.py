@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import pytest
+
 from stats.ast import parse_node
-from stats.request import ReportRequest, ReportResult
+from stats.errors import ReportError
+from stats.request import CustomStatSpec, OrderKey, ReportRequest, ReportResult
 from stats.service import run_report
 
 Row = tuple[Any, ...]
@@ -194,3 +197,34 @@ def test_the_level_is_part_of_the_cache_key() -> None:
     run_report(ReportRequest(stats=["vpip"]), tenant_id=1, run=db, cache=cache)
     run_report(ReportRequest(stats=["vpip"], confidence=95), tenant_id=1, run=db, cache=cache)
     assert len(db.calls) == 2 and len(cache.store) == 2
+
+
+def test_a_report_that_splits_by_grain_refuses_to_be_ordered() -> None:
+    """Two queries, one merge, no ranking of the whole: say so rather than answer (ADR-065).
+
+    Each plan carries its own LIMIT, so a ranking would let the two halves keep different
+    players and the merged rows would hold half the stats each.
+    """
+    request = ReportRequest(
+        group_by=["position"],
+        stats=["hands", "cbet_flop"],
+        custom=[
+            CustomStatSpec(code="own", grain="hand", format="count", numerator={"count": True})
+        ],
+        order_by=[OrderKey(key="hands", direction="desc")],
+    )
+    with pytest.raises(ReportError, match="order_by needs one table"):
+        run_report(request, 1, run=FakeDB({}))
+
+
+def test_the_rows_come_back_in_the_order_the_database_returned_them() -> None:
+    """The merge is a dict keyed by the group, so one plan's SQL order is the answer's."""
+    columns = ["position", "vpip", "vpip__n", "__hands"]
+    rows: list[Row] = [("CO", 30.0, 10, 10), ("BB", 20.0, 90, 90), ("BTN", 25.0, 50, 50)]
+    db = FakeDB({"stats_daily": (columns, rows)})
+    request = ReportRequest(
+        group_by=["position"], stats=["vpip"], order_by=[OrderKey(key="vpip", direction="desc")]
+    )
+    result = run_report(request, 1, run=db)
+    assert [row.group["position"] for row in result.rows] == ["CO", "BB", "BTN"]
+    assert "ORDER BY vpip DESC" in db.calls[0][0]
