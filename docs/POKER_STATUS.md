@@ -5,8 +5,10 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: phases A–F complete, phases G and H queued** (G: board texture and population inference, added 2026-09-22, 5 steps · H: pool ranges at every situation and the exploits that follow, added 2026-09-23, 11 steps — none started) — 82 steps, **66 ticked** (H.10, the docs step, among them); of A–F's 66, the one that is not (D.9b) is waiting on a push, not on work · **Status: 9.1M real hands loaded · `hand_uid` is `FixedString(16)` end to end · `make check` 1,756 · `make web-check` 1,656 / 156 · nothing pushed**
-**Last updated:** 2026-09-23 (session 26, **phase H planned** — documentation only, no code, nothing committed, ClickHouse read-only. 11 steps plus **ADR-078/079/080**. Exploration overturned the premise: `board_texture` already works; the disqualifying gap is that **`NodeKey` cannot express a cross-street line** (`node_filter` uses `street_line`; the registry has `line_so_far`; session 25's every finding keyed on `line_so_far`). Three more: **a live bug** — ClickHouse 202 is absent from `stats/tenancy.py`'s `REJECTIONS` and one replayer step already issues up to 4 queries against a ceiling of 4, so fast stepping returns a **500** today (**H.0**, takeable now); **`vpip`/`pfr` cannot be situational at all** by design; and the cube is small — **46,688 situations, 6,351 at n≥100 covering 97% of decisions**. Also measured: **94,276 stable opponent identities**, contradicting `POKER_DATA_MODEL.md §3`, amended below.)
+**Current phase: phases A–F complete; G and H in flight as round 10** (G: board texture and population inference, 5 steps · H: pool ranges at every situation and the exploits that follow, 11 steps) — 82 steps, **67 ticked** · **Status: 9.1M real hands loaded · `hand_uid` is `FixedString(16)` end to end · `make check` 1,756 · `make web-check` 1,656 / 156 · pushed to `d9aa6c8`, CI green (run 35833221826)**
+**Last updated:** 2026-09-23 (session 27, **the push, and D.9b ticked** — the G/H planning docs committed as `9d20f17` with the six ADR index rows they lacked and H.10 ticked; pushed as a fast-forward with the privacy hook clean; **the e2e job's first CI run was red** on a spec selector that F.13's explainer made ambiguous, fixed in `d9aa6c8` from a clean clone; **run 35833221826 green on all four jobs**. Phases A–F are complete. Round 10's four lanes are running.)
+
+**Previously:** 2026-09-23 (session 26, **phase H planned** — documentation only, no code, nothing committed, ClickHouse read-only. 11 steps plus **ADR-078/079/080**. Exploration overturned the premise: `board_texture` already works; the disqualifying gap is that **`NodeKey` cannot express a cross-street line** (`node_filter` uses `street_line`; the registry has `line_so_far`; session 25's every finding keyed on `line_so_far`). Three more: **a live bug** — ClickHouse 202 is absent from `stats/tenancy.py`'s `REJECTIONS` and one replayer step already issues up to 4 queries against a ceiling of 4, so fast stepping returns a **500** today (**H.0**, takeable now); **`vpip`/`pfr` cannot be situational at all** by design; and the cube is small — **46,688 situations, 6,351 at n≥100 covering 97% of decisions**. Also measured: **94,276 stable opponent identities**, contradicting `POKER_DATA_MODEL.md §3`, amended below.)
 
 **Previously:** 2026-09-22 (session 25, **pool analysis against the real corpus** — no code changed, ClickHouse read-only, nothing committed. Answered a question about the pool's barrelling ranges and kept going until the method held; **three defects found in the product by using it**, each measured on the real corpus and each written up as an ADR and queued as **phase G**: `flop_connectedness` is wrong on **73.1%** of 4,050,004 flops (**ADR-075**), `MIN_N = 100` assumes independent rows against a measured design effect of **4.59** (**ADR-076**), and the cohort presets leave **39%** of the pool unnamed while a VPIP label under 200 hands carries no information (**ADR-077**). Docs only: `POKER_PLAN.md` phase G + §6, `POKER_DECISIONS.md` ADR-075…077, this file.)
 
@@ -54,48 +56,41 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Next: **push, watch CI, tick D.9b** — then **G.1**, then **phase H**
+### ▶ Next: **the round-10 merge** — four lanes, pool ranges first
 
-> **One thing can jump the queue: `H.0`.** ClickHouse code 202 (`TOO_MANY_SIMULTANEOUS_QUERIES`) is
-> missing from `stats/tenancy.py`'s `REJECTIONS`, and one replayer step already issues up to four
-> ClickHouse queries against a per-tenant ceiling of four — so **stepping quickly through a hand
-> returns a 500 today**. It is a small, isolated fix (ADR-079) and it does not depend on G or H.
+**Phases A–F are complete.** D.9b was ticked on 2026-09-23 when its E2E job went green in CI (run
+35833221826 on `d9aa6c8`). **Phases G and H are in flight as round 10**, four parallel sessions in this
+tree, each writing its doc text to `scratchpad/lane-<name>.docs.md` and its file list to
+`scratchpad/lane-<name>.files`:
 
-**Phases A–F hold no build work.** 65 of their 66 steps are `[x]`. The 66th,
-**D.9b**, is built, committed and green locally; its *Done means* is *its E2E job green in CI*, and
-nothing has ever been pushed. So the remaining step is an operation, not a feature:
+| Lane | Steps | ADRs | What it is |
+|---|---|---|---|
+| **texture** | G.1, G.2, H.2, H.3 | 081–084 | the board taxonomy from SQL to TypeScript, and **the one rebuild of the real marts** |
+| **key** | H.1 | 085–088 | a situation is a line across streets; stored keys must still find their ranges |
+| **inference** | G.3, G.4 | 089–092 | a frequency carries its cluster-robust interval; seven cohorts, preset-addressable |
+| **replayer** | H.0, H.7 (the reveal) | 093–096 | the pool's range beside your read, on click, before the cube — a deliberate amendment to H's order |
 
-1. **`cd platform && make up && make privacy-check`** — it reads every real opponent's key from the
-   real ClickHouse read-only and refuses a tree or a push that carries one. `make install-hooks`
-   installs it as `pre-push`; it is installed here.
-2. **`make e2e`** (needs `make up && make seed` first, and **never beside `make test-all`** — same
-   consumer group, and that session drops the test databases). Round 8 added
-   `web/e2e/pool-lookup.spec.ts`, which is **written and typechecked but has never been run**.
-3. **Push `feat/range-lab`** (25 commits ahead of `origin`), watch the `e2e` job, and **tick D.9b**
-   when it is green. If it is red, that is the step's *Done means* doing its job — fix and push again.
+**When they report finished, the merge:**
 
-**Then `G.1`** — the first step of **phase G**, added to the plan on 2026-09-22 after a session of
-pool analysis found three defects by using the product against the real corpus (ADR-075/076/077).
-`G.1` is the flop-connectivity fix: `flop_connectedness` is a span between a flop's extremes, blind
-to its middle card and to ace-low, and **73.1% of 4,050,004 real flops change category** under a
-correct OESD definition. Take it first — `G.5`'s texture report is not worth reading until it lands,
-and `G.3` (a node frequency must carry a cluster-robust interval; the design effect is **4.59**, so
-`MIN_N = 100` ships ±21pp intervals as facts) changes numbers already on screen.
-
-**Then phase H** — pool ranges at every situation, grouped by opponent type, with the exploits
-stated and shown in the hand replayer (ADR-078/079/080). It closes **F-906**, **F-402**, **F-602**
-and much of **F-314**. G is a hard prerequisite for everything in H except `H.0`.
-
-**After phase H** the next unit of work comes from
-[POKER_FEATURES.md](POKER_FEATURES.md): the plan's §1 non-goals are what is left — live HUD (F-8xx),
-solver integration (F-904/905), Iceberg/Spark (F-206/B06), Airflow (F-B05), billing (F-704) and new
-site parsers — and each needs a plan of its own before it is started, the way phases A–F did.
+1. **Re-verify the real rebuild before anything else.** `system.columns` must show the new texture
+   columns on `marts.decisions` and `marts.player_hands`, and the row counts must not have moved.
+   **Never commit the texture lane's registry change or the client's texture tags without it** —
+   until the rebuild lands, every postflop node query against the real ClickHouse is a 500
+   (code 47, `flop_connectivity` cannot be resolved), and the founder's own `make start` stack runs
+   from this tree.
+2. Reconcile each lane's `.files` against `git status --porcelain -uall`; two lanes share
+   `analysis/pool/node_filter.py` (texture owns `TEXTURE_DIMENSIONS`/`_texture_leaf`, key owns the
+   rest) and `poker-core/src/hand/node.ts` (key's, with texture's `textureTags` wired in).
+3. Gates over the combined tree: `make check`, `make web-check`, `make seed && make test-all`,
+   `make e2e` (not beside test-all), `make privacy-check`; place the lanes' doc text and ADRs.
+4. Then **round 11**: H.4 + H.5 (the cube and the adaptive collapse), H.6 (exploits), H.7's exploit
+   panel, H.8, H.9, G.5.
 
 **Two things are still only the founder's**, both about history that is already public: the
-fifteenth real handle lives in `88625fd` and its ancestors, so removing it means a second
-`filter-repo --replace-text` and a second force-push; and the two pre-rewrite Actions runs need
-deleting, with GitHub Support asked to purge the old commits. **Decide these before pushing**, since
-a push is what makes the rest of the history public too.
+fifteenth real handle lives in `88625fd` and its ancestors — removing it means a second
+`filter-repo --replace-text` and a second force-push, and since `filter-repo` hard-resets the working
+tree it can only run **between rounds**; and the two pre-rewrite Actions runs need deleting, with
+GitHub Support asked to purge the old commits.
 
 > **Do not put a real screen name in a test fixture, a commit message or a verification note**
 > (ADR-058).
@@ -1759,6 +1754,7 @@ Newest first. One line per session: what changed, what's next.
 
 | Date | Session did | Left off at |
 |---|---|---|
+| 2026-09-23 (session 27 — **the push, and D.9b ticked**) | The G/H planning docs committed (`9d20f17`, six missing ADR index rows added, H.10 ticked) and pushed as a fast-forward, privacy hook clean. The e2e job's first CI run was red on a spec selector F.13's explainer made ambiguous; fixed in `d9aa6c8` from a clean clone, run 35833221826 green on all four jobs. **Phases A–F complete.** Round 10's prompts written after checking the new plan against the code. | The round-10 merge |
 | 2026-09-21 (session 23 — **B.5b, the `core.*` rebuild**, with the machine to itself) | **`hand_uid` is `FixedString(16)` on every core, staging, intermediate and mart table** (ADR-064). Backup first and written down first (`FREEZE`, 9.1 GB of hard links, 0 bytes of extra disk); all 346,922,887 ids proved to round-trip before a byte was written; 39 partitions copied at peak 1.05 GiB; **parity exact under `FINAL`** on counts, id hashes and full row hashes, and the marts' counters unmoved. `hand_uid` **2.23 GiB → 0.78 GiB**. New: `scripts/rebuild_core_uid.py`, migration `0013` (proved on a throwaway prefixed database), `core.ids` as the one home of the hex↔bytes boundary. **Amended two clauses of the step with evidence** — the mart chain was not recreated (rebuilding five day-partitions through the new boundary gave byte-identical rows) and the size clause was measured on `core.*` (`player_hand_flags` was deleted in C.6). Three ClickHouse behaviours measured and designed around, incl. **a SELECT alias shadowing the column in WHERE**; one defect the fix introduced (an over-long id → 500) caught over HTTP and guarded. Verified against the real corpus on a scratch account: hero list, pool list, both replayers, the tag filter, the search pair key. **Also measured and recorded: Docker's VM clock jumps back 976 s for ~12 s at a time**, which breaks MinIO signing and was the cause of a long run of false integration failures. | Old `core.<t>__v2` tables and the `FREEZE` snapshot still on disk; **F.14** next |
 | 2026-09-21 (session 21 — **the round-6 merge**) | Six lanes committed (`22ddf18` D.9b, `e24e45e` D.9c, `76b0b42` F.12b, `3f42270` F.12c, `4dbfa08` F.12d, `e9a0ee2` F.13, `2e543fc` allowlist); **five steps ticked**, D.9b left `[ ]` by design. Manifests cross-checked: 229 paths, none unclaimed, 12 shared and each assigned deliberately. Two privacy fixes only the merge could make (a name quoted in STATUS, folded out of the unpushed docs commit; D.9c's fifteenth handle), after which `make privacy-check` answers *no real player key found* and its hook is installed. Gates: `make check` 1,714 · `make web-check` 1,549 / 146 · `make test-all` 1,821 passed, 6 skipped. | **D.10** (close phase D), then F.12's three remaining §13 lines and B.5b; nothing pushed |
 | 2026-09-15 (session 20, continued — **history rewrite**) | Bundle backup of all refs; `git filter-repo --replace-text` trialled in a mirror (tree identical, only five files touched in any commit, full-history scan clean), then run in place with identical hashes; force-pushed with a lease to `88625fd`; docs' commit hashes remapped; round-6 lanes had written nothing, so nothing was lost to the reset. GitHub still serves old SHAs. | Founder: delete the two old Actions runs, Support purge (or go private meanwhile) |
