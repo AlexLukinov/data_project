@@ -5,8 +5,12 @@
 > Planning lives in [POKER_FEATURES.md](POKER_FEATURES.md) (what & why) and
 > [POKER_ROADMAP.md](POKER_ROADMAP.md) (order & learning mapping). This file is *how far*.
 
-**Current phase: the v2 plan is complete** — 66 steps, **65 ticked**; the one that is not (D.9b) is waiting on a push, not on work · **Status: 9.1M real hands loaded · `hand_uid` is `FixedString(16)` end to end · `make check` 1,756 · `make web-check` 1,656 / 156 · nothing pushed**
-**Last updated:** 2026-09-22 (session 24, **the round-8 merge** — four workstreams committed: B.5b `1289512`, the registry lane `6023a71`, F.14 `569691f`, the leftovers lane `588d55d`, plus the docs. **F.14 ticked**, so every plan step but D.9b's is closed. Eleven ADRs, 064–074, and for the first round no merge fixes were needed at all. `make check` **1,756** · `make web-check` **1,656 / 156** · `make seed && make test-all` ****1,869 passed, 6 skipped**** · `make privacy-check` clean. Still unpushed, 25 commits ahead.)
+**Current phase: phases A–F complete, phases G and H queued** (G: board texture and population inference, added 2026-09-22, 5 steps · H: pool ranges at every situation and the exploits that follow, added 2026-09-23, 11 steps — none started) — 82 steps, **66 ticked** (H.10, the docs step, among them); of A–F's 66, the one that is not (D.9b) is waiting on a push, not on work · **Status: 9.1M real hands loaded · `hand_uid` is `FixedString(16)` end to end · `make check` 1,756 · `make web-check` 1,656 / 156 · nothing pushed**
+**Last updated:** 2026-09-23 (session 26, **phase H planned** — documentation only, no code, nothing committed, ClickHouse read-only. 11 steps plus **ADR-078/079/080**. Exploration overturned the premise: `board_texture` already works; the disqualifying gap is that **`NodeKey` cannot express a cross-street line** (`node_filter` uses `street_line`; the registry has `line_so_far`; session 25's every finding keyed on `line_so_far`). Three more: **a live bug** — ClickHouse 202 is absent from `stats/tenancy.py`'s `REJECTIONS` and one replayer step already issues up to 4 queries against a ceiling of 4, so fast stepping returns a **500** today (**H.0**, takeable now); **`vpip`/`pfr` cannot be situational at all** by design; and the cube is small — **46,688 situations, 6,351 at n≥100 covering 97% of decisions**. Also measured: **94,276 stable opponent identities**, contradicting `POKER_DATA_MODEL.md §3`, amended below.)
+
+**Previously:** 2026-09-22 (session 25, **pool analysis against the real corpus** — no code changed, ClickHouse read-only, nothing committed. Answered a question about the pool's barrelling ranges and kept going until the method held; **three defects found in the product by using it**, each measured on the real corpus and each written up as an ADR and queued as **phase G**: `flop_connectedness` is wrong on **73.1%** of 4,050,004 flops (**ADR-075**), `MIN_N = 100` assumes independent rows against a measured design effect of **4.59** (**ADR-076**), and the cohort presets leave **39%** of the pool unnamed while a VPIP label under 200 hands carries no information (**ADR-077**). Docs only: `POKER_PLAN.md` phase G + §6, `POKER_DECISIONS.md` ADR-075…077, this file.)
+
+**Previously:** 2026-09-22 (session 24, **the round-8 merge** — four workstreams committed: B.5b `1289512`, the registry lane `6023a71`, F.14 `569691f`, the leftovers lane `588d55d`, plus the docs. **F.14 ticked**, so every plan step but D.9b's is closed. Eleven ADRs, 064–074, and for the first round no merge fixes were needed at all. `make check` **1,756** · `make web-check` **1,656 / 156** · `make seed && make test-all` ****1,869 passed, 6 skipped**** · `make privacy-check` clean. Still unpushed, 25 commits ahead.)
 
 **Previously:** 2026-09-21 (session 23, **B.5b — the `core.*` rebuild**, with the machine to itself; ADR-064). `hand_uid` is `FixedString(16)` on every core, staging, intermediate and mart table; the id column fell **2.23 GiB → 0.78 GiB** and live `core.*` **9.02 → 5.10 GiB**; the parity fingerprint did not move. `make check` **1,737** · `make seed && make test-all` **1,849 passed, 6 skipped** · `make privacy-check` clean. The `FREEZE` backup is still on disk. Still unpushed.)
 
@@ -50,9 +54,14 @@ intervals (session 11, ADR-040, left unticked), and F.12)
 > **Read this first. "Continue" means: do this.** Keep it concrete enough to start from cold —
 > which file, which command, what "done" looks like. Rewrite it at the end of every session.
 
-### ▶ Next: **push, watch CI, tick D.9b** — and the v2 plan is finished
+### ▶ Next: **push, watch CI, tick D.9b** — then **G.1**, then **phase H**
 
-**There is no build work left in `docs/POKER_PLAN.md`.** 65 of its 66 steps are `[x]`. The 66th,
+> **One thing can jump the queue: `H.0`.** ClickHouse code 202 (`TOO_MANY_SIMULTANEOUS_QUERIES`) is
+> missing from `stats/tenancy.py`'s `REJECTIONS`, and one replayer step already issues up to four
+> ClickHouse queries against a per-tenant ceiling of four — so **stepping quickly through a hand
+> returns a 500 today**. It is a small, isolated fix (ADR-079) and it does not depend on G or H.
+
+**Phases A–F hold no build work.** 65 of their 66 steps are `[x]`. The 66th,
 **D.9b**, is built, committed and green locally; its *Done means* is *its E2E job green in CI*, and
 nothing has ever been pushed. So the remaining step is an operation, not a feature:
 
@@ -65,7 +74,19 @@ nothing has ever been pushed. So the remaining step is an operation, not a featu
 3. **Push `feat/range-lab`** (25 commits ahead of `origin`), watch the `e2e` job, and **tick D.9b**
    when it is green. If it is red, that is the step's *Done means* doing its job — fix and push again.
 
-**Then the plan is done, and the next unit of work no longer comes from it.** It comes from
+**Then `G.1`** — the first step of **phase G**, added to the plan on 2026-09-22 after a session of
+pool analysis found three defects by using the product against the real corpus (ADR-075/076/077).
+`G.1` is the flop-connectivity fix: `flop_connectedness` is a span between a flop's extremes, blind
+to its middle card and to ace-low, and **73.1% of 4,050,004 real flops change category** under a
+correct OESD definition. Take it first — `G.5`'s texture report is not worth reading until it lands,
+and `G.3` (a node frequency must carry a cluster-robust interval; the design effect is **4.59**, so
+`MIN_N = 100` ships ±21pp intervals as facts) changes numbers already on screen.
+
+**Then phase H** — pool ranges at every situation, grouped by opponent type, with the exploits
+stated and shown in the hand replayer (ADR-078/079/080). It closes **F-906**, **F-402**, **F-602**
+and much of **F-314**. G is a hard prerequisite for everything in H except `H.0`.
+
+**After phase H** the next unit of work comes from
 [POKER_FEATURES.md](POKER_FEATURES.md): the plan's §1 non-goals are what is left — live HUD (F-8xx),
 solver integration (F-904/905), Iceberg/Spark (F-206/B06), Airflow (F-B05), billing (F-704) and new
 site parsers — and each needs a plan of its own before it is started, the way phases A–F did.

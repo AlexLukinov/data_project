@@ -310,7 +310,7 @@ the incumbent that does it best.
 > fields. Needs an expression allowlist, not raw SQL.
 > **Deps** — F-311, F-409 · **Reference** — PT4 (custom stats/columns — best in class)
 
-**F-314 · Stats-as-seen-at-play** — `dbt` `ch` · **L** · **Differentiator** · planned
+**F-314 · Stats-as-seen-at-play** — `dbt` `ch` · **L** · **Differentiator** · **partly planned as PLAN H.9** (2026-09-23; H.9 is post-hoc review, not the point-in-time cut)
 > Point-in-time stat snapshot: what a HUD *would have shown* at hand N, using only hands before
 > it. Makes the replayer honest about what you actually knew.
 > **Deps** — F-301, F-506 · **Reference** — HM3 (replayer stat context)
@@ -327,7 +327,7 @@ the incumbent that does it best.
 > Date range, stakes, position, game type, table size, site, session. The always-on dimensions.
 > **Deps** — F-301 · **Reference** — PT4
 
-**F-402 · Board texture filter** — `dbt` `core` · **L** · planned
+**F-402 · Board texture filter** — `dbt` `core` · **L** · **planned as PLAN phases G.1/G.2 + H.2** (2026-09-22/23)
 > Categorize flop/turn/river: paired, monotone/two-tone/rainbow, connectedness, high-card class,
 > straight/flush-possible. Also feeds `spot_key` (F-210).
 > **Deps** — F-301 · **Reference** — Flopzilla (texture taxonomy), PT4 (filter UI)
@@ -435,7 +435,7 @@ the incumbent that does it best.
 > irrelevant to an aggregate.
 > **Deps** — F-210, F-301 · **Reference** — Hand2Note Range Research (the category leader)
 
-**F-602 · Cohort definition by stat criteria** — `dbt` `api` · **L** · **Differentiator** · planned
+**F-602 · Cohort definition by stat criteria** — `dbt` `api` · **L** · **Differentiator** · **delivered; extended by PLAN G.4 + H.8** (ADR-077, ADR-080)
 > Define a player cohort by stat thresholds, then ask what that cohort does in a spot.
 > **Deps** — F-601, F-410 · **Reference** — Hand2Note Range Research
 
@@ -598,7 +598,7 @@ the incumbent that does it best.
 > Load solver output (own or purchased) into the `spot_key` seam.
 > **Deps** — F-209, F-210 · **Reference** — GTO Wizard
 
-**F-906 · Range research on real data** — `dbt` `web` · **L** · **Differentiator** · planned
+**F-906 · Range research on real data** — `dbt` `web` · **L** · **Differentiator** · **planned as PLAN phase H** (2026-09-23)
 > The *observed* range a cohort actually shows up with in a spot — reconstructed from showdowns.
 > Population data answers what solvers can't: what people really do.
 > **Deps** — F-601, F-901 · **Reference** — Hand2Note Range Research

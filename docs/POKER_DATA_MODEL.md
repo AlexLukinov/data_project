@@ -227,6 +227,41 @@ viable product — arguably a better one, since it's what the AI coaching layer 
 should be a conscious position, not a surprise. It's one of the open questions in
 [POKER_GAP_ANALYSIS.md](POKER_GAP_ANALYSIS.md#open-questions-for-you-before-the-implementation-run).
 
+### 3b. Amendment, 2026-09-23 — this section does not describe the corpus we actually have
+
+Everything above is correct about GG's **anonymous tables** and wrong about **this database**.
+Measured on the real pool (tenant 1, `dataset='population'`):
+
+| | |
+|---|---|
+| Rows carrying a real `player_key` | **73,523,444 of 73,523,498** (54 anonymized, one key) |
+| Distinct opponents | **94,276** |
+| Hands per opponent | median **55**, p95 **2,258**, max **119,758** |
+| Opponents with ≥1,000 hands | thousands — 7,708 of them are regs in a *single* flop node |
+
+A per-hand pseudonym cannot accumulate 119,758 hands. Identity is **stable** here, so the flat claim
+above — *"Every opponent-level stat is impossible on those sites. There is no 'this villain 3-bets
+11%', no HUD, no player notes that follow someone around, no exploitative read"* — does not hold
+for this corpus. It holds for GG's anonymous tables; the hands we have are not those.
+
+**What stays true.** Rule 2 (`player_key IS NOT NULL` gates opponent stats) is still the right
+design and is what makes the distinction safe — it degrades correctly whichever kind of hand
+arrives. Rule 3 is still true. The fast-fold note is still true. And **hero's own GG hands carry
+session-scoped aliases**, which is why `/v1/pool/players` exists and has no hero equivalent.
+
+**What changes.** Opponent-level work is viable on this data, and phase H's per-player panel
+(ADR-080) depends on it. Two limits that are *not* about anonymization still bind, and are the real
+constraints to design against:
+
+- **`vpip` and `pfr` cannot be situational at all.** They are hand-grain (`player_hands`), and
+  `stats/router.py:59-64` refuses a hand-grain stat combined with any decisions-only dimension, by
+  name. "This villain's VPIP facing a 3-bet" is a `ReportError`, not a slow query. The
+  decision-grain stats (`threebet`, `steal`, `fold_to_3bet`, `cbet_flop`) *can* be asked at a node.
+- **The median opponent has 55 hands.** Identity being available is not the same as a read being
+  available, which is why ADR-080 shows the villain beside their cohort and falls back out loud.
+
+Do not read §3 as a product position without reading this block.
+
 ---
 
 ## 4. ClickHouse design

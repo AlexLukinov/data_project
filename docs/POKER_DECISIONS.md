@@ -84,6 +84,12 @@ not a change I've made.
 | [072](#adr-072--fact-4-binds-the-seats-not-the-number-of-examples) | Fact 4 binds the seats, not the number of examples | ✅ |
 | [073](#adr-073--an-empty-state-with-no-data-to-offer-may-offer-a-worked-example-and-names-one-spot-rather-than-the-index) | An empty state with no data to offer may offer a worked example, and names one spot rather… | ✅ |
 | [074](#adr-074--a-control-that-renders-as-a-control-does-something) | A control that renders as a control does something | ✅ |
+| [075](#adr-075--a-flops-connectivity-is-what-a-hand-can-draw-to-not-the-span-between-its-ends) | A flop's connectivity is what a hand can draw to, not the span between its ends | ✅ |
+| [076](#adr-076--a-population-frequency-needs-a-cluster-robust-sample-and-min_n--100-is-not-one) | A population frequency needs a cluster-robust sample, and `MIN_N = 100` is not one | ✅ |
+| [077](#adr-077--a-vpip-label-under-200-hands-names-nothing) | A VPIP label under 200 hands names nothing | ✅ |
+| [078](#adr-078--a-situation-is-a-line-across-streets-not-a-line-on-one-street) | A situation is a line across streets, not a line on one street | ✅ |
+| [079](#adr-079--the-pools-range-is-precomputed-because-a-tenant-may-hold-four-queries) | The pool's range is precomputed, because a tenant may hold four queries | ✅ |
+| [080](#adr-080--seven-labels-name-a-player-five-keys-describe-behaviour) | Seven labels name a player; five keys describe behaviour | ✅ |
 
 ---
 
@@ -5512,3 +5518,270 @@ needs its own decision, so the rows there stay read-only and the honest fix is t
 above. `RangeMatrix` in `mode="view"` emits an unhandled `cellClick` in four trainers and is **not**
 a finding: it sets `cursor: default` for view mode, so it advertises nothing. That contrast — does
 the element *say* it is a control? — is the test this ADR uses.
+
+---
+
+## ADR-075 — A flop's connectivity is what a hand can draw to, not the span between its ends
+
+**Status:** accepted · 2026-09-22 · queued as plan step **G.1**/**G.2** · supersedes the
+`flop_connectedness` dimension introduced with `int_board_by_street`.
+
+**Context.** A session of pool analysis needed board texture controlled, and reached for
+`flop_connectedness`. It is computed in `int_board_by_street.sql` as a **span between the extremes**:
+`high − low ≤ 2` → `connected`, `≤ 4` → `semi_connected`, else `disconnected`. That is not a poker
+property. It reads only the highest and lowest card, so it cannot see the middle one; it has no
+concept of the ace playing low; and its `connected` boundary is *narrower* than the condition for a
+made straight, which the neighbouring `straight_possible()` macro already computes correctly.
+
+**Measured, not argued.** Recomputed against **4,050,004 real flops** in `core.hands`: **73.1%
+change category.** Only `disconnected → disconnected` (960,187) and `connected → connected` (129,978)
+survive; `semi_connected` has no counterpart at all.
+
+| old → new | boards | example | why the new one is right |
+|---|---|---|---|
+| disconnected → oesd | 1,957,960 | `4s Qc 6c` | hold 5,7 → 4567 |
+| semi_connected → connected | 551,210 | `7s Jd 8h` | hold 9,T → 789TJ, a made straight |
+| connected → oesd | 186,939 | `9c 7h 7d` | a paired board has two ranks; it can never fill a five-window |
+| disconnected → connected | 70,455 | `5s 3s Ah` | the wheel — span sees A−3 = 11 and misses ace-low |
+| connected → disconnected | 25,609 | `Qs Ad Qd` | J,K gives JQKA — one-ended, a broadway draw, not an OESD |
+
+**Decision.** Retire `flop_connectedness`. Introduce **`flop_connectivity`** over three ordered
+values, matching how solvers (and GTO Wizard's board filters) split a flop:
+
+- `connected` — a straight is already available: the existing `straight_possible(ranks)` (three
+  distinct board ranks inside one five-window, ace duplicated as rank 0).
+- `oesd` — not connected, but some two-card holding makes an **open-ended** straight draw: a
+  four-rank window **open at both ends** containing ≥2 board ranks —
+  `arrayExists(l -> arrayCount(x -> x >= l and x <= l+3, distinct_ranks_with_ace_low) >= 2, range(1,10))`.
+  `range(1,10)` is the whole decision in one expression: it admits `2345` through `TJQK` and excludes
+  `A234` and `JQKA`, which complete at one end only and are therefore not open-ended.
+- `disconnected` — neither.
+
+**A new code, not a redefinition of the old one.** A saved filter or cohort naming
+`flop_connectedness` must **fail loudly** in the registry rather than keep working against a
+dimension whose meaning moved under 73% of boards. This is the more disruptive option and it is
+chosen deliberately.
+
+**Consequence — the cross product is 14 cells, not 27.** `pairing × suitedness × connectivity` reads
+as 27, but three constraints are structural, not empirical: trips has one rank, so it is always
+rainbow and always disconnected (1 cell); a paired flop can never be monotone, because two cards of
+the same rank cannot share a suit, and never connected, because two distinct ranks cannot fill a
+five-window (4 cells); unpaired is the full 3×3 (9 cells). Any UI that offers 27 offers 13 that
+cannot occur. The validated distribution is in POKER_PLAN.md §4, phase G.
+
+**§4. And the high card is not in the taxonomy at all.** The three axes say nothing about rank, yet
+in the same analysis the reg over-fold to a flop c-bet ran **+17.2** on ace-dry boards against
+**+7.3** on low-wet ones — a bigger spread than two of the three axes produce. `flop_high_card`
+(the raw rank) is kept and **`flop_high_card_class`** is added beside it: `ace` 21% · `king_queen`
+34% · `jack_ten` 22% · `middle` (9–7) 18% · `low` (6 and below) 5.4%, shares measured on the corpus
+so the buckets are balanced rather than tidy.
+
+---
+
+## ADR-076 — A population frequency needs a cluster-robust sample, and `MIN_N = 100` is not one
+
+**Status:** accepted · 2026-09-22 · queued as plan step **G.3** · amends the constants in
+`analysis/pool/node_query.py`.
+
+**Context.** `node_query.py` gates every pool answer on `MIN_N = 100` observations, below which it
+returns a count and `enough=False`. The constant assumes the 100 rows are independent. They are not:
+a pool node's rows are **decisions by players**, and the same player contributes many.
+
+**Measured.** On the BB-defends-a-flop-c-bet node — 556,112 decisions by **7,708** regs — the
+cluster-robust standard error (the ratio estimator, clustering on `player_key`) is **0.143pp**
+against a binomial **0.067pp**: a **design effect of 4.59**, implying an intra-class correlation of
+about **0.24**. Standard errors are therefore **2.14×** what the naive formula gives.
+
+At `MIN_N = 100` and a frequency near 50%, that is a 95% interval of roughly **±21 points** — and the
+UI is told `enough=True` and prints the number. The gate admits answers that cannot support the
+claim they render. For a ±5pp claim the same arithmetic wants **n ≈ 1,800**.
+
+**Decision.** A node answer carries a **cluster-robust interval**, and the gate is on the width of
+that interval rather than on a raw row count. A frequency without its interval is not shipped.
+
+**The correction is not uniform, which is the part worth writing down.** The ICC of ~0.24 is a
+property of *choice* — whether a player folds is a stable trait, so their rows repeat. It does not
+transfer to what a player is **dealt**: `hand_class` is randomised by the deck, its between-player
+ICC is ≈0, and its design effect is ≈1. So `MIN_BUCKET_N = 200` on the 169-class buckets is not
+wrong for this reason and must **not** be scaled by 4.59. The registry needs to distinguish the two
+stat kinds, because the sample a claim needs depends on which it is.
+
+**Also to check, not yet measured:** E.2's confidence intervals on the My-game KPI tiles. If they
+are binomial over population counts they are ~2.1× too narrow; over hero's own hands, where hero is
+a single cluster, the question is different again.
+
+---
+
+## ADR-077 — A VPIP label under 200 hands names nothing
+
+**Status:** accepted · 2026-09-22 · queued as plan step **G.4** · extends the two cohort presets in
+`analysis/pool/presets.yaml`.
+
+**Context.** The presets ship `regs` (VPIP <25 over ≥1,000 hands) and `fish` (VPIP ≥35 over ≥200).
+Between and below them sits **39%** of the pool, unnamed — and an unnamed 39% quietly becomes the
+denominator of every "the pool does X" sentence.
+
+**Measured** on fold-to-flop-c-bet, BB defending an SRP heads-up:
+
+| cohort | VPIP | hands | n | folds |
+|---|---|---|---|---|
+| reg | <25 | ≥1000 | 556,112 | **45.4%** |
+| reg_m | <25 | 200–999 | 72,361 | 42.6% |
+| other | 25–35 | ≥200 | 190,372 | 41.7% |
+| fish | ≥35 | ≥200 | 26,474 | **38.8%** |
+| reg_s | <25 | <200 | 17,854 | 41.5% |
+| other_s | 25–35 | <200 | 26,470 | 40.0% |
+| fish_s | ≥35 | <200 | 22,557 | 39.9% |
+
+**Two findings, both actionable.** The ≥200-hand groups spread **6.6 points**; the sub-200 groups
+spread **2.0** and all sit near 40%. **Under 200 hands a VPIP reading carries essentially no
+information about how a player defends** — the board texture moves the same number by 20 points, so
+texture beats the player read whenever the read is thin. And `reg_m` sits nearer `other` (41.7) than
+`reg` (45.4): the 1,000-hand threshold in the existing preset is doing real work, not just reducing
+noise, and lowering it to 200 would blur the one group the exploit depends on.
+
+**Decision.** Seven cohorts, disjoint and total, so every pool player is named and no report has a
+silent remainder: `reg` · `reg_m` · `other` · `fish` · `reg_s` · `other_s` · `fish_s`. Each preset's
+description carries the measured fold rate above, so the number a reader is about to act on is in
+the same place as the definition they are acting on.
+
+**Not corrected:** the labels are computed over the whole history, which includes the hands being
+analysed. The endogeneity is mild at these sample sizes and is recorded rather than fixed.
+
+---
+
+## ADR-078 — A situation is a line across streets, not a line on one street
+
+**Status:** accepted · 2026-09-23 · queued as plan step **H.1** · amends `NodeKey` (ADR-028) and
+`node_filter`.
+
+**Context.** Phase H needs to ask the pool "what range do you have *here*". The starting assumption
+was that `NodeKey.board_texture` was accepted and ignored. **It is not.**
+`analysis/pool/node_filter.py:98` maps every tag to one of
+`TEXTURE_DIMENSIONS = (flop_suitedness, flop_pairing, flop_connectedness, flop_high_card)` **by
+value**, and an unknown tag is a `RegistryError`. That part works.
+
+Four real gaps were found instead, and one of them is disqualifying:
+
+1. **Only flop texture is reachable.** `turn_completes_flush`, `turn_pairs_board`, `river_*` and
+   `board_*` all exist on `decisions` and are not in `TEXTURE_DIMENSIONS`. A node cannot say "the
+   turn brought a flush card" — which is exactly what runout grouping needs.
+2. **No conflict detection.** `["monotone","rainbow"]` becomes two contradictory `eq` leaves under
+   one `All` → zero rows, silently, with no error (`node_filter.py:171`).
+3. **★ `NodeKey` cannot express a cross-street line.** `node_filter` filters `preflop_line` or
+   `street_line` — *this street only*. The registry has had `line_so_far` (`'r/x-c/'`, streets joined
+   by `/`) all along and `node_filter` never uses it. **Every finding of the 2026-09-22 analysis
+   keyed on `line_so_far='r/b/b/'`. The product cannot ask the question that produced phase G.**
+4. **Sizing is not a predicate.** `ActionStep.size_pct` is carried and never becomes a
+   `facing_size_pct` filter — pinned *negatively* at `tests/test_node_filter.py:67` — yet sizing
+   moved the measured reg over-fold from +15.9 to +5.2. Also unexpressible: `pot_type`, `spr`,
+   `facing_is_cbet`, `players_live`, date, site.
+
+**Decision.** `NodeKey` gains **`line_so_far`**, **`size_bucket`** and **`pot_type``**, each with its
+`node_filter` leaf; `size_bucket` goes through the registry's bucket machinery, which `_bucket_of`
+already does for `eff_stack_bb`. Texture-tag conflicts raise. `TEXTURE_DIMENSIONS` grows to the
+G.1/G.2 dimensions and the runout dimensions of H.2.
+
+`street_line` stays for single-street nodes; a key carries one or the other, never both.
+
+**The twins move together.** `analysis/pool/nodes.py`, `web/packages/poker-core/src/node.ts` and
+`tests/fixtures/nodes.json` ship in one commit — `parseNodeKey` rejects unknown fields *by design*,
+so a server-side addition is a hard client break, and that is the intended behaviour.
+
+**A fixture inconsistency fixed at the same time.** `tests/fixtures/nodes.json:76-107` ("BB flop
+check-raise vs a third-pot c-bet") carries a **multi-street** sequence with `street: "flop"`. Run
+through `node_filter` that key yields `facing eq "raise"` where the seat actually faces a *bet*, and
+`street_line eq "c-x"` where the true flop line is `"x"`. It is only used for round-trip validation
+today, so nothing fails — but it disagrees with `hand/node.ts`, which keeps only the last street's
+decisions and is the convention to follow. The fixture is corrected, not the code.
+
+**And texture reaches the replayer through a twin, not a guess.** `hand/node.ts:152` hard-codes
+`board_texture: []` with the comment *"the texture tags are the server's, and a guess made here
+would not match the pool's own bucketing"*. Correct today, and fixed the way this repo fixes twins:
+`textureTags(board)` in `poker-core` with **one fixture both suites parse** (H.3), the same
+discipline that keeps `NodeKey` and `node.ts` from drifting (ADR-028/031).
+
+---
+
+## ADR-079 — The pool's range is precomputed, because a tenant may hold four queries
+
+**Status:** accepted · 2026-09-23 · queued as plan steps **H.0**, **H.4**, **H.5**.
+
+**Context.** Phase H puts pool ranges in the hand replayer, which asks a question *per step*. The
+existing path cannot carry that, and the evidence is measured rather than feared.
+
+**Measured.**
+
+| | |
+|---|---|
+| Pool-wide node query | **1.6 s** (`POKER_SCALE.md` §2) |
+| Per-tenant concurrency | **4** (`stats/budget.py:94` → `max_concurrent_queries_for_user`) |
+| Hourly quota | 3,600 queries — **1/s sustained** |
+| Queries per replayer step today | **up to 4** — `HandStudy.vue:97` fires `frequencies` + `realization` in parallel, and `realization` is 3 ClickHouse queries server-side |
+| Situations (street × position × pot_type × line × texture × size; HU; SRP+3bet) | **46,688** |
+| …with n ≥ 100 | **6,351**, covering **97%** of decisions |
+| …with n ≥ 1,800 (ADR-076's bar) | **1,018**, covering **81.4%** |
+| Per-player situational query | **~0.05 s** — `decisions` is sorted `(user_id, dataset, player_key_norm, street, …)`, so scoping by player is a granule seek |
+
+**A live bug, found on the way (H.0).** ClickHouse code **202**
+(`TOO_MANY_SIMULTANEOUS_QUERIES`) is **absent** from `stats/tenancy.py:91-121`'s `REJECTIONS`, which
+classifies 201, 158, 241, 159 and 452. So the fifth concurrent query of a fast-stepping reader
+returns an unclassified **500**, not a 429 — already observed and worded client-side
+(`hands/study.ts`'s `UNDER_LOAD`) without ever being classified server-side. This is fixed first and
+independently of phase H.
+
+**Decision.** Build **`marts.node_ranges`**, a precomputed cube: ~6,351 nodes × 5 opponent groups ×
+169 hand classes ≈ **5M rows**. The node services read the cube when a node is expressible there and
+fall back to `marts.decisions` otherwise — the same shape as `stats/router.py`'s existing
+rollup-vs-fact choice, not a new query path.
+
+**Cohort is part of the key**, not a query-time predicate. That is what makes reg-vs-fish a single
+cheap read instead of two scans, and it sidesteps `cohort_subquery`'s full-rollup `GROUP BY
+player_key … HAVING` entirely.
+
+**Per-player stats stay live**, because they are the cheap side: a granule seek, not a scan. The
+expensive thing was always the pool-wide question, and that is what the cube removes.
+
+**The board hierarchy is stored at every level, and the reader collapses.** A node's board identity
+is `flop_class → turn_change → river_change`. The reader asks for the finest level whose
+cluster-robust interval (ADR-076) is tight enough and falls back to the parent, **and says which
+level it answered at**. The collapse is the feature: a fixed taxonomy that shows "insufficient data"
+on most river nodes is the failure mode this decision exists to avoid.
+
+**Caching is not an alternative.** A report's cache key is a SHA-256 of the whole request document
+(`request.py:157-164`), so every replayer step is a cold key; and the parser worker drops the whole
+`stats:`/`report:` namespace on any upload.
+
+---
+
+## ADR-080 — Seven labels name a player; five keys describe behaviour
+
+**Status:** accepted · 2026-09-23 · queued as plan steps **H.4**, **H.8** · builds on ADR-077.
+
+**Context.** ADR-077 defines **seven** cohorts, disjoint and total, so every pool player is named and
+no report carries a silent remainder. Phase H then has to decide how many of them the range cube is
+keyed on. Keying on seven is the obvious answer and it is the wrong one.
+
+**Measured** (fold-to-flop-c-bet, BB defending an SRP heads-up):
+
+| Cube key | Folds in | Measured | Why |
+|---|---|---|---|
+| `all` | everyone | 42.6% | the field; always available |
+| `reg` | reg | **45.4%** | the exploit group |
+| `other` | other + **reg_m** | 41.7% / 42.6% | `reg_m` behaves like `other`, not like `reg` |
+| `fish` | fish | **38.8%** | the other exploit group |
+| `unknown` | reg_s + other_s + fish_s | 41.5% / 40.0% / 39.9% | **indistinguishable** |
+
+**Decision.** Seven labels for the **player panel**, where naming a specific human precisely is the
+point. Five keys for the **cube**, where behaviour is the point.
+
+Splitting the cube seven ways would multiply its rows for two groups that behave alike and three
+that cannot be told apart, pushing thin nodes below ADR-076's interval gate for no gain.
+
+**The consequence the UI must say out loud.** When the villain is `unknown`, the panel says so and
+shows `all` — it does **not** show a fish range because a 30-hand sample's VPIP happened to read 47.
+ADR-077 measured that a VPIP label under 200 hands carries essentially no information about how a
+player defends, and this is where that finding becomes behaviour rather than a note.
+
+Each seat therefore carries **the group and the hands behind it**, so "this is a reg" and "this is a
+reg on 1,040 hands" are never confused.
