@@ -110,7 +110,15 @@ async def test_presets_are_served(client: AsyncClient, runner: FakeRunner) -> No
     assert hero.json()[0]["request"]["compare_to"] == "population"
     pool = await client.get("/v1/pool/presets")
     assert pool.status_code == 200
-    assert [c["code"] for c in pool.json()["cohorts"]] == ["regs", "fish"]
+    assert [c["code"] for c in pool.json()["cohorts"]] == [
+        "reg",
+        "reg_m",
+        "mid",
+        "fish",
+        "reg_s",
+        "mid_s",
+        "fish_s",
+    ]
     assert "pool_by_position" in [r["code"] for r in pool.json()["reports"]]
 
 

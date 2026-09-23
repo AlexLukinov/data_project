@@ -12,7 +12,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from analysis.pool.cohorts import CohortPreset
+from analysis.pool.cohorts import CohortGroup, CohortPreset
 from analysis.pool.nodes import NodeKey
 from analysis.presets import Preset
 from stats.request import CohortSpec
@@ -44,10 +44,15 @@ class CohortDetailOut(CohortOut):
 
 
 class PoolPresetsOut(BaseModel):
-    """The pool area's landing reports and its ready-made cohorts."""
+    """The pool area's landing reports, its ready-made cohorts, and the groups they form.
+
+    A cohort here is addressable by its code (`?cohort=preset:reg`) and a group by its key
+    (`?cohort=group:unknown`) on every pool route that takes a `cohort_id` (plan G.4, ADR-080).
+    """
 
     reports: list[Preset]
     cohorts: list[CohortPreset]
+    groups: list[CohortGroup]
 
 
 HAND_CLASS = r"^(?:[2-9TJQKA]{2}|[2-9TJQKA]{2}[so])$"

@@ -1,6 +1,7 @@
-# Pool presets (plan §2.8): the landing reports of the Pool area, and the two cohorts every
-# player names first. Every request is validated against the registry when the module loads;
-# a pool preset must read the population dataset with `hero_only: false`.
+# Pool presets (plan §2.8): the landing reports of the Pool area, and the seven cohorts that
+# between them name every player (G.4, ADR-077). Every request is validated against the
+# registry when the module loads; a pool preset must read the population dataset with
+# `hero_only: false`.
 
 reports:
   - code: pool_by_position
@@ -56,17 +57,90 @@ reports:
           - {stat: vpip, op: gte, value: 35}
           - {stat: hands, op: gte, value: 200}
 
+# Seven cohorts, disjoint and total over the (VPIP, hands) plane (ADR-077): VPIP under 25 /
+# 25 to under 35 / 35 and over, crossed with the hands the label rests on. Each description
+# carries the fold-to-flop-c-bet measured on 2026-09-22 for the BB defending a single-raised
+# pot heads-up, with the decisions it was measured on, so the number a reader acts on sits
+# beside the definition and beside its sample. `group` is the ADR-080 behaviour group: reg_m
+# plays like the mid-VPIP label, and the three sub-200 labels are indistinguishable, so they
+# are `unknown` together. ADR-077's `other` label is `mid` here so that no preset code spells
+# a group key with different members. `tests/test_cohort_presets.py` proves that every player
+# falls in exactly one of the seven.
 cohorts:
-  - code: regs
+  - code: reg
     label: Regs
-    description: VPIP under 25 over at least 1,000 hands.
+    group: reg
+    description: >-
+      VPIP under 25 over at least 1,000 hands. Folded to a flop c-bet 45.4% of the time over
+      556,112 decisions (measured 2026-09-22) — the group that over-folds, and the one the
+      exploit depends on.
     rules:
       - {stat: vpip, op: lt, value: 25}
       - {stat: hands, op: gte, value: 1000}
 
+  - code: reg_m
+    label: Regs (200–999 hands)
+    group: other
+    description: >-
+      VPIP under 25 over 200 to 999 hands. Folded to a flop c-bet 42.6% of the time over
+      72,361 decisions (measured 2026-09-22) — nearer the mid-VPIP players (41.7%) than regs
+      (45.4%), which is why the 1,000-hand line for a reg stays.
+    rules:
+      - {stat: vpip, op: lt, value: 25}
+      - {stat: hands, op: gte, value: 200}
+      - {stat: hands, op: lt, value: 1000}
+
+  - code: mid
+    label: Mid-VPIP (25–35)
+    group: other
+    description: >-
+      VPIP from 25 to under 35 over at least 200 hands. Folded to a flop c-bet 41.7% of the
+      time over 190,372 decisions (measured 2026-09-22).
+    rules:
+      - {stat: vpip, op: gte, value: 25}
+      - {stat: vpip, op: lt, value: 35}
+      - {stat: hands, op: gte, value: 200}
+
   - code: fish
     label: Recreational players
-    description: VPIP of 35 or more over at least 200 hands.
+    group: fish
+    description: >-
+      VPIP of 35 or more over at least 200 hands. Folded to a flop c-bet 38.8% of the time over
+      26,474 decisions (measured 2026-09-22) — the group that under-folds.
     rules:
       - {stat: vpip, op: gte, value: 35}
       - {stat: hands, op: gte, value: 200}
+
+  - code: reg_s
+    label: Regs (under 200 hands)
+    group: unknown
+    description: >-
+      VPIP under 25 over fewer than 200 hands. Folded to a flop c-bet 41.5% of the time over
+      17,854 decisions (measured 2026-09-22) — under 200 hands a VPIP reading says nothing
+      about how a player defends.
+    rules:
+      - {stat: vpip, op: lt, value: 25}
+      - {stat: hands, op: lt, value: 200}
+
+  - code: mid_s
+    label: Mid-VPIP (under 200 hands)
+    group: unknown
+    description: >-
+      VPIP from 25 to under 35 over fewer than 200 hands. Folded to a flop c-bet 40.0% of the
+      time over 26,470 decisions (measured 2026-09-22) — indistinguishable from the other
+      thin labels.
+    rules:
+      - {stat: vpip, op: gte, value: 25}
+      - {stat: vpip, op: lt, value: 35}
+      - {stat: hands, op: lt, value: 200}
+
+  - code: fish_s
+    label: Recreational (under 200 hands)
+    group: unknown
+    description: >-
+      VPIP of 35 or more over fewer than 200 hands. Folded to a flop c-bet 39.9% of the time
+      over 22,557 decisions (measured 2026-09-22) — not the 38.8% of a recreational player on
+      a real sample.
+    rules:
+      - {stat: vpip, op: gte, value: 35}
+      - {stat: hands, op: lt, value: 200}

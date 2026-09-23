@@ -19,7 +19,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from ingestion.clickhouse import clickhouse
-from stats import tenancy
+from stats import cluster, tenancy
+from stats.cluster_query import build_clustered
 from stats.errors import ReportError
 from stats.interval import DISPERSION_SUFFIX, Level, for_cell
 from stats.query import HANDS_ALIAS, build_query
@@ -64,7 +65,16 @@ def validate_request(request: ReportRequest, reg: Registry | None = None) -> Non
     reg = reg or registry()
     stats = resolve_stats(request, reg)
     for one in plans_for(request, stats, reg):
-        build_query(request, 0, one, reg)
+        build(request, 0, one, reg)
+
+
+def build(
+    request: ReportRequest, tenant_id: int, one: Plan, reg: Registry
+) -> tuple[str, dict[str, Any]]:
+    """The query for one plan: flat, or two-level when the request is clustered (plan G.3)."""
+    if request.cluster is not None:
+        return build_clustered(request, tenant_id, one, reg)
+    return build_query(request, tenant_id, one, reg)
 
 
 def plans_for(request: ReportRequest, stats: Sequence[ResolvedStat], reg: Registry) -> list[Plan]:
@@ -76,7 +86,13 @@ def plans_for(request: ReportRequest, stats: Sequence[ResolvedStat], reg: Regist
     read off the request (plan F.15). Every other report is one query, which the database
     orders itself.
     """
-    made = plan(stats, dimensions_used(request), reg, dispersion=request.confidence is not None)
+    made = plan(
+        stats,
+        dimensions_used(request),
+        reg,
+        dispersion=request.confidence is not None,
+        cluster=request.cluster is not None,
+    )
     if request.order_by and len(made) > 1:
         grains = " and ".join(sorted({one.table for one in made}))
         raise ReportError(
@@ -106,9 +122,10 @@ def run_report(
     stats = resolve_stats(request, reg)
     plans = plans_for(request, stats, reg)
     merged: dict[GroupKey, ReportRow] = {}
+    clustered = request.cluster is not None
     for one in plans:
-        columns, rows = runner(*build_query(request, tenant_id, one, reg))
-        _merge(merged, request.group_by, one.stats, columns, rows, request.confidence)
+        columns, rows = runner(*build(request, tenant_id, one, reg))
+        _merge(merged, request.group_by, one.stats, columns, rows, request.confidence, clustered)
 
     result = ReportResult(
         hands=sum(row.hands for row in merged.values()) if request.group_by else _total(merged),
@@ -130,12 +147,13 @@ def _merge(
     columns: Sequence[str],
     rows: Sequence[Sequence[Any]],
     level: Level | None = None,
+    clustered: bool = False,
 ) -> None:
     """Fold one query's rows into the result, keyed by the group values."""
     for raw in rows:
         record = dict(zip(columns, raw, strict=True))
         key = tuple(record[code] for code in group_by)
-        cells = {stat.code: _cell(stat, record, level) for stat in stats}
+        cells = {stat.code: _cell(stat, record, level, clustered) for stat in stats}
         existing = merged.get(key)
         if existing is None:
             merged[key] = ReportRow(
@@ -152,17 +170,29 @@ def _merge(
             )
 
 
-def _cell(stat: ResolvedStat, record: Mapping[str, Any], level: Level | None) -> Cell:
+def _cell(
+    stat: ResolvedStat, record: Mapping[str, Any], level: Level | None, clustered: bool = False
+) -> Cell:
     """One stat in one row: its value, the sample size behind it, and the interval if asked.
 
     `__sd` is absent for every stat but a per-100 one, and absent for all of them when no
     level was requested; `for_cell` turns a missing spread into no interval rather than a
-    guess at one.
+    guess at one. A clustered row carries per-player sums instead of a spread, and its
+    interval is `stats.cluster`'s.
     """
     value = _float(record.get(stat.code))
     n = int(record.get(f"{stat.code}__n") or 0)
     if level is None:
         return Cell(value=value, n=n)
+    if clustered:
+        interval = cluster.for_cell(stat.format, value, stat.code, record, level)
+        players = record.get(f"{stat.code}{cluster.PLAYERS_SUFFIX}")
+        return Cell(
+            value=value,
+            n=n,
+            interval=interval,
+            players=None if players is None else int(players),
+        )
     spread = _float(record.get(f"{stat.code}{DISPERSION_SUFFIX}"))
     return Cell(value=value, n=n, interval=for_cell(stat.format, value, n, spread, level))
 
@@ -183,6 +213,7 @@ def _meta(stat: ResolvedStat) -> StatMeta:
         format=stat.format,
         grain=stat.grain,
         description=stat.description,
+        kind=stat.kind,
     )
 
 

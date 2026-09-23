@@ -230,6 +230,8 @@ async def test_a_node_the_pool_has_never_played_says_so_rather_than_guessing() -
         res = await c.post("/v1/pool/node/frequencies", json=node, headers=_auth(token))
         assert res.status_code == 200, res.text
         body = res.json()
+        # Under the floor the maps are empty and the requirement is the pool's typical one
+        # (plan G.3, ADR-090): no number, only the count that fell short and what it needs.
         assert body == {
             "tier": 1,
             "sample_size": 0,
@@ -237,7 +239,13 @@ async def test_a_node_the_pool_has_never_played_says_so_rather_than_guessing() -
             "min_n": body["min_n"],
             "actions": {},
             "frequencies": {},
+            "intervals": {},
+            "players": 0,
+            "design_effect": None,
+            "max_half_width": 0.05,
+            "min_players": 30,
         }
+        assert body["min_n"] > 100
 
         shown = await c.post("/v1/pool/node/showdown-range", json=node, headers=_auth(token))
         assert shown.status_code == 200, shown.text

@@ -1,4 +1,4 @@
-"""Tier 3 and the empirical EQR beside it, on hand-worked numbers (plan F.10).
+"""Tier 3 on hand-worked numbers (plan F.10); the EQR beside it is `test_node_realization.py`.
 
 A reconstruction moves a range the founder will then study, so every number here is one that
 can be checked on paper. Two rules are what the tests exist for:
@@ -14,10 +14,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
+from node_fakes import frequency_answer, is_frequencies_query
 
 from analysis.pool.node_query import MIN_BUCKET_N, MIN_N
+from analysis.pool.node_service import frequencies
 from analysis.pool.nodes import NodeKey
-from analysis.pool.realization import realization
 from analysis.pool.reconstruct import answered_action, estimated_range
 
 CO_BET = NodeKey.model_validate(
@@ -33,30 +34,14 @@ CO_BET = NodeKey.model_validate(
 )
 
 Rows = tuple[list[str], Sequence[Sequence[Any]]]
-Mean = tuple[int, float, float]
-"""One realization group as the fakes state it: decisions, mean net won, mean pot."""
 COUNT_COLUMNS = ["decisions", "decisions__n", "__hands"]
-EQR_COLUMNS = [
-    "decisions",
-    "decisions__n",
-    "net_from_here",
-    "net_from_here__n",
-    "pot_bb",
-    "pot_bb__n",
-    "__hands",
-]
-
-
-def built() -> bool:
-    """Stands in for the column check, so nothing in this file needs a database."""
-    return True
 
 
 class Pool:
     """A fake pool: what it does at the node, what it showed, and what the shown hands did.
 
     The three queries tier 3 asks are told apart the way they actually differ — the first
-    groups by `action`, and only the third names an action in its parameters.
+    is the clustered per-player shape, and only the third names an action in its parameters.
     """
 
     def __init__(
@@ -69,9 +54,8 @@ class Pool:
 
     def __call__(self, sql: str, params: Mapping[str, Any]) -> Rows:
         self.sql.append(sql)
-        if "GROUP BY action" in sql:
-            rows = [[name, n, n, n] for name, n in self.actions.items()]
-            return ["action", *COUNT_COLUMNS], rows
+        if is_frequencies_query(sql):
+            return frequency_answer(self.actions)
         groups = self.took if "bet" in params.values() else self.shown
         return ["hand_class", *COUNT_COLUMNS], [[name, n, n, n] for name, n in groups.items()]
 
@@ -122,6 +106,8 @@ def test_the_prior_is_reweighted_by_what_each_class_actually_does() -> None:
     assert by_class["KK"].posterior == 0.3333
     assert by_class["72o"].posterior == 0.1333
     assert all(row.fallback is False for row in answer.classes)
+    # Enough or not, `min_n` is tier 1's requirement for this node, never the constant.
+    assert answer.min_n == frequencies(CO_BET, 7, run=pool).min_n
 
 
 def test_a_rate_the_ratio_pushes_over_one_is_capped_at_one() -> None:
@@ -148,6 +134,9 @@ def test_the_reconstruction_reports_how_far_off_the_prior_is() -> None:
     assert answer.observed_frequency == 0.3
     assert answer.implied_frequency == 0.2411
     assert answer.shown == 1200 and answer.covers == 0.12
+    # Tier 1's own interval travels with the frequency it is checked against (ADR-076).
+    assert answer.observed_interval is not None and answer.observed_interval.method == "cluster"
+    assert answer.observed_interval.low < 0.3 < answer.observed_interval.high
 
 
 def test_a_prior_that_matches_the_field_implies_exactly_what_tier_one_measured() -> None:
@@ -211,86 +200,28 @@ def test_a_node_under_min_n_reconstructs_nothing() -> None:
     assert len(pool.sql) == 1
 
 
+def test_a_node_tier_one_withholds_carries_tier_ones_own_requirement() -> None:
+    """The sentence "1,200 of the N needed" is tier 1's, and tier 3 must repeat it, not 100.
+
+    Eight players over 1,200 rows: too few players for an interval, so `enough` is false
+    with a per-node requirement, and the reconstruction says the same number.
+    """
+    pool = Pool(actions={"bet": 400, "check": 800}, shown={"AA": 400}, took={"AA": 320})
+
+    def thin(sql: str, params: Mapping[str, Any]) -> Rows:
+        return (
+            frequency_answer(pool.actions, players=8)
+            if is_frequencies_query(sql)
+            else pool(sql, params)
+        )
+
+    answer = estimated_range(CO_BET, {"AA": 1}, 7, run=thin)
+    at_node = frequencies(CO_BET, 7, run=thin)
+    assert answer.enough is False and at_node.enough is False
+    assert answer.sample_size == 1200 and answer.min_n == at_node.min_n != MIN_N
+
+
 def test_only_revealed_hands_are_bucketed() -> None:
     pool = Pool(actions={"bet": 3000}, shown={"AA": 400}, took={"AA": 320})
     estimated_range(CO_BET, {"AA": 1}, 7, run=pool)
     assert sum("hand_class !=" in sql for sql in pool.sql) == 2
-
-
-class Realized:
-    """A fake pool for the EQR question: one overall row, and a row per revealed class."""
-
-    def __init__(self, overall: Mean, classes: dict[str, Mean]) -> None:
-        self.overall = overall
-        self.classes = classes
-        self.sql: list[str] = []
-
-    def __call__(self, sql: str, params: Mapping[str, Any]) -> Rows:
-        self.sql.append(sql)
-        if "net_from_here" not in sql:
-            return ["action", "decisions", "decisions__n", "__hands"], [["bet", 3000, 3000, 3000]]
-        if "GROUP BY action" in sql:
-            n, net, pot = self.overall
-            return ["action", *EQR_COLUMNS], [["bet", n, n, net, n, pot, n, n]]
-        rows = [[name, n, n, net, n, pot, n, n] for name, (n, net, pot) in self.classes.items()]
-        return ["hand_class", *EQR_COLUMNS], rows
-
-
-def test_realized_is_what_the_field_took_away_as_a_share_of_the_pot() -> None:
-    pool = Realized(
-        overall=(3000, 2.4, 8.0),
-        classes={"AA": (400, 9.0, 10.0), "KK": (300, 3.0, 12.0)},
-    )
-    answer = realization(CO_BET, 7, run=pool, built=built)
-
-    assert answer.action == "bet" and answer.enough is True
-    assert answer.overall is not None and answer.overall.realized == 0.3
-    by_class = {row.hand_class: row for row in answer.by_hand_class}
-    assert by_class["AA"].realized == 0.9 and by_class["AA"].mean_net_bb == 9.0
-    assert by_class["KK"].realized == 0.25
-    assert answer.covers == round(700 / 3000, 4)
-
-
-def test_a_class_under_the_bucket_threshold_carries_its_count_and_no_number() -> None:
-    pool = Realized(
-        overall=(3000, 2.4, 8.0),
-        classes={"AA": (400, 9.0, 10.0), "72o": (MIN_BUCKET_N - 1, -4.0, 9.0)},
-    )
-    answer = realization(CO_BET, 7, run=pool, built=built)
-
-    thin = next(row for row in answer.by_hand_class if row.hand_class == "72o")
-    assert thin.sample_size == MIN_BUCKET_N - 1
-    assert thin.realized is None and thin.mean_net_bb is None and thin.mean_pot_bb is None
-
-
-def test_chips_won_from_here_adds_back_what_was_already_in() -> None:
-    """The seat's sunk chips belong to the pot, not to the seat: `net_won_bb + invested_bb`."""
-    pool = Realized(overall=(3000, 2.4, 8.0), classes={})
-    realization(CO_BET, 7, run=pool, built=built)
-
-    measured = [sql for sql in pool.sql if "net_from_here" in sql]
-    assert measured, pool.sql
-    assert all("net_won_bb" in sql and "invested_bb" in sql for sql in measured)
-
-
-def test_a_node_under_min_n_realizes_nothing() -> None:
-    def thin(sql: str, params: Mapping[str, Any]) -> Rows:
-        return ["action", "decisions", "decisions__n", "__hands"], [["bet", 9, 9, 9]]
-
-    answer = realization(CO_BET, 7, run=thin, built=built)
-    assert answer.enough is False and answer.overall is None and answer.by_hand_class == []
-    assert answer.min_n == MIN_N and answer.min_bucket_n == MIN_BUCKET_N
-
-
-def test_before_the_rebuild_the_question_is_named_not_answered() -> None:
-    """`invested_bb` lands on the mart only when the chain is rebuilt (plan F.10).
-
-    Until then every EQR query would fail on an unknown identifier, so the answer says which
-    column is missing instead — and nothing is asked of ClickHouse at all.
-    """
-    pool = Realized(overall=(3000, 2.4, 8.0), classes={"AA": (400, 9.0, 10.0)})
-    answer = realization(CO_BET, 7, run=pool, built=lambda: False)
-
-    assert answer.needs_rebuild is True and answer.enough is False
-    assert answer.overall is None and answer.by_hand_class == []
-    assert pool.sql == []

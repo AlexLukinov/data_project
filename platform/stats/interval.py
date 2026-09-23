@@ -34,6 +34,12 @@ from one session, and one session is played against a correlated pool. The true 
 therefore *wider* than the one printed, by an amount the aggregates cannot reveal. This is a
 floor on the uncertainty, not a ceiling -- a large improvement on the false precision of a
 bare point estimate, and still not a licence to read the last decimal.
+
+**Except where the correlation is measured.** A population report can be clustered by player
+(`ReportRequest.cluster`, plan G.3, ADR-076): the query then aggregates per player first and
+`stats.cluster` computes the interval from those sums, which is the one correlation that
+matters for a pool frequency -- the same player folding the same way many times. Such an
+interval says `method = "cluster"` and carries the players behind it and the design effect.
 """
 
 from __future__ import annotations
@@ -83,6 +89,9 @@ says the whole estimator is a floor). Below it the product does what it does eve
 says nothing rather than something fabricated (spec §17)."""
 
 
+Method = Literal["wilson", "normal", "cluster"]
+
+
 class Interval(_Strict):
     """A confidence interval around a cell's value, in that cell's own printed units."""
 
@@ -94,8 +103,35 @@ class Interval(_Strict):
     """The sample size the interval was computed from, so no client has to guess it."""
     level: Level
     """The confidence level, as a whole percent."""
-    method: Literal["wilson", "normal"]
-    """`wilson` for a proportion, `normal` for the standard error of a mean."""
+    method: Method
+    """`wilson` for a proportion, `normal` for the standard error of a mean, `cluster` for
+    either computed over per-player sums (`stats.cluster`)."""
+    players: int | None = None
+    """Clustered only: the players behind `n` -- the independent units the interval rests on."""
+    effective_n: float | None = None
+    """Clustered only: the sample the interval was actually computed on, `n` divided by the
+    design effect -- so "100 rows, 22 effective" can be read off rather than inferred."""
+    design_effect: float | None = None
+    """Clustered proportions only, and only when it could be measured: how many rows one
+    independent observation is worth here. 1 is independence; the pool's fold frequency
+    measured 4.59 (ADR-076). None where it was assumed instead -- a single player, or no
+    variation at all -- so a reader never compares a measured effect with an assumed one."""
+
+
+def wilson(p: float, n: float, z: float) -> tuple[float, float]:
+    """(centre, half-width) of the Wilson score interval, as fractions of 1.
+
+        centre = (p + z²/2n) / (1 + z²/n)
+        half   = z / (1 + z²/n) · sqrt( p(1-p)/n + z²/4n² )
+
+    `n` may be fractional: a clustered interval passes the *effective* sample size, the row
+    count divided by the design effect, and the formula does not care.
+    """
+    z2 = z * z
+    spread = 1.0 + z2 / n
+    centre = (p + z2 / (2 * n)) / spread
+    half = z / spread * math.sqrt(p * (1.0 - p) / n + z2 / (4 * n * n))
+    return centre, half
 
 
 def proportion(value: float, n: int, level: Level) -> Interval | None:
@@ -103,21 +139,14 @@ def proportion(value: float, n: int, level: Level) -> Interval | None:
 
     `value` is the stat as the engine reports it (0..100), `n` the opportunity count behind
     it. Returns `None` when there is nothing to put an interval on.
-
-        centre = (p + z²/2n) / (1 + z²/n)
-        half   = z / (1 + z²/n) · sqrt( p(1-p)/n + z²/4n² )
     """
     if n < MIN_N_PROPORTION or not math.isfinite(value):
         return None
     p = min(max(value / PERCENT_SCALE, 0.0), 1.0)
-    z = Z[level]
-    z2 = z * z
-    spread = 1.0 + z2 / n
-    centre = (p + z2 / (2 * n)) / spread
-    half = z / spread * math.sqrt(p * (1.0 - p) / n + z2 / (4 * n * n))
+    centre, half = wilson(p, n, Z[level])
     return Interval(
-        low=_rounded(PERCENT_SCALE * max(centre - half, 0.0), "percent"),
-        high=_rounded(PERCENT_SCALE * min(centre + half, 1.0), "percent"),
+        low=rounded_like(PERCENT_SCALE * max(centre - half, 0.0), "percent"),
+        high=rounded_like(PERCENT_SCALE * min(centre + half, 1.0), "percent"),
         n=n,
         level=level,
         method="wilson",
@@ -139,8 +168,8 @@ def mean(value: float, sd: float, n: int, level: Level) -> Interval | None:
         return None
     half = PERCENT_SCALE * Z[level] * sd / math.sqrt(n)
     return Interval(
-        low=_rounded(value - half, "per100"),
-        high=_rounded(value + half, "per100"),
+        low=rounded_like(value - half, "per100"),
+        high=rounded_like(value + half, "per100"),
         n=n,
         level=level,
         method="normal",
@@ -164,6 +193,6 @@ def for_cell(
     return None
 
 
-def _rounded(value: float, fmt: Format) -> float:
+def rounded_like(value: float, fmt: Format) -> float:
     """A bound rounded exactly as the value it brackets is rounded."""
     return round(value, ROUNDING[fmt])

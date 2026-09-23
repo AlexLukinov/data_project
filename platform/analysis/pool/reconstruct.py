@@ -63,8 +63,9 @@ from analysis.pool.node_query import (
 from analysis.pool.node_service import frequencies
 from analysis.pool.nodes import NodeAction, NodeKey
 from stats.ast import Leaf
+from stats.interval import Interval
 from stats.registry import Registry
-from stats.request import CohortSpec
+from stats.request import Cohort
 from stats.service import Cache, Runner, run_report
 
 ANSWERED_AS: dict[NodeAction, str] = {
@@ -117,6 +118,8 @@ class NodeEstimatedRange(NodeAnswer):
     covers: float = 0.0
     """Their share of every decision taken here: how much of the node the estimate ever saw."""
     observed_frequency: float | None = None
+    observed_interval: Interval | None = None
+    """Tier 1's cluster-robust interval around `observed_frequency` (ADR-076)."""
     implied_frequency: float | None = None
     classes: list[ClassEstimate] = Field(default_factory=list)
 
@@ -142,7 +145,7 @@ def _class_counts(
     key: NodeKey,
     tenant_id: int,
     action: str | None,
-    cohort: CohortSpec | None,
+    cohort: Cohort | None,
     run: Runner | None,
     cache: Cache | None,
     reg: Registry | None,
@@ -230,7 +233,7 @@ def estimated_range(
     prior: dict[str, float],
     tenant_id: int,
     *,
-    cohort: CohortSpec | None = None,
+    cohort: Cohort | None = None,
     run: Runner | None = None,
     cache: Cache | None = None,
     reg: Registry | None = None,
@@ -243,7 +246,9 @@ def estimated_range(
     action = answered_action(key)
     at_node = frequencies(key, tenant_id, cohort=cohort, run=run, cache=cache, reg=reg)
     if not at_node.enough:
-        return NodeEstimatedRange(sample_size=at_node.sample_size, enough=False, action=action)
+        return NodeEstimatedRange(
+            sample_size=at_node.sample_size, enough=False, min_n=at_node.min_n, action=action
+        )
 
     shown = _class_counts(key, tenant_id, None, cohort, run, cache, reg)
     took = _class_counts(key, tenant_id, action, cohort, run, cache, reg)
@@ -254,10 +259,12 @@ def estimated_range(
     return NodeEstimatedRange(
         sample_size=at_node.sample_size,
         enough=True,
+        min_n=at_node.min_n,
         action=action,
         shown=revealed,
         covers=round(revealed / at_node.sample_size, DIGITS) if at_node.sample_size else 0.0,
         observed_frequency=observed,
+        observed_interval=at_node.intervals.get(action),
         implied_frequency=round(implied, DIGITS),
         classes=_rounded(rows),
     )

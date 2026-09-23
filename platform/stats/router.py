@@ -34,6 +34,7 @@ def plan(
     reg: Registry,
     *,
     dispersion: bool = False,
+    cluster: bool = False,
 ) -> list[Plan]:
     """At most two plans, cheapest table first.
 
@@ -42,11 +43,12 @@ def plan(
     per-100 interval needs cannot be recovered from it at any cost. Asking for that interval
     therefore costs the rollup: the report drops to the fact tables, where `stddevSamp` is
     available. Proportions are unaffected -- Wilson needs only the value and `n`, both of
-    which the rollup already sums exactly (plan E.2, ADR-040).
+    which the rollup already sums exactly (plan E.2, ADR-040). `cluster` (plan G.3) drops to
+    the facts too: nothing nests the rollup's `WITH` prologue in a per-player aggregate yet.
     """
     dims = _dimensions(dims_used, reg)
     rollup_serves = all(s.cached for s in stats) and all(ROLLUP in d.tables for d in dims)
-    if dispersion and any(s.dispersion is not None for s in stats):
+    if cluster or (dispersion and any(s.dispersion is not None for s in stats)):
         rollup_serves = False
     if rollup_serves:
         return [Plan(ROLLUP, tuple(stats))]

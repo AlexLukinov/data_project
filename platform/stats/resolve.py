@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from stats.ast import Count, Expr, Sum, leaves, terms
 from stats.checks import check_expr
-from stats.definitions import TABLE_FOR_GRAIN, Format, Grain, Table
+from stats.definitions import TABLE_FOR_GRAIN, Format, Grain, Kind, Table
 from stats.errors import RegistryError, ReportError
 from stats.registry import Registry
 from stats.request import CustomStatSpec, ReportRequest
@@ -28,6 +28,8 @@ class ResolvedStat:
     denominator: Expr | None
     cached: bool
     description: str = ""
+    kind: Kind = "chosen"
+    """Chosen by the seat or dealt by the deck: which interval a clustered report gives it."""
 
     @property
     def table(self) -> Table:
@@ -83,6 +85,7 @@ def _builtin(code: str, reg: Registry) -> ResolvedStat:
         denominator=stat.denominator_expr,
         cached=stat.cached,
         description=stat.description,
+        kind=stat.kind,
     )
 
 
@@ -107,6 +110,7 @@ def _custom(spec: CustomStatSpec, reg: Registry) -> ResolvedStat:
         numerator=spec.numerator,
         denominator=spec.denominator,
         cached=False,
+        kind=spec.kind,
     )
 
 

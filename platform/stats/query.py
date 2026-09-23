@@ -23,7 +23,7 @@ from stats.errors import RegistryError, ReportError
 from stats.interval import DISPERSION_SUFFIX
 from stats.order import order_by
 from stats.registry import Registry
-from stats.request import DATASET_POPULATION, CohortSpec, ReportRequest
+from stats.request import DATASET_POPULATION, Cohort, CohortSpec, CohortUnion, ReportRequest
 from stats.resolve import ResolvedStat
 from stats.router import ROLLUP, Plan
 
@@ -84,13 +84,7 @@ def build_query(
         raise ReportError(str(exc)) from exc
     select.append(f"{HANDS_EXPR[plan.table]} AS {HANDS_ALIAS}")
 
-    where, scalars = scope(request, tenant_id, plan.table)
-    if not (isinstance(request.filter, All) and not request.filter.all):
-        where.append(f"({filter_sql})")
-    if request.cohort is not None and request.dataset == DATASET_POPULATION:
-        members = cohort_subquery(request.cohort, reg, params)
-        where.append(f"s.{PLAYER_COLUMN[plan.table]} IN ({members})")
-
+    where, scalars = where_terms(request, tenant_id, plan.table, filter_sql, params, reg)
     prologue, table = source_of(plan.table)
     sql = f"{prologue}SELECT {', '.join(select)} FROM {table} AS s WHERE {' AND '.join(where)}"
     if request.group_by:
@@ -101,6 +95,28 @@ def build_query(
     sql += " LIMIT {limit:UInt32}"
     scalars["limit"] = request.limit
     return sql, {**scalars, **params.values}
+
+
+def where_terms(
+    request: ReportRequest,
+    tenant_id: int,
+    table: Table,
+    filter_sql: str,
+    params: Params,
+    reg: Registry,
+) -> tuple[list[str], dict[str, Any]]:
+    """Every WHERE term of a report and their bound values: scope, then filter, then cohort.
+
+    Shared with the clustered builder (`stats.cluster_query`), so the two shapes cannot
+    disagree about who may see which rows.
+    """
+    where, scalars = scope(request, tenant_id, table)
+    if not (isinstance(request.filter, All) and not request.filter.all):
+        where.append(f"({filter_sql})")
+    if request.cohort is not None and request.dataset == DATASET_POPULATION:
+        members = cohort_subquery(request.cohort, reg, params)
+        where.append(f"s.{PLAYER_COLUMN[table]} IN ({members})")
+    return where, scalars
 
 
 def source_of(table: Table) -> tuple[str, str]:
@@ -170,7 +186,7 @@ def scope(request: ReportRequest, tenant_id: int, table: Table) -> tuple[list[st
     return where, scalars
 
 
-def cohort_subquery(spec: CohortSpec, reg: Registry, params: Params) -> str:
+def cohort_subquery(cohort: Cohort, reg: Registry, params: Params) -> str:
     """The players a cohort names: each `player_key` of the rollup that meets every rule.
 
     Evaluated on `stats_daily` because a cohort is defined by whole-history stats per player,
@@ -178,7 +194,23 @@ def cohort_subquery(spec: CohortSpec, reg: Registry, params: Params) -> str:
     the answer is the same whatever the enclosing report filters on. Anonymized seats ('')
     are never members. The tenant and dataset placeholders are the enclosing query's own;
     every identifier is qualified with `c`, so no outer alias can capture it.
+
+    A union of rule sets (`CohortUnion`, ADR-080's groups) is the same scan with each set
+    parenthesised and joined by `OR`: one pass over the rollup, whatever the group.
     """
+    specs = cohort.any if isinstance(cohort, CohortUnion) else [cohort]
+    conjunctions = [_rules_sql(spec, reg, params) for spec in specs]
+    having = conjunctions[0] if len(specs) == 1 else " OR ".join(f"({c})" for c in conjunctions)
+    table = f"{get_settings().db('marts')}.{PHYSICAL[ROLLUP]}"
+    return (
+        f"SELECT c.player_key FROM {table} AS c WHERE c.user_id = {{tenant_id:UInt32}}"
+        " AND c.dataset = {dataset:String} AND c.player_key != '' GROUP BY c.player_key"
+        f" HAVING {having}"
+    )
+
+
+def _rules_sql(spec: CohortSpec, reg: Registry, params: Params) -> str:
+    """One rule set as `HAVING` terms joined by AND, every threshold bound."""
     having: list[str] = []
     for rule in spec.rules:
         stat = _cached_stat(rule.stat, reg)
@@ -189,12 +221,7 @@ def cohort_subquery(spec: CohortSpec, reg: Registry, params: Params) -> str:
         bound = params.scalar(rule.value, "Float64")
         value = value_expr(numerator, denominator, stat.format)
         having.append(f"{value} {COMPARISONS[rule.op]} {bound}")
-    table = f"{get_settings().db('marts')}.{PHYSICAL[ROLLUP]}"
-    return (
-        f"SELECT c.player_key FROM {table} AS c WHERE c.user_id = {{tenant_id:UInt32}}"
-        " AND c.dataset = {dataset:String} AND c.player_key != '' GROUP BY c.player_key"
-        f" HAVING {' AND '.join(having)}"
-    )
+    return " AND ".join(having)
 
 
 def _cached_stat(code: str, reg: Registry) -> Stat:

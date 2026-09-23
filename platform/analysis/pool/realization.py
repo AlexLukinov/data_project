@@ -46,7 +46,7 @@ from core.settings import get_settings
 from ingestion.clickhouse import clickhouse
 from stats.ast import Add, Count, Leaf, Node, Sum
 from stats.registry import Registry
-from stats.request import CohortSpec, CustomStatSpec, ReportResult
+from stats.request import Cohort, CustomStatSpec, ReportResult
 from stats.service import Cache, Runner, run_report
 
 DIGITS = 4
@@ -174,7 +174,7 @@ def realization(
     key: NodeKey,
     tenant_id: int,
     *,
-    cohort: CohortSpec | None = None,
+    cohort: Cohort | None = None,
     run: Runner | None = None,
     cache: Cache | None = None,
     reg: Registry | None = None,
@@ -192,8 +192,7 @@ def realization(
         return NodeRealization(sample_size=0, enough=False, action=action, needs_rebuild=True)
     at_node = frequencies(key, tenant_id, cohort=cohort, run=run, cache=cache, reg=reg)
     if not at_node.enough:
-        return NodeRealization(sample_size=at_node.sample_size, enough=False, action=action)
-
+        return _withheld(at_node.sample_size, at_node.min_n, action)
     took = with_leaves(node_filter(key, reg), Leaf(dim="action", op="eq", value=action))
     ask = _asker(tenant_id, cohort, run, cache, reg)
     # One group per action, and the filter fixes the action, so the answer is a single row.
@@ -211,9 +210,14 @@ def realization(
     )
 
 
+def _withheld(sample_size: int, min_n: int, action: str) -> NodeRealization:
+    """The answer under tier 1's gate: the count, and tier 1's own requirement (ADR-076)."""
+    return NodeRealization(sample_size=sample_size, enough=False, min_n=min_n, action=action)
+
+
 def _asker(
     tenant_id: int,
-    cohort: CohortSpec | None,
+    cohort: Cohort | None,
     run: Runner | None,
     cache: Cache | None,
     reg: Registry | None,

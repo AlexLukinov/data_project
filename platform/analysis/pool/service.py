@@ -15,7 +15,7 @@ from stats.registry import Registry
 from stats.request import (
     DATASET_POPULATION,
     MAX_LIMIT,
-    CohortSpec,
+    Cohort,
     OrderKey,
     OrderMatch,
     ReportRequest,
@@ -87,7 +87,7 @@ def pool_report(
     request: ReportRequest,
     tenant_id: int,
     *,
-    cohort: CohortSpec | None = None,
+    cohort: Cohort | None = None,
     run: Runner | None = None,
     cache: Cache | None = None,
     reg: Registry | None = None,

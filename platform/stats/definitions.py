@@ -20,6 +20,27 @@ DimType = Literal["enum", "number", "bool", "line", "string"]
 Category = Literal["preflop", "postflop", "showdown", "money"]
 Grain = Literal["hand", "decision"]
 Format = Literal["percent", "ratio", "per100", "count"]
+Kind = Literal["chosen", "dealt"]
+"""What a stat measures, and therefore which gate its sample must pass (ADR-076, plan G.3).
+
+  chosen  The seat decided it: an action, a line, the chips that follow. A player's choices
+          repeat -- whether they fold is a stable trait -- so their rows are not independent
+          draws. Measured on 556,112 flop decisions from 7,708 regs: a design effect of 4.59.
+          A chosen frequency is shown only when its player-clustered interval is narrow
+          enough (`analysis.pool.node_gate.verdict`).
+  dealt   The deck decided it: a hole-card class, a made hand. What is dealt is randomised
+          per hand, so the between-player correlation is small -- not zero at a node, where
+          who arrives is selected by their choices (measured 1.3-1.4 on the 169 classes at
+          ADR-076's node) -- and a dealt bucket is gated on a count, `MIN_BUCKET_N`, which
+          must not be scaled by the design effect of a chosen stat.
+
+The kind picks the gate, never the estimator: under `ReportRequest.cluster` every proportion
+gets the clustered interval, and a genuinely independent sample pays nothing for it, because
+the design effect is measured and floored at 1. Every built-in stat is chosen; `dealt` is
+declared, never inferred.
+"""
+KIND_CHOSEN: Kind = "chosen"
+KIND_DEALT: Kind = "dealt"
 
 OPS_BY_TYPE: dict[str, frozenset[str]] = {
     "enum": frozenset({"in", "not_in", "eq", "ne"}),
@@ -114,6 +135,9 @@ class Stat(_Strict):
     category: Category
     grain: Grain
     format: Format = "percent"
+    kind: Kind = KIND_CHOSEN
+    """Chosen by the seat or dealt by the deck -- which decides the gate its sample must pass
+    before a number is shown (`Kind`)."""
     situation: Node | None = None
     action: Node | None = None
     numerator: Expr | None = None

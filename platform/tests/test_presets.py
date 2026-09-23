@@ -30,8 +30,9 @@ def test_pool_presets_are_population_reports_and_regs_carries_a_cohort() -> None
     assert regs is not None and [r.stat for r in regs.rules] == ["vpip", "hands"]
 
 
-def test_cohort_presets_name_regs_and_fish() -> None:
-    assert [c.code for c in cohorts.cohort_presets()] == ["regs", "fish"]
+def test_cohort_presets_name_the_seven_labels_of_adr_077() -> None:
+    codes = [c.code for c in cohorts.cohort_presets()]
+    assert codes == ["reg", "reg_m", "mid", "fish", "reg_s", "mid_s", "fish_s"]
     regs = cohorts.cohort_presets()[0].spec
     assert regs.rules[0].op == "lt" and regs.rules[0].value == 25
 

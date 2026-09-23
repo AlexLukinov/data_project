@@ -16,10 +16,14 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from stats.ast import CODE, All, Expr, Node, _Strict
-from stats.definitions import Format, Grain
+from stats.definitions import KIND_CHOSEN, Format, Grain, Kind
 from stats.interval import Interval, Level
 
 Direction = Literal["asc", "desc"]
+
+Cluster = Literal["player"]
+CLUSTER_PLAYER: Cluster = "player"
+"""The one unit a report can be clustered by (plan G.3, ADR-076); a hand or a session later."""
 
 Dataset = Literal["hero", "population"]
 DATASET_HERO: Dataset = "hero"
@@ -32,6 +36,7 @@ MAX_STATS = 40
 MAX_CUSTOM = 20
 MAX_LIMIT = 10_000
 MAX_COHORT_RULES = 10
+MAX_COHORT_UNION = 10
 MAX_HANDS = 200
 """Hands one search returns. A replayer list is browsed, not exported."""
 
@@ -58,6 +63,20 @@ class CohortSpec(_Strict):
     rules: list[CohortRule] = Field(min_length=1, max_length=MAX_COHORT_RULES)
 
 
+class CohortUnion(_Strict):
+    """Players who meet **any** one of several rule sets (plan G.4, ADR-080).
+
+    A group is a union of rectangles in the (VPIP, hands) plane -- `other` is the mid-VPIP
+    label with `reg_m` -- compiled as one rollup scan; a saved cohort is never a union.
+    """
+
+    any: list[CohortSpec] = Field(min_length=1, max_length=MAX_COHORT_UNION)
+
+
+Cohort = CohortSpec | CohortUnion
+"""What restricts a population report to some of its players: `rules` or `any` tells them apart."""
+
+
 class CustomStatSpec(_Strict):
     """A user-defined stat: numerator (+ denominator) expressions over one grain."""
 
@@ -65,6 +84,8 @@ class CustomStatSpec(_Strict):
     label: str = ""
     grain: Grain
     format: Format = "percent"
+    kind: Kind = KIND_CHOSEN
+    """Chosen by the seat (the default) or dealt by the deck: which gate it faces (`Kind`)."""
     numerator: Expr
     denominator: Expr | None = None
 
@@ -119,24 +140,23 @@ class ReportRequest(_Strict):
     filter: Node = Field(default_factory=lambda: All(all=[]))
     group_by: list[str] = Field(default_factory=list, max_length=MAX_GROUP_BY)
     order_by: list[OrderBy] = Field(default_factory=list, max_length=MAX_ORDER_BY)
-    """How to rank the groups. Empty is the group key itself, which is what a grid wants.
-
-    Only meaningful with a `group_by`: a report without one has a single row. Every term is
-    allowlisted in `stats.order` against this request's own group-by and stats, so a rank can
-    only be over a column of the answer (ADR-065)."""
+    """How to rank the groups; empty is the group key itself. Needs a `group_by`, and every
+    term is allowlisted in `stats.order` against this request's own columns (ADR-065)."""
     stats: list[str] = Field(default_factory=list, max_length=MAX_STATS)
     custom: list[CustomStatSpec] = Field(default_factory=list, max_length=MAX_CUSTOM)
     compare_to: Literal["population"] | None = None
-    cohort: CohortSpec | None = None
-    """Restrict the pool to these players. On a population request it scopes the report; on a
-    hero request with `compare_to` it scopes the baseline (hero vs regs)."""
+    cohort: Cohort | None = None
+    """Restrict the pool to these players: the report, or the baseline under `compare_to`."""
     confidence: Level | None = None
     """Put a confidence interval at this level on every cell that can carry one (plan E.2).
-
-    Opt-in rather than always-on, because it is not free: a per-100 interval needs the
-    per-hand spread, which only the fact tables can give, so asking for one on `bb_per_100`
-    takes that report off the rollup (`stats.router.plan`). Screens that show a KPI want it;
-    a 40-column grid being scrolled does not."""
+    Opt-in, because a per-100 interval needs the per-hand spread, which only the fact tables
+    give: asking for one on `bb_per_100` takes that report off the rollup (`stats.router`)."""
+    cluster: Cluster | None = None
+    """Compute every interval over per-player sums rather than over rows (plan G.3, ADR-076):
+    the same player contributes many rows, so the row count overstates the sample (measured,
+    a fold frequency's true standard error is 2.14x the binomial one). Needs a `confidence`
+    level -- it changes the interval, not the value -- and the population dataset, where a
+    player is a unit and not the subject; takes the report off the rollup (`stats.cluster`)."""
     limit: int = Field(default=500, ge=1, le=MAX_LIMIT)
 
     @model_validator(mode="after")
@@ -152,7 +172,22 @@ class ReportRequest(_Strict):
             raise ValueError("date_from is after date_to")
         if self.order_by and not self.group_by:
             raise ValueError("order_by needs a group_by: a report without one has a single row")
+        if self.cluster is not None:
+            self._clusterable()
         return self
+
+    def _clusterable(self) -> None:
+        """A clustered interval is a pool inference: a level, the pool, and no one player."""
+        if self.confidence is None:
+            raise ValueError(
+                "cluster needs a confidence level: it changes the interval, not the value"
+            )
+        if self.dataset != DATASET_POPULATION:
+            raise ValueError("cluster applies to the population dataset, where a player is a unit")
+        if self.player_key is not None:
+            raise ValueError(
+                "cluster asks about the pool; one player's report is binomial over their rows"
+            )
 
     def canonical(self) -> str:
         """A stable JSON form: the same question always yields the same cache key."""
@@ -178,6 +213,7 @@ class ReportRequest(_Strict):
                 "player_key": None,
                 "compare_to": None,
                 "confidence": None,
+                "cluster": None,
             }
         )
 
@@ -228,6 +264,9 @@ class Cell(_Strict):
     interval: Interval | None = None
     """Present when the request named a `confidence` level and the format has one. Its own `n`
     repeats this cell's, so a client holding only the interval still knows what it rests on."""
+    players: int | None = None
+    """Clustered reports only: the distinct players behind `n`, present whether or not the
+    cell earned an interval -- a sample of eight players has a size even when it has no band."""
 
 
 class ReportRow(_Strict):
@@ -246,6 +285,8 @@ class StatMeta(_Strict):
     format: Format
     grain: Grain
     description: str = ""
+    kind: Kind = KIND_CHOSEN
+    """Chosen by the seat or dealt by the deck -- which gate its sample is judged by."""
 
 
 class ReportResult(_Strict):

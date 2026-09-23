@@ -13,13 +13,11 @@ from stats import tenancy
 from stats.compiler import Params
 from stats.query import cohort_subquery
 from stats.registry import Registry, registry
-from stats.request import DATASET_POPULATION, CohortSpec
+from stats.request import DATASET_POPULATION, Cohort
 from stats.service import Runner
 
 
-def cohort_size_query(
-    spec: CohortSpec, tenant_id: int, reg: Registry
-) -> tuple[str, dict[str, Any]]:
+def cohort_size_query(spec: Cohort, tenant_id: int, reg: Registry) -> tuple[str, dict[str, Any]]:
     """(sql, parameters) counting the cohort's members for one tenant."""
     params = Params()
     members = cohort_subquery(spec, reg, params)
@@ -28,7 +26,7 @@ def cohort_size_query(
 
 
 def cohort_size(
-    spec: CohortSpec, tenant_id: int, *, run: Runner | None = None, reg: Registry | None = None
+    spec: Cohort, tenant_id: int, *, run: Runner | None = None, reg: Registry | None = None
 ) -> int:
     """How many players meet every rule of the cohort."""
     runner = run or tenancy.runner_for(tenant_id)

@@ -28,13 +28,14 @@ from analysis.pool.service import PlayerMatches, PlayerSearch, pool_report, pres
 from analysis.pool.service import players as player_lookup
 from api import cache, hand_query
 from api import hand_note_store as notes
-from api.deps import CurrentUserDep, SessionDep
+from api.deps import CurrentUser, CurrentUserDep, SessionDep
 from api.models_pg import Cohort
 from api.ratelimit import tenant_rate_limit
 from api.routers.hands import TagFilter
 from api.schemas import HandSummary
 from api.schemas_pool import CohortDetailOut, CohortIn, CohortOut, PoolPresetsOut
 from stats.errors import RegistryError, ReportError
+from stats.request import Cohort as CohortDoc
 from stats.request import CohortSpec, ReportRequest, ReportResult
 from stats.service import Cache, validate_request
 
@@ -70,6 +71,27 @@ async def load_cohort(session: AsyncSession, user_id: uuid.UUID, cohort_id: uuid
 def cohort_spec(row: Cohort) -> CohortSpec:
     """The stored criteria as the engine's document."""
     return CohortSpec.model_validate(row.criteria)
+
+
+async def resolve_cohort(
+    session: AsyncSession, user: CurrentUser, cohort_id: uuid.UUID | None, cohort: str | None
+) -> CohortDoc | None:
+    """The players a route is asked about, by either of the two names it may be given.
+
+    `cohort_id` is a saved row (404 for a stranger's). `cohort` is a key in the client's own
+    scheme: `preset:<code>` for one of the seven shipped cohorts, `group:<key>` for one of
+    ADR-080's five groups (plan G.4) -- so a reader who never saved "reg" can still ask for
+    it. Neither is the whole field; both at once is a 400 in words, and an unknown code or
+    key is a 400 that lists the ones there are.
+    """
+    if cohort_id is not None and cohort:
+        raise _bad_request(ValueError("name a cohort by cohort_id or by cohort, not both"))
+    if cohort_id is not None:
+        return cohort_spec(await load_cohort(session, user.id, cohort_id))
+    try:
+        return cohort_service.cohort_by_key(cohort or "")
+    except (ReportError, RegistryError) as exc:
+        raise _bad_request(exc) from exc
 
 
 def _checked_criteria(body: CohortIn) -> dict[str, Any]:
@@ -161,15 +183,19 @@ async def pool_stats(
     user: CurrentUserDep,
     session: SessionDep,
     cohort_id: uuid.UUID | None = None,
+    cohort: str | None = None,
 ) -> ReportResult:
-    """A population report, optionally restricted to a saved cohort.
+    """A population report, optionally restricted to a saved cohort, a preset or a group.
 
-    Set `player_key` on the body for one opponent's report.
+    Set `player_key` on the body for one opponent's report. The body may carry a cohort's
+    rules inline instead; naming one there and in the query is a 400, not a silent override.
     """
-    cohort = cohort_spec(await load_cohort(session, user.id, cohort_id)) if cohort_id else None
+    scoped = await resolve_cohort(session, user, cohort_id, cohort)
+    if scoped is not None and body.cohort is not None:
+        raise _bad_request(ValueError("the body names a cohort and so does the query; pick one"))
     try:
         return await run_in_threadpool(
-            pool_report, body, user.tenant_id, cohort=cohort, cache=report_cache()
+            pool_report, body, user.tenant_id, cohort=scoped, cache=report_cache()
         )
     except (ReportError, RegistryError) as exc:
         raise _bad_request(exc) from exc
@@ -224,5 +250,6 @@ async def pool_hands(
 
 @router.get("/presets", response_model=PoolPresetsOut)
 def pool_presets(user: CurrentUserDep) -> PoolPresetsOut:
-    """The pool area's landing reports and ready-made cohorts."""
-    return PoolPresetsOut(reports=presets(), cohorts=cohort_service.cohort_presets())
+    """The pool area's landing reports, its ready-made cohorts, and the groups they form."""
+    cohorts = cohort_service.shipped()
+    return PoolPresetsOut(reports=presets(), cohorts=cohorts, groups=cohort_service.groups(cohorts))

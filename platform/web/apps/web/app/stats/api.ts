@@ -186,10 +186,21 @@ export type ReportRequest = {
 export interface Interval {
   low: number;
   high: number;
-  /** The sample the interval rests on. Repeats the cell's own `n`, so neither travels alone. */
+  /** The rows the interval rests on. Repeats the cell's own `n`, so neither travels alone. */
   n: number;
   level: ConfidenceLevel;
-  method: 'wilson' | 'normal';
+  /** `cluster` is computed over per-player sums (plan G.3, ADR-076); the other two over rows. */
+  method: 'wilson' | 'normal' | 'cluster';
+  /** Clustered only: the players behind `n`, the independent units the interval rests on. */
+  players?: number | null;
+  /** Clustered only: `n` divided by the design effect — "100 rows, 22 effective". */
+  effective_n?: number | null;
+  /**
+   * Clustered proportions only, and only when it could be measured: how many rows one independent
+   * observation is worth (1 is independence; the pool's fold frequency measured 4.59). Null where
+   * it was assumed instead — a single player, or nothing varied at all.
+   */
+  design_effect?: number | null;
 }
 
 export interface Cell {

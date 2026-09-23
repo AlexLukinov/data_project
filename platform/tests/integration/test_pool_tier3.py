@@ -71,7 +71,10 @@ async def test_a_node_nobody_has_played_reconstructs_nothing() -> None:
         assert body["tier"] == 3 and body["action"] == "bet"
         assert body["enough"] is False and body["classes"] == []
         assert body["observed_frequency"] is None and body["implied_frequency"] is None
-        assert body["min_bucket_n"] >= body["min_n"]
+        assert body["observed_interval"] is None
+        # Two different samples: a node needs `min_n` decisions -- since plan G.3 what THIS
+        # node needs, never under the floor -- and a class bucket needs 200 revealed rows.
+        assert body["min_n"] >= 100 and body["min_bucket_n"] == 200
 
 
 async def test_the_eqr_question_is_refused_no_numbers_rather_than_zeros() -> None:
