@@ -96,8 +96,9 @@ async function expectHands(page: Page, shown: string): Promise<void> {
  */
 async function addScreenName(page: Page): Promise<void> {
   await test.step('name the seat on the upload page', async () => {
-    // The nav links carry no data-testid (app.vue); the link's own name is the selector.
-    await page.getByRole('link', { name: 'Upload', exact: true }).click();
+    // The nav links carry no data-testid (app.vue); the link's own name is the selector, scoped to
+    // the nav because My game's explainer links to Upload too, under its related tools (ADR-059).
+    await page.getByRole('navigation').getByRole('link', { name: 'Upload', exact: true }).click();
     await expect(page.getByTestId('accounts-empty')).toBeVisible();
     await page.getByTestId('accounts-site').selectOption(SEED_SITE);
     await page.getByTestId('accounts-name').fill(SEED_SCREEN_NAME);
