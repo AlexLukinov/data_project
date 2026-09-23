@@ -2,7 +2,13 @@
 /**
  * The per-combo blocker table (spec §6.2): hero's combos against villain's calling and folding
  * ranges, sortable by any score, with the bluff-count arithmetic for a bet size when one is
- * given. Clicking a row selects the combo for the card and class views.
+ * given. With `selectable`, a row can be picked: its combo cell holds a real button (the keyboard
+ * and screen-reader control, with `aria-pressed` for the pinned one) and the whole row answers a
+ * mouse click. The row itself stays a table row — a `<tr>` given `role="button"` would flatten its
+ * cells and the column headings with them. Without `selectable` the rows are plain rows — no
+ * pointer, no hover, no button, no emit — because a row that renders as a control must do
+ * something (ADR-074), and this panel used to advertise every row as clickable whether or not a
+ * host was listening.
  */
 import type { BlockerRow, Card, ComboIndex, WeightedRange } from '@poker/core';
 import { blockerTable, classRemovalBreakdown, comboToString, rankBluffCandidates, union } from '@poker/core';
@@ -27,8 +33,10 @@ const props = withDefaults(
     /** Which hero combos are value bets; the rest are bluff candidates. */
     isValue?: (combo: ComboIndex) => boolean;
     limit?: number;
+    /** Whether a row may be picked. Set it exactly when `comboSelect` is listened to. */
+    selectable?: boolean;
   }>(),
-  { selectedCombo: null, board: () => [], deadCards: () => [], pot: null, bet: null, isValue: () => false, limit: 60 },
+  { selectedCombo: null, board: () => [], deadCards: () => [], pot: null, bet: null, isValue: () => false, limit: 60, selectable: false },
 );
 
 const FLOP = 3;
@@ -74,6 +82,11 @@ function sort(column: Column): void {
   }
 }
 
+/** A pick only where the row said it could be picked. */
+function pick(combo: ComboIndex): void {
+  if (props.selectable) emit('comboSelect', combo);
+}
+
 function cell(row: BlockerRow, column: Column): string {
   if (column === 'combo') return comboToString(row.combo);
   if (column === 'weight') return num(row.weight);
@@ -112,9 +125,12 @@ function cell(row: BlockerRow, column: Column): string {
             </th>
           </tr>
         </thead>
-        <tbody>
-          <tr v-for="row in rows" :key="row.combo" :class="{ 'pk-selected': row.combo === selectedCombo, 'pk-value': isValue(row.combo) }" @click="emit('comboSelect', row.combo)">
-            <td v-for="c in COLUMNS" :key="c.key" :class="{ 'pk-num': c.key !== 'combo' }">{{ cell(row, c.key) }}</td>
+        <tbody data-testid="blocker-rows">
+          <tr v-for="row in rows" :key="row.combo" :class="{ 'pk-selected': row.combo === selectedCombo, 'pk-value': isValue(row.combo), 'pk-selectable': selectable }" @click="pick(row.combo)">
+            <td v-for="c in COLUMNS" :key="c.key" :class="{ 'pk-num': c.key !== 'combo' }">
+              <button v-if="selectable && c.key === 'combo'" type="button" class="pk-pick" :aria-pressed="row.combo === selectedCombo" @click.stop="pick(row.combo)">{{ cell(row, c.key) }}</button>
+              <template v-else>{{ cell(row, c.key) }}</template>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -176,11 +192,20 @@ function cell(row: BlockerRow, column: Column): string {
   color: inherit;
   cursor: pointer;
 }
-.pk-table tbody tr {
+.pk-table tbody tr.pk-selectable {
   cursor: pointer;
 }
-.pk-table tbody tr:hover {
+.pk-table tbody tr.pk-selectable:hover,
+.pk-table tbody tr.pk-selectable:focus-within {
   background: var(--pk-surface, #f4f4f5);
+}
+.pk-pick {
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
 }
 .pk-selected {
   outline: 2px solid var(--pk-accent, #2563eb);

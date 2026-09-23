@@ -26,10 +26,18 @@ describe('the analyzer’s failure sentences', () => {
     expect(libraryLookupProblem(refusal(500, null))).toContain('Your range library could not be read');
   });
 
-  it('read a sanitized 5xx as the refusal under load it usually is, not as a broken page', () => {
+  it('relay the refusal under load in the server’s own words — since plan H.0 it is a 429 that names itself', () => {
+    for (const problem of ALL) {
+      const text = problem(refusal(429, 'The account is already running as many queries at once as it may; ask again in a moment.'));
+      expect(text).toContain('as many queries at once as it may');
+    }
+  });
+
+  it('read a sanitized 5xx as the fault it now is, naming the terminal rather than promising a retry', () => {
     for (const problem of ALL) {
       const text = problem(refusal(500, 'Internal server error'));
-      expect(text).toContain('several questions were asked at once');
+      expect(text).toContain('the reason is in the terminal running `make api`');
+      expect(text).not.toContain('several questions were asked at once');
       expect(text).not.toContain('Internal server error');
     }
   });

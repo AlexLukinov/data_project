@@ -82,9 +82,11 @@ QUOTA_ATTEMPTS = 25
 def provisioned() -> Iterator[list[int]]:
     """Tenants whose ClickHouse access objects this test made, dropped afterwards.
 
-    Not strictly required -- `tenancy.ensure` re-applies the standard budget to any tenant it
-    provisions, so a narrowed one heals on its next use -- but a test that leaves server-side
-    state behind is a test that passes for the wrong reason on the second run.
+    Load-bearing, not tidiness: a cache miss runs `ensure_exists`, which deliberately keeps the
+    tier a tenant is on (ADR-043's reconnect bug), so a narrowed tenant does **not** heal on its
+    next use. Dropping the user and quota is what puts it back on the standard budget when it is
+    next provisioned -- and a test that leaves server-side state behind is a test that passes for
+    the wrong reason on the second run.
     """
     tenants: list[int] = []
     yield tenants

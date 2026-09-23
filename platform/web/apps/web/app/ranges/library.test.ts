@@ -131,7 +131,7 @@ describe('the library', () => {
     // Reworded with `describeApiError`: a bare 5xx is usually the account's query budget, so the
     // sentence offers another attempt before it points at the terminal.
     expect(describeLibraryError({ statusCode: 500 })).toBe(
-      'The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+      'The API failed while answering this; the reason is in the terminal running `make api`. Reload the page once it has been fixed.',
     );
     const dexie = Object.assign(new Error('Transaction aborted'), { name: 'AbortError' });
     expect(describeLibraryError(dexie)).toBe('AbortError: Transaction aborted');

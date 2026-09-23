@@ -96,6 +96,7 @@ const pinned = shallowRef<ComboIndex | null>(null);
         :villain-fold="NOTHING"
         :board="ctx.spot.board"
         :selected-combo="pinned"
+        selectable
         @combo-select="pinned = $event"
       />
     </div>

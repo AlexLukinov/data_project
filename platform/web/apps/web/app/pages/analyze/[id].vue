@@ -122,8 +122,9 @@ const context: StepContext = {
  * The two questions settle independently and each refusal becomes a sentence the gate shows
  * instead of waiting for ever (ADR-061): one can be answered while the other is refused, and a
  * refusal under load is the common case — this asks twice at once, and ClickHouse answers only a
- * few of an account's queries at a time (plan E.3). An answer already held is not asked again;
- * one that failed is, the next time the reader moves between committed steps.
+ * few of an account's queries at a time (plan E.3; a 429 in its own words since plan H.0). An
+ * answer already held is not asked again; one that failed is, the next time the reader moves
+ * between committed steps.
  */
 /** One run at a time: two commits in quick succession would otherwise double the load that refuses. */
 let asking = false;

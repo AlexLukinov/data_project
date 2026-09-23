@@ -99,7 +99,7 @@ describe('HandNotes', () => {
     // No longer the API's sanitized noun: `describeApiError` reads a 5xx it would not describe as
     // a refusal under load, so the note says the save is worth making again.
     expect(text(w, 'note-status')).toBe(
-      'Not saved: The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+      'Not saved: The API failed while answering this; the reason is in the terminal running `make api`. Reload the page once it has been fixed.',
     );
     expect((w.find('textarea').element as HTMLTextAreaElement).value).toBe('kept');
   });

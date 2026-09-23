@@ -115,7 +115,7 @@ const typed = ref<number | null>(2.5);
     <section class="grid gap-6 lg:grid-cols-2">
       <div class="space-y-2">
         <h2 class="font-medium">BlockerPanel</h2>
-        <BlockerPanel :hero-range="range" :villain-call="parseRange('TT-77,AJs-ATs,KTs+').range" :villain-fold="parseRange('66-22,A9s-A2s,QTs+,JTs,T9s,98s,AJo-ATo,KQo').range" :dead-cards="board" :pot="100" :bet="75" :selected-combo="selectedCombo" @combo-select="(c) => { selectedCombo = c; lastEvent = `comboSelect ${c}` }" />
+        <BlockerPanel :hero-range="range" :villain-call="parseRange('TT-77,AJs-ATs,KTs+').range" :villain-fold="parseRange('66-22,A9s-A2s,QTs+,JTs,T9s,98s,AJo-ATo,KQo').range" :dead-cards="board" :pot="100" :bet="75" :selected-combo="selectedCombo" selectable @combo-select="(c) => { selectedCombo = c; lastEvent = `comboSelect ${c}` }" />
       </div>
       <div class="space-y-2">
         <h2 class="font-medium">CardBlockerHeatmap</h2>

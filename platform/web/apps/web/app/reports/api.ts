@@ -35,11 +35,22 @@ export interface CohortPreset {
   label: string;
   description: string;
   rules: CohortRule[];
+  /** The behaviour group this label folds into (ADR-080), since plan G.4. */
+  group?: string;
+}
+
+/** One of the five behaviour groups (ADR-080): its key, its label, and the preset codes it folds in. */
+export interface PoolGroup {
+  key: string;
+  label: string;
+  cohorts: string[];
 }
 
 export interface PoolPresets {
   reports: Preset[];
   cohorts: CohortPreset[];
+  /** Since plan G.4; absent from an older API, which is why it is optional here. */
+  groups?: PoolGroup[];
 }
 
 /** A stored report. `definition` is the engine document, so it loads straight into the workbench. */

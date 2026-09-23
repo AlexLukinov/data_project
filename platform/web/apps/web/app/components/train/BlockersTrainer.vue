@@ -63,6 +63,7 @@ const ringed = computed(() => (selected.value === null ? null : [selected.value]
         :pot="spot.potBB"
         :bet="spot.betBB"
         :selected-combo="selected"
+        selectable
         @combo-select="selected = $event"
       />
       <p class="text-xs text-zinc-500">{{ CHART_PROVENANCE }}</p>

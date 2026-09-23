@@ -7,34 +7,52 @@
  * refusals may reach the screen as "there is nothing here".
  */
 import type { HandState, NodeKey } from '@poker/core';
-import { COMBO_COUNT, comboIndex, nodeKey, nodeKeyEquals, parseCard, step } from '@poker/core';
-import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel } from '@poker/ui';
+import { COMBO_COUNT, comboIndex, nodeKey, nodeKeyEquals, parseCard, parseRange, step } from '@poker/core';
+import { ComboDistributionPanel, EquityCalculator, HandReplayer, MDFPanel, RangeMatrix } from '@poker/ui';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 
+import type * as PoolApiModule from '~/pool/api';
 import type { StoredRange } from '~/ranges/api';
 import { situationFromQuery } from '~/ranges/situation';
 
 import { GG_HAND } from '../../../../../packages/poker-core/test/fixtures/hand';
 import HandStudy from './HandStudy.vue';
+import PoolBlockers from './PoolBlockers.vue';
+import RangeReveal from './RangeReveal.vue';
 
-/** The three services the component asks, mutable per test: every one of them can refuse. */
+/** The four services the component asks, mutable per test: every one of them can refuse. */
 const library = vi.hoisted(() => ({ lookup: vi.fn(), status: 'ready', error: null as string | null }));
-const pool = vi.hoisted(() => ({ frequencies: vi.fn(), realization: vi.fn() }));
+const pool = vi.hoisted(() => ({ frequencies: vi.fn(), realization: vi.fn(), showdownRange: vi.fn(), estimatedRange: vi.fn() }));
+const poolStats = vi.hoisted(() => ({ cohorts: vi.fn(), presets: vi.fn() }));
 const analyses = vi.hoisted(() => ({ create: vi.fn() }));
 
 vi.mock('~/stores/ranges', () => ({ useRangesStore: () => library }));
-vi.mock('~/pool/api', () => ({ createPoolApi: () => pool }));
+// The key helpers stay real: `hands/reveal.ts` builds `group:` keys with them.
+vi.mock('~/pool/api', async (importOriginal) => ({ ...(await importOriginal<typeof PoolApiModule>()), createPoolApi: () => pool }));
+vi.mock('~/pool/stats', () => ({ createPoolStatsApi: () => poolStats }));
 vi.mock('~/analyze/api', () => ({ createAnalysesApi: () => analyses }));
 
-/** ClickHouse's "Too many simultaneous queries" as the browser meets it: the API's sanitized 500. */
+/** ClickHouse's "Too many simultaneous queries" as the browser meets it since plan H.0: `stats/tenancy.py`'s 429. */
 function refusedUnderLoad(): Error {
-  return Object.assign(new Error('FetchError'), { name: 'FetchError', status: 500, data: { detail: 'Internal server error' } });
+  return Object.assign(new Error('FetchError'), {
+    name: 'FetchError',
+    status: 429,
+    data: { detail: 'The account is already running as many queries at once as it may; ask again in a moment.' },
+  });
 }
 
 const NODE: NodeKey = nodeKey('BB', {
   villain_position: 'CO',
+  street: 'flop',
+  stake: 'NL10',
+  action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call'), step('CO', 'bet', { size_pct: 0.33 })],
+});
+
+/** CO's own bet on the flop — a step somebody (BB) has to answer, which is what the blocker table needs. */
+const BET_NODE: NodeKey = nodeKey('CO', {
+  villain_position: 'BB',
   street: 'flop',
   stake: 'NL10',
   action_sequence: [step('CO', 'raise', { size_bb: 2.5 }), step('BB', 'call'), step('CO', 'bet', { size_pct: 0.33 })],
@@ -108,7 +126,7 @@ function equityResult(): Record<string, unknown> {
 async function study() {
   const wrapper = mount(HandStudy, {
     props: { hand: GG_HAND },
-    global: { components: { NuxtLink }, stubs: { HandReplayer: true, EquityCalculator: true, ComboDistributionPanel: true, RangeMatrix: true } },
+    global: { components: { NuxtLink }, stubs: { HandReplayer: true, EquityCalculator: true, ComboDistributionPanel: true, RangeMatrix: true, RangeDiffView: true } },
   });
   return wrapper;
 }
@@ -352,5 +370,82 @@ describe('HandStudy — a question that came back refused', () => {
     await flushPromises();
     expect(said(wrapper, 'study-analyze-error')).toContain('Press Analyze this node again to try once more.');
     expect(wrapper.find('[data-testid="study-analyze"]').attributes('disabled')).toBeUndefined();
+  });
+});
+
+/*
+ * Plan H.7, the reveal half and the pool-fed blocker table. Both hang off the same node the other
+ * panels rebind to, both ask the pool only on a press, and the two share one choice of group.
+ */
+describe('HandStudy — the pool’s ranges, on a press', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.stubGlobal('useApi', () => ({}));
+    vi.stubGlobal('useEquityService', () => ({ service: { compute: vi.fn(), cancel: vi.fn() } }));
+    vi.stubGlobal('navigateTo', vi.fn());
+    library.lookup.mockResolvedValue([]);
+    library.status = 'ready';
+    library.error = null;
+    pool.frequencies.mockResolvedValue(null);
+    pool.realization.mockResolvedValue(null);
+    poolStats.cohorts.mockResolvedValue([{ id: 'c1', name: 'regs', criteria: { rules: [] }, created_at: '', updated_at: '' }]);
+    poolStats.presets.mockResolvedValue({ reports: [], cohorts: [], groups: [{ key: 'all', label: 'everyone', cohorts: [] }, { key: 'fish', label: 'fish', cohorts: ['fish'] }] });
+    analyses.create.mockResolvedValue({ id: 'a1' });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lists the pool’s groups and the saved cohorts in the one chooser both panels read', async () => {
+    const wrapper = await study();
+    await reach(wrapper, BET_NODE, at(13, 4));
+    expect(wrapper.find('[data-testid="reveal-group"]').findAll('option').map((option) => option.text())).toEqual(['nobody — the field alone', 'fish', 'regs']);
+    await wrapper.find('[data-testid="reveal-group"]').setValue('group:fish');
+    await flushPromises();
+    expect(wrapper.findComponent(PoolBlockers).props('group')).toEqual({ key: 'group:fish', label: 'fish' });
+  });
+
+  it('mounts the reveal at the node and asks the pool for a range only when Reveal is pressed', async () => {
+    pool.showdownRange.mockResolvedValue({ tier: 2, sample_size: 300, enough: true, min_n: 100, decisions_at_node: 9000, covers: 0.03, classes: { AA: 6 }, weights: {} });
+    const wrapper = await study();
+    await reach(wrapper, NODE, at(13, 4));
+    expect(has(wrapper, 'study-reveal')).toBe(true);
+    expect(pool.showdownRange).not.toHaveBeenCalled();
+
+    wrapper.findComponent(RangeReveal).findComponent(RangeMatrix).vm.$emit('update:range', parseRange('AA').range);
+    await flushPromises();
+    await wrapper.find('[data-testid="reveal-button"]').trigger('click');
+    await flushPromises();
+    expect(pool.showdownRange).toHaveBeenCalledTimes(1);
+    expect(pool.showdownRange).toHaveBeenCalledWith(NODE, '');
+  });
+
+  it('mounts the blocker table only at a step where a bet was just made, on the defender’s node, sharing the group', async () => {
+    const wrapper = await study();
+    // BET_NODE ends with CO's own bet: BB is the seat that must answer it.
+    await reach(wrapper, BET_NODE, at(13, 4));
+    expect(has(wrapper, 'study-blockers')).toBe(true);
+    await wrapper.find('[data-testid="reveal-group"]').setValue('c1');
+    await flushPromises();
+    const blockers = wrapper.findComponent(PoolBlockers);
+    expect(blockers.props('facing').hero_position).toBe('BB');
+    expect(blockers.props('facing').action_sequence.at(-1)).toEqual(step('BB', 'fold'));
+    expect(blockers.props('group')).toEqual({ key: 'c1', label: 'regs' });
+
+    // NODE is BB's own node, whose last step is CO's bet rather than BB's: nobody is answering BB.
+    await reach(wrapper, NODE, at(21, 0));
+    expect(has(wrapper, 'study-blockers')).toBe(false);
+  });
+
+  it('rings the pinned blocker row on the bettor’s own grid, and drops the ring at the next step', async () => {
+    library.lookup.mockResolvedValue([storedRange()]);
+    const wrapper = await study();
+    await reach(wrapper, BET_NODE, at(13, 4));
+    const aa = comboIndex(parseCard('As'), parseCard('Ah'));
+    wrapper.findComponent(PoolBlockers).vm.$emit('comboSelect', aa);
+    await flushPromises();
+    const grids = wrapper.findAllComponents(RangeMatrix);
+    expect(grids[0]!.props('highlightCombos')).toEqual([aa]);
+
+    await reach(wrapper, BET_NODE, at(21, 8));
+    expect(wrapper.findAllComponents(RangeMatrix)[0]!.props('highlightCombos')).toBeNull();
   });
 });

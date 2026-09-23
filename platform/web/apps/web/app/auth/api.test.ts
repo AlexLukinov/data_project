@@ -6,7 +6,7 @@ const SILENT = 'Nothing answered.';
 
 /** The two sentences `describeApiError` owns, pinned once so a reword shows up as one diff. */
 const BROKE =
-  'The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.';
+  'The API failed while answering this; the reason is in the terminal running `make api`. Reload the page once it has been fixed.';
 const SIGNED_OUT = 'Your sign-in has expired. Use Sign in at the top of the page, then try again.';
 
 /**
@@ -103,8 +103,9 @@ describe('describeApiError', () => {
   });
 
   it('reads the catch-all\'s sanitized detail as no detail at all', () => {
-    // The API answers an unclassified failure — a ClickHouse query refused for running alongside
-    // too many others — with this exact string; printing it verbatim named no next step.
+    // The API answers an unclassified failure with this exact string; printing it verbatim named
+    // no next step. (The query refused for running alongside too many others used to arrive this
+    // way; since plan H.0 it is a 429 with its own sentence, which the test below keeps.)
     expect(describeApiError({ status: 500, data: { detail: 'Internal server error' } })).toBe(BROKE);
   });
 

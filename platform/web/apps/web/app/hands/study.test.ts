@@ -13,13 +13,27 @@ function silent(): unknown {
 }
 
 describe('poolProblem', () => {
-  it('says the database refused under load, not that the field never played the spot', () => {
-    // ClickHouse's "Too many simultaneous queries" reaches the browser as the API's sanitized 500.
-    const said = poolProblem(answered(500, 'Internal server error'));
+  it('says the database refused under load, not that the field never played the spot (plan H.0)', () => {
+    // ClickHouse's "Too many simultaneous queries" (code 202) reaches the browser as `stats/tenancy.py`'s 429.
+    const said = poolProblem(answered(429, 'The account is already running as many queries at once as it may; ask again in a moment.'));
     expect(said).toContain('The pool could not be asked what the field does here.');
     expect(said).toContain('only a few of them are answered at a time');
     expect(said).toContain('Stepping to this spot again asks afresh.');
+    expect(said).not.toContain('ask again in a moment');
+  });
+
+  it('no longer calls a sanitized 500 "under load": since H.0 that is a fault, and it says where the reason is', () => {
+    const said = poolProblem(answered(500, 'Internal server error'));
+    expect(said).toContain('The pool could not be asked what the field does here.');
+    expect(said).toContain('the reason is in the terminal running `make api`');
+    expect(said).not.toContain('only a few of them are answered at a time');
     expect(said).not.toContain('Internal server error');
+  });
+
+  it('keeps a 429 that is not that refusal — the hour’s quota — in the server’s own words', () => {
+    const said = poolProblem(answered(429, "The account's hourly query budget is spent; try again later."));
+    expect(said).toContain("The account's hourly query budget is spent; try again later.");
+    expect(said).not.toContain('only a few of them are answered at a time');
   });
 
   it('says the API is stopped when nothing answered, and how to start it', () => {
@@ -33,9 +47,9 @@ describe('poolProblem', () => {
   });
 
   it('closes a server detail that has no full stop before the retry clause follows it', () => {
-    // ClickHouse's own refusal, as the API relays it: no terminal punctuation.
-    const said = poolProblem(answered(500, 'Too many simultaneous queries for user poker_tenant_1. Current: 4, maximum: 4'));
-    expect(said).toContain('maximum: 4. Stepping to this spot again asks afresh.');
+    // A described refusal with no terminal punctuation.
+    const said = poolProblem(answered(400, 'That query setting is fixed for this account'));
+    expect(said).toContain('fixed for this account. Stepping to this spot again asks afresh.');
   });
 });
 

@@ -162,7 +162,7 @@ describe('PokerAccounts', () => {
     await flushPromises();
     // The bare-5xx sentence was reworded in `auth/api.ts`: a refusal under load is asked again.
     expect(find(b, 'accounts-error').text()).toBe(
-      'The change was saved, but the list could not be read back: The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.',
+      'The change was saved, but the list could not be read back: The API failed while answering this; the reason is in the terminal running `make api`. Reload the page once it has been fixed.',
     );
   });
 

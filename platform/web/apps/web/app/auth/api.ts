@@ -151,13 +151,14 @@ export function unwrapAsyncDataError(error: unknown): unknown {
 const SANITIZED = 'Internal server error';
 
 /**
- * A 5xx the API would not describe. Most of them are one thing: ClickHouse refusing a query
- * because the account is already running as many as its budget allows (plan E.3), which arrives
- * unclassified and so sanitized. Nothing is broken and nothing is missing — the question is worth
- * asking again — so the sentence says that first and the terminal second.
+ * A 5xx the API would not describe. Until plan H.0 most of them were one thing — ClickHouse
+ * refusing a query because the account was already running as many as its budget allows (plan
+ * E.3), which arrived unclassified and so sanitized — and this sentence said so and offered a
+ * retry. That refusal is now a 429 whose own detail reaches the screen unchanged, so what is
+ * left behind a sanitized 5xx is a fault: retrying cannot help, and the sentence says where the
+ * reason is instead of guessing at one.
  */
-const API_BROKE =
-  'The API could not answer this — often because several questions were asked at once and only a few are answered at a time. Try again; if it keeps failing, the reason is in the terminal running `make api`.';
+const API_BROKE = 'The API failed while answering this; the reason is in the terminal running `make api`. Reload the page once it has been fixed.';
 
 /**
  * A 401 outside the sign-in form. `session.ts` has already tried the refresh cookie and cleared the

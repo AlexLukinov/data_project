@@ -197,7 +197,7 @@ const editedSide = computed(() => (lastEdited.value === 'hero' ? hero : villain)
           <CardPicker :selected="heroHand" :disabled="blockedCards" label="hero's hand" @toggle="toggleHeroCard" />
         </div>
         <p v-if="!result" class="text-sm text-zinc-500">Waiting for equities to split villain's range into calls and folds.</p>
-        <BlockerPanel v-else :hero-range="hero.state.value" :villain-call="villainCall" :villain-fold="villainFold" :board="board" :dead-cards="blockedCards" :pot="pot" :bet="bet" :is-value="isValue" :selected-combo="selectedCombo" @combo-select="selectCombo" />
+        <BlockerPanel v-else :hero-range="hero.state.value" :villain-call="villainCall" :villain-fold="villainFold" :board="board" :dead-cards="blockedCards" :pot="pot" :bet="bet" :is-value="isValue" :selected-combo="selectedCombo" selectable @combo-select="selectCombo" />
       </div>
       <div class="space-y-3">
         <h2 class="font-medium">What each card removes from villain</h2>

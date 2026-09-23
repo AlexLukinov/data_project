@@ -89,6 +89,7 @@ class Rejection:
 
 
 QUOTA_EXCEEDED = 201
+TOO_MANY_SIMULTANEOUS_QUERIES = 202
 TOO_MANY_ROWS_OR_BYTES = 158
 TIMEOUT_EXCEEDED = 159
 MEMORY_LIMIT_EXCEEDED = 241
@@ -99,8 +100,20 @@ _TOO_BIG = (
     "filter, or group less finely."
 )
 
+QUERIES_AT_ONCE = (
+    "The account is already running as many queries at once as it may; ask again in a moment."
+)
+"""The 202 sentence, by name: `web/apps/web/app/hands/study.ts` holds the same literal, because
+the replayer is the screen that provokes it (one step asks up to four questions against a
+ceiling of four, plan H.0) and words the retry as *stepping to this spot again*. A change here
+fails the unit test that pins the literal, which is the reminder to change it there too."""
+
 REJECTIONS: dict[int, tuple[int, str]] = {
     QUOTA_EXCEEDED: (429, "The account's hourly query budget is spent; try again later."),
+    # `max_concurrent_queries_for_user` (stats/budget.py) refusing the fifth query. Absent from
+    # this table it reached the caller as an unclassified 500, and a reader stepping quickly
+    # through a hand met "Internal server error" for a refusal that is the budget working.
+    TOO_MANY_SIMULTANEOUS_QUERIES: (429, QUERIES_AT_ONCE),
     TOO_MANY_ROWS_OR_BYTES: (400, _TOO_BIG),
     MEMORY_LIMIT_EXCEEDED: (400, _TOO_BIG),
     TIMEOUT_EXCEEDED: (504, "This query took longer than the account's budget allows."),
@@ -110,10 +123,12 @@ REJECTIONS: dict[int, tuple[int, str]] = {
 
 The message never carries the server's own text: a ClickHouse exception body contains the SQL,
 which names every table and column in it (`api/main.py` has made that mistake once already).
+Both 429s get a `Retry-After` from `api/main.py`'s handler, which keys on the status alone.
 """
 
 NAMES = {
     QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+    TOO_MANY_SIMULTANEOUS_QUERIES: "TOO_MANY_SIMULTANEOUS_QUERIES",
     TOO_MANY_ROWS_OR_BYTES: "TOO_MANY_ROWS_OR_BYTES",
     TIMEOUT_EXCEEDED: "TIMEOUT_EXCEEDED",
     MEMORY_LIMIT_EXCEEDED: "MEMORY_LIMIT_EXCEEDED",

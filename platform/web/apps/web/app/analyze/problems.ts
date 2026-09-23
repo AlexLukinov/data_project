@@ -7,11 +7,12 @@
  * "the field has never played this" or "you have no chart here" — when what happened is that
  * nobody was able to ask. The distinction matters most under load: a commit asks the pool two
  * questions at once, and ClickHouse refuses a query once the account is already running as many
- * as its budget allows (plan E.3), which the API relays as a sanitized 500.
+ * as its budget allows (plan E.3) — since plan H.0 a 429 whose own sentence reaches the screen.
  *
- * `describeApiError` already words that case ("several questions were asked at once…"), so these
- * sentences only say *what* could not be asked and *how* to ask again. `hands/study.ts` keeps its
- * own copies for the replayer, whose retry is a step rather than a button.
+ * `describeApiError` relays that sentence, and words a 5xx the API would not describe as the
+ * fault it now is, so these sentences only say *what* could not be asked and *how* to ask again.
+ * `hands/study.ts` keeps its own copies for the replayer, whose retry is a step rather than a
+ * button.
  *
  * Every sentence is built here rather than in a template, so it is asserted as text.
  */

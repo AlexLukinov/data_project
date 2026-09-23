@@ -148,6 +148,7 @@ def test_dropping_a_tenant_leaves_the_tier_profile_alone() -> None:
     ("code", "status_code"),
     [
         (tenancy.QUOTA_EXCEEDED, 429),
+        (tenancy.TOO_MANY_SIMULTANEOUS_QUERIES, 429),
         (tenancy.TOO_MANY_ROWS_OR_BYTES, 400),
         (tenancy.MEMORY_LIMIT_EXCEEDED, 400),
         (tenancy.TIMEOUT_EXCEEDED, 504),
@@ -162,6 +163,22 @@ def test_a_budget_refusal_maps_to_a_status_that_says_what_happened(
     assert found.status_code == status_code
     assert found.clickhouse == tenancy.NAMES[code]
     assert "server said something" not in found.detail, "never forward the server's own text"
+
+
+def test_the_fifth_simultaneous_query_is_a_429_the_replayer_can_word() -> None:
+    """Plan H.0. Code 202 is `max_concurrent_queries_for_user` working, so it is a 429, not a 500.
+
+    The sentence is pinned because `web/apps/web/app/hands/study.ts` recognises this refusal by
+    it and answers with the replayer's own wording ("stepping quickly through a hand asks several
+    questions at once"). The two literals must stay identical; this is the test that says so.
+    """
+    found = tenancy.rejection(DatabaseError("Too many simultaneous queries", code=202))
+    assert found is not None
+    assert found.status_code == 429
+    assert found.clickhouse == "TOO_MANY_SIMULTANEOUS_QUERIES"
+    assert found.detail == (
+        "The account is already running as many queries at once as it may; ask again in a moment."
+    )
 
 
 def test_a_retried_refusal_is_classified_too() -> None:

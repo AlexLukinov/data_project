@@ -96,8 +96,8 @@ describe('ComboDistributionPanel', () => {
 describe('BlockerPanel', () => {
   const props = { heroRange: parseRange('AhKh,JhTh').range, villainCall: parseRange('AA,KK,QQ').range, villainFold: parseRange('JJ,TT').range };
 
-  it('lists hero combos sorted by bluff score and selects on click', async () => {
-    const wrapper = mount(BlockerPanel, { props });
+  it('lists hero combos sorted by bluff score and, when selectable, selects on click', async () => {
+    const wrapper = mount(BlockerPanel, { props: { ...props, selectable: true } });
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0]!.text()).toContain('AhKh');
     expect(rows[0]!.text()).toContain('+33.3');
@@ -105,6 +105,31 @@ describe('BlockerPanel', () => {
     expect(wrapper.emitted('comboSelect')![0]).toEqual([parseCombo('JhTh')]);
     await wrapper.findAll('th button')[0]!.trigger('click'); // sort by combo
     expect(wrapper.findAll('tbody tr')[0]!.text()).toContain('JhTh');
+  });
+
+  /*
+   * ADR-074: a row that renders as a control must do something. Every row used to carry a pointer
+   * cursor and emit whether or not a host listened, so an unbound mount (`Step5Blockers`) lied.
+   * Now a row says it can be picked — a real button in its combo cell, with the pressed state —
+   * exactly when it can be, and the row stays a table row so its cells stay cells.
+   */
+  it('renders plain rows that neither look like controls nor emit unless told they may be picked', async () => {
+    const plain = mount(BlockerPanel, { props });
+    const row = plain.findAll('tbody tr')[1]!;
+    expect(row.find('button').exists()).toBe(false);
+    expect(row.classes()).not.toContain('pk-selectable');
+    await row.trigger('click');
+    expect(plain.emitted('comboSelect')).toBeUndefined();
+
+    const selectable = mount(BlockerPanel, { props: { ...props, selectable: true, selectedCombo: parseCombo('JhTh') } });
+    const rows = selectable.findAll('tbody tr');
+    expect(rows[1]!.attributes('role')).toBeUndefined();
+    const pinned = rows[1]!.find('button');
+    expect(pinned.text()).toBe('JhTh');
+    expect(pinned.attributes('aria-pressed')).toBe('true');
+    expect(rows[0]!.find('button').attributes('aria-pressed')).toBe('false');
+    await rows[0]!.find('button').trigger('click');
+    expect(selectable.emitted('comboSelect')).toEqual([[parseCombo('AhKh')]]); // once: the button's click does not bubble into the row's
   });
 
   it('explains what the selected hand kills, class by class', () => {
