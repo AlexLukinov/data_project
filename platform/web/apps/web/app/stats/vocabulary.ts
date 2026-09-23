@@ -2,7 +2,7 @@
  * The registry in words a reader can use (ADR-057).
  *
  * The app has two vocabularies. One is `@poker/ui`'s `GLOSSARY`: hand-written, static, about
- * poker itself. The other is this one — 65 stats and 80 dimensions that arrive from
+ * poker itself. The other is this one — 65 stats and 83 dimensions that arrive from
  * `GET /v1/definitions` at runtime, each with a one-line `description` written next to the SQL it
  * compiles to. Copying the second into the first would put words a server serves into a file that
  * ships a week later, so registry text reaches the screen through this module and
@@ -147,9 +147,9 @@ export function bucketWords(dim: Dimension, name: string): string {
  * **Nothing here rewrites a value any more** (ADR-062 §7). The client used to carry two rules of
  * its own — `5bet_plus` → `5bet+`, and one global `''` → "not applicable" — and both were guesses
  * standing in for words the registry had never been asked to write. The first ran on every string
- * and turned a pool player called `a_plus_b` into `a+b`; the second gave one word to the ten
+ * and turned a pool player called `a_plus_b` into `a+b`; the second gave one word to the thirteen
  * dimensions that declare `''`, which mean seven different things by it ("Before the flop",
- * "Nobody has raised yet", "Not shown"…). The registry now names all 171 enum values where it
+ * "Nobody has raised yet", "Not shown"…). The registry now names all 190 enum values where it
  * declares them and refuses to load an unlabelled one, so the rule is simply: ask the dimension.
  *
  * What is left is what no label can answer. A bucket name goes through `bucketWords`, which prints

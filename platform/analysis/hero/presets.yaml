@@ -70,7 +70,7 @@ reports:
     description: C-betting and facing a c-bet, split by how connected and how suited the flop is.
     request:
       stats: [cbet_flop, fold_to_cbet_flop, raise_cbet_flop]
-      group_by: [flop_connectedness, flop_suitedness]
+      group_by: [flop_connectivity, flop_suitedness]
       compare_to: population
 
   - code: facing_cbet_by_size

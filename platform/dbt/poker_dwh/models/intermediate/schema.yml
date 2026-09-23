@@ -26,7 +26,21 @@ models:
         tests:
           - accepted_values:
               values: ['trips', 'paired', 'unpaired']
-      - name: flop_connectedness
+      - name: flop_connectivity
         tests:
           - accepted_values:
-              values: ['connected', 'semi_connected', 'disconnected']
+              values: ['connected', 'oesd', 'disconnected']
+      - name: flop_high_card_class
+        tests:
+          - accepted_values:
+              values: ['ace', 'king_queen', 'jack_ten', 'middle', 'low']
+      # '' is the value before the street was dealt; every hand here saw a flop, not every one
+      # a turn or a river.
+      - name: turn_change
+        tests:
+          - accepted_values:
+              values: ['', 'turn_flush', 'turn_straight', 'turn_pair', 'turn_flush_draw', 'turn_overcard', 'turn_blank']
+      - name: river_change
+        tests:
+          - accepted_values:
+              values: ['', 'river_flush', 'river_straight', 'river_pair', 'river_overcard', 'river_blank']

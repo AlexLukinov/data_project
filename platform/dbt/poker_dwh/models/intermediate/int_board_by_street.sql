@@ -6,7 +6,9 @@
 -- which is what the registry declares for "before the flop" (stats/registry/dimensions.yaml).
 --
 -- Ranks are 1..13 for 2..A via position() into one rank string, the same encoding as
--- macros/hand_arrays.sql uses for hole cards.
+-- macros/hand_arrays.sql uses for hole cards. Every classification is a macro in
+-- macros/board.sql, so the fixture both test suites parse can be run through the same SQL
+-- (plan H.3); this model only wires them to the columns.
 
 {{
   config(
@@ -66,23 +68,12 @@ select
     src_parsed_at                                                        as src_parsed_at,
 
     -- ---- the flop ------------------------------------------------------------------
-    multiIf(
-        fs[1] = fs[2] and fs[2] = fs[3], 'monotone',
-        fs[1] = fs[2] or fs[2] = fs[3] or fs[1] = fs[3], 'two_tone',
-        'rainbow'
-    )::LowCardinality(String)                                            as flop_suitedness,
-    multiIf(
-        fr[1] = fr[2] and fr[2] = fr[3], 'trips',
-        fr[1] = fr[2] or fr[2] = fr[3] or fr[1] = fr[3], 'paired',
-        'unpaired'
-    )::LowCardinality(String)                                            as flop_pairing,
+    {{ flop_suitedness('fs') }}::LowCardinality(String)                  as flop_suitedness,
+    {{ flop_pairing('fr') }}::LowCardinality(String)                     as flop_pairing,
     substring('{{ ranks }}', fr_desc[1], 1)::LowCardinality(String)      as flop_high_card,
+    {{ flop_high_card_class('fr') }}::LowCardinality(String)             as flop_high_card_class,
+    {{ flop_connectivity('fr') }}::LowCardinality(String)                as flop_connectivity,
     toUInt8(fr_desc[1] - fr_desc[3])                                     as flop_span,
-    multiIf(
-        fr_desc[1] - fr_desc[3] <= 2, 'connected',
-        fr_desc[1] - fr_desc[3] <= 4, 'semi_connected',
-        'disconnected'
-    )::LowCardinality(String)                                            as flop_connectedness,
     toUInt8(length(arrayDistinct(fr)) < length(fr))                      as paired_flop,
     {{ flush_possible('fs') }}                                           as flush_flop,
     {{ straight_possible('fr') }}                                        as straight_flop,
@@ -91,6 +82,8 @@ select
     if(has_turn, substring('{{ ranks }}', r4, 1), '')::LowCardinality(String) as turn_rank,
     toUInt8(has_turn and has(fr, r4))                                    as turn_pairs_board,
     toUInt8(has_turn and countEqual(ts, s4) >= 3)                        as turn_completes_flush,
+    if(has_turn, {{ street_change('fr', 'fs', 'r4', 's4', 'turn', true) }}, '')::LowCardinality(String)
+                                                                         as turn_change,
     toUInt8(length(arrayDistinct(tr)) < length(tr))                      as paired_turn,
     {{ flush_possible('ts') }}                                           as flush_turn,
     {{ straight_possible('tr') }}                                        as straight_turn,
@@ -99,6 +92,8 @@ select
     if(has_river, substring('{{ ranks }}', r5, 1), '')::LowCardinality(String) as river_rank,
     toUInt8(has_river and has(tr, r5))                                   as river_pairs_board,
     toUInt8(has_river and countEqual(rs, s5) >= 3 and countEqual(ts, s5) < 3) as river_completes_flush,
+    if(has_river, {{ street_change('tr', 'ts', 'r5', 's5', 'river', false) }}, '')::LowCardinality(String)
+                                                                         as river_change,
     toUInt8(length(arrayDistinct(rr)) < length(rr))                      as paired_river,
     {{ flush_possible('rs') }}                                           as flush_river,
     {{ straight_possible('rr') }}                                        as straight_river,

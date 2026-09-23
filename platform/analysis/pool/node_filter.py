@@ -10,6 +10,8 @@ no bucket boundary is written twice: `eff_stack_bb` is matched by the registry's
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from analysis.pool.nodes import ActionStep, NodeKey, Position, Street
 from stats.ast import All, Leaf, Node
 from stats.definitions import Dimension
@@ -38,8 +40,38 @@ POSTFLOP_FACING: dict[int, str] = {1: "bet", 2: "raise"}
 OPEN_ENDED = 1e9
 """Stands in for the open top of the last bucket; no stack, pot or size comes near it."""
 
-TEXTURE_DIMENSIONS = ("flop_suitedness", "flop_pairing", "flop_connectedness", "flop_high_card")
-"""Where a `board_texture` tag is looked up. A tag IS one of these dimensions' values."""
+TEXTURE_DIMENSIONS = (
+    "flop_suitedness",
+    "flop_pairing",
+    "flop_connectivity",
+    "flop_high_card_class",
+    "turn_change",
+    "river_change",
+    "flop_high_card",
+)
+"""Where a `board_texture` tag is looked up. A tag IS one of these dimensions' values.
+
+The first dimension holding the value wins, so no value may be declared by two of them:
+`tests/test_texture_tags.py` pins that against the registry, and the runout dimensions carry
+their street in every value (`turn_blank`, `river_blank`) for exactly that reason (ADR-082).
+The first six are the board hierarchy of ADR-079 -- flop class, then the turn, then the river
+-- in the order `textureTags()` in poker-core emits them; `flop_high_card`, the raw rank, is a
+tag a person may type and the replayer never emits, so it comes last.
+"""
+
+TEXTURE_STREET: dict[str, Street] = {
+    "flop_suitedness": "flop",
+    "flop_pairing": "flop",
+    "flop_connectivity": "flop",
+    "flop_high_card_class": "flop",
+    "flop_high_card": "flop",
+    "turn_change": "turn",
+    "river_change": "river",
+}
+"""The first street each texture dimension is set on. Before it the column reads '', so a
+turn tag on a flop node would be a filter that matches no row and says nothing."""
+
+STREET_ORDER: tuple[Street, ...] = ("preflop", "flop", "turn", "river")
 
 POSTFLOP_ORDER: tuple[str, ...] = (
     "SB",
@@ -96,13 +128,44 @@ def _bucket_of(value: float, dim: Dimension) -> Leaf:
 
 
 def _texture_leaf(tag: str, reg: Registry) -> Leaf:
-    """A board-texture tag is a value of one of the flop dimensions; anything else is an error."""
+    """A board-texture tag is a value of one texture dimension; anything else is an error."""
     for code in TEXTURE_DIMENSIONS:
         dim = reg.dimensions.get(code)
         if dim is not None and tag in dim.values:
             return Leaf(dim=code, op="eq", value=tag)
     known = ", ".join(sorted(v for c in TEXTURE_DIMENSIONS for v in _values(c, reg) if v))
-    raise RegistryError(f"unknown board texture {tag!r}; the flop dimensions offer: {known}")
+    raise RegistryError(f"unknown board texture {tag!r}; the texture dimensions offer: {known}")
+
+
+def _texture_leaves(tags: Sequence[str], street: Street, reg: Registry) -> list[Leaf]:
+    """One leaf per tag, each on the dimension that declares the tag as a value.
+
+    Two things are refused here rather than becoming a query that matches no row and says
+    nothing (ADR-078 gap 2): two different tags from one dimension (`["monotone", "rainbow"]`
+    as two `eq` leaves under `All`), and a tag of a street the node has not reached (a
+    `turn_blank` on a flop node, or any texture on a preflop one -- the column is '' there).
+    The same tag twice is one leaf.
+    """
+    first_tag: dict[str, str] = {}
+    out: list[Leaf] = []
+    for tag in tags:
+        leaf = _texture_leaf(tag, reg)
+        set_on = TEXTURE_STREET[leaf.dim]
+        if STREET_ORDER.index(street) < STREET_ORDER.index(set_on):
+            raise RegistryError(
+                f"board_texture: {tag!r} is a {leaf.dim} value, which is set from the "
+                f"{set_on} on; this node is on the {street}"
+            )
+        earlier = first_tag.setdefault(leaf.dim, tag)
+        if earlier == tag:
+            if leaf not in out:
+                out.append(leaf)
+            continue
+        raise RegistryError(
+            f"board_texture: {earlier!r} and {tag!r} are both values of {leaf.dim!r}; "
+            "a node carries one tag per dimension"
+        )
+    return out
 
 
 def _values(code: str, reg: Registry) -> tuple[str, ...]:
@@ -147,7 +210,8 @@ def _first_raiser(steps: list[ActionStep]) -> Position | None:
 def node_filter(key: NodeKey, reg: Registry | None = None) -> Node:
     """The decisions this node covers. The key's **last step is excluded**: it is the answer.
 
-    Raises `RegistryError` when the key names a texture the registry does not know.
+    Raises `RegistryError` when the key names a texture the registry does not know, two
+    textures from one dimension, or a texture of a street the node has not reached.
     """
     reg = reg or registry()
     before = list(key.action_sequence[:-1])
@@ -168,5 +232,5 @@ def node_filter(key: NodeKey, reg: Registry | None = None) -> Node:
         leaves.append(_bucket_of(float(key.eff_stack_bb), stack))
     if key.stake:
         leaves.append(Leaf(dim="stake_level", op="eq", value=key.stake))
-    leaves.extend(_texture_leaf(tag, reg) for tag in key.board_texture)
+    leaves.extend(_texture_leaves(key.board_texture, key.street, reg))
     return All(all=leaves)

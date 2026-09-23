@@ -24,7 +24,9 @@ def test_every_enum_value_is_named_for_a_reader() -> None:
 def test_the_blank_value_says_what_it_means_in_each_dimension_that_has_one() -> None:
     """'' is "no flop" in one dimension and "nobody raised" in another; one word cannot do both."""
     blanks = {d.code: d.value_labels[""] for d in registry().dimensions.values() if "" in d.values}
-    assert len(blanks) == 10, blanks
+    # Ten until phase G/H added flop_high_card_class, flop_connectivity, turn_change and
+    # river_change (ADR-075, ADR-082); the words stayed at seven.
+    assert len(blanks) == 13, blanks
     assert len(set(blanks.values())) == 7, "the file header counts these; keep the two in step"
     assert blanks["turn_rank"] != blanks["river_rank"] != blanks["opener_position"]
     assert blanks["made_hand"] != blanks["hand_shape"], "one is preflop too, the other never is"

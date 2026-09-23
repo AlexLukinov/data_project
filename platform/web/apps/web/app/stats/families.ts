@@ -1,7 +1,7 @@
 /**
  * How the registry's dimensions are grouped for a person choosing a situation (plan D.3).
  *
- * The registry (`stats/registry/dimensions.yaml`) is a flat list of 79 columns in table order,
+ * The registry (`stats/registry/dimensions.yaml`) is a flat list of 83 columns in table order,
  * which is the right shape for a compiler and the wrong one for a player: nobody looks for
  * "the third `decisions`-only bool". These families are the order a hand is actually thought
  * about — where am I playing, where do I sit, what happened preflop, how far did it get, what
@@ -59,9 +59,9 @@ export const FAMILIES: readonly Family[] = [
     name: 'Board',
     hint: 'The cards on the table, as of this street.',
     codes: [
-      'flop_suitedness', 'flop_pairing', 'flop_high_card', 'flop_connectedness', 'flop_span',
-      'turn_rank', 'turn_completes_flush', 'turn_pairs_board',
-      'river_rank', 'river_completes_flush', 'river_pairs_board',
+      'flop_suitedness', 'flop_pairing', 'flop_high_card', 'flop_high_card_class', 'flop_connectivity', 'flop_span',
+      'turn_rank', 'turn_change', 'turn_completes_flush', 'turn_pairs_board',
+      'river_rank', 'river_change', 'river_completes_flush', 'river_pairs_board',
       'board_paired', 'board_flush_possible', 'board_straight_possible',
       'board_paired_final', 'board_flush_possible_final',
     ],

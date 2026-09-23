@@ -18,7 +18,7 @@
 #              the label is the reader's half, and it is complete so that no client has to
 #              guess at one (ADR-062).
 #   ''         means "not applicable / unknown", and not the same thing in every dimension
-#              that declares it: the ten of them say it seven different ways (before the flop,
+#              that declares it: the thirteen of them say it seven different ways (before the flop,
 #              cards not shown, before the turn, nobody has raised yet, ...) -- which is why
 #              each spells its own out under `value_labels` instead of sharing one word.
 #   group_by   whether a report may use the dimension as its row axis. Numbers group by bucket.
@@ -269,19 +269,41 @@
   tables: [decisions, player_hands]
   description: The highest flop rank; '' before the flop.
 
-- code: flop_connectedness
-  label: Flop connectedness
+- code: flop_high_card_class
+  label: Flop high card class
   type: enum
-  values: ['', connected, semi_connected, disconnected]
+  values: ['', ace, king_queen, jack_ten, middle, low]
+  value_labels:
+    '': Before the flop
+    ace: Ace-high
+    king_queen: King- or queen-high
+    jack_ten: Jack- or ten-high
+    middle: Nine- to seven-high
+    low: Six-high or lower
+  tables: [decisions, player_hands]
+  description: >-
+    The highest flop rank in five classes balanced on the corpus rather than tidy (ADR-075):
+    ace, king or queen, jack or ten, nine to seven, six and below; '' before the flop.
+
+# `flop_connectivity` replaced `flop_connectedness` (ADR-075): the old code measured the span
+# between the highest and lowest rank, which is not a poker property and moved 73% of boards
+# once corrected. A NEW code on purpose, so a saved filter naming the old one fails here rather
+# than quietly answering a different question.
+- code: flop_connectivity
+  label: Flop connectivity
+  type: enum
+  values: ['', connected, oesd, disconnected]
   value_labels:
     '': Before the flop
     connected: Connected
-    semi_connected: Semi-connected
+    oesd: Open-ended draw
     disconnected: Disconnected
   tables: [decisions, player_hands]
   description: >-
-    How close the three flop ranks sit: connected when the highest minus the lowest is 2 or
-    less, semi-connected up to 4, disconnected beyond that; '' before the flop.
+    What a two-card holding can already make or draw to: connected when three flop ranks sit
+    inside one five-card window (a straight is available, the ace playing high or low),
+    open-ended draw when two flop ranks sit inside a four-card window open at both ends (2345
+    through TJQK), disconnected otherwise; '' before the flop.
 
 - code: flop_span
   label: Flop rank span
@@ -699,6 +721,28 @@
   tables: [decisions]
   description: The turn matched a flop rank.
 
+# The runout dimensions (ADR-082): one class per later-street card, the first that applies.
+# Values carry the street as a prefix because a `board_texture` tag is matched by value
+# across every texture dimension, and a bare `blank` on two dimensions could reach only one.
+- code: turn_change
+  label: What the turn changed
+  type: enum
+  values: ['', turn_flush, turn_straight, turn_pair, turn_flush_draw, turn_overcard, turn_blank]
+  value_labels:
+    '': Before the turn
+    turn_flush: Completes a flush
+    turn_straight: Completes a straight
+    turn_pair: Pairs the board
+    turn_flush_draw: Brings a flush draw
+    turn_overcard: Overcard
+    turn_blank: Blank
+  tables: [decisions]
+  description: >-
+    What the turn card made, the first of these that applies: a flush (at least two of its
+    suit were already there), a straight that needs fewer hole cards than before, a paired
+    board, a flush draw (a second card of its suit), an overcard above every flop card, or
+    nothing; '' before the turn.
+
 - code: river_rank
   label: River card
   type: enum
@@ -732,6 +776,24 @@
   type: bool
   tables: [decisions]
   description: The river matched an earlier board rank.
+
+- code: river_change
+  label: What the river changed
+  type: enum
+  values: ['', river_flush, river_straight, river_pair, river_overcard, river_blank]
+  value_labels:
+    '': Before the river
+    river_flush: Completes a flush
+    river_straight: Completes a straight
+    river_pair: Pairs the board
+    river_overcard: Overcard
+    river_blank: Blank
+  tables: [decisions]
+  description: >-
+    What the river card made, the first of these that applies: a flush (at least two of its
+    suit were already there), a straight that needs fewer hole cards than before, a paired
+    board, an overcard above every earlier card, or nothing -- no draw class, since no card is
+    to come; '' before the river.
 
 - code: board_paired
   label: Board paired

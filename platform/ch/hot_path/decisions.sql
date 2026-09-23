@@ -37,9 +37,9 @@ select
     am_prev_street_aggressor, prev_street_my_action, prev_street_faced,
     preflop_line, street_line, line_so_far,
     eff_stack_bb, spr,
-    flop_suitedness, flop_pairing, flop_high_card, flop_connectedness, flop_span,
-    turn_rank, turn_completes_flush, turn_pairs_board,
-    river_rank, river_completes_flush, river_pairs_board,
+    flop_suitedness, flop_pairing, flop_high_card, flop_high_card_class, flop_connectivity, flop_span,
+    turn_rank, turn_completes_flush, turn_pairs_board, turn_change,
+    river_rank, river_completes_flush, river_pairs_board, river_change,
     board_paired, board_flush_possible, board_straight_possible,
     hand_class, hand_shape, hole_cards, made_hand,
     action, is_allin, amount_bb, size_pct, raise_to_bb,
@@ -197,14 +197,17 @@ from (
         if(st >= 1, hb.b_flop_suitedness, '')::LowCardinality(String)    as flop_suitedness,
         if(st >= 1, hb.b_flop_pairing, '')::LowCardinality(String)       as flop_pairing,
         if(st >= 1, hb.b_flop_high_card, '')::LowCardinality(String)     as flop_high_card,
-        if(st >= 1, hb.b_flop_connectedness, '')::LowCardinality(String) as flop_connectedness,
+        if(st >= 1, hb.b_flop_high_card_class, '')::LowCardinality(String) as flop_high_card_class,
+        if(st >= 1, hb.b_flop_connectivity, '')::LowCardinality(String)  as flop_connectivity,
         if(st >= 1, hb.b_flop_span, 0)::UInt8                            as flop_span,
         if(st >= 2, hb.b_turn_rank, '')::LowCardinality(String)          as turn_rank,
         if(st >= 2, hb.b_turn_completes_flush, 0)::UInt8                 as turn_completes_flush,
         if(st >= 2, hb.b_turn_pairs_board, 0)::UInt8                     as turn_pairs_board,
+        if(st >= 2, hb.b_turn_change, '')::LowCardinality(String)        as turn_change,
         if(st >= 3, hb.b_river_rank, '')::LowCardinality(String)         as river_rank,
         if(st >= 3, hb.b_river_completes_flush, 0)::UInt8                as river_completes_flush,
         if(st >= 3, hb.b_river_pairs_board, 0)::UInt8                    as river_pairs_board,
+        if(st >= 3, hb.b_river_change, '')::LowCardinality(String)       as river_change,
         multiIf(st = 1, hb.b_paired_flop, st = 2, hb.b_paired_turn, st = 3, hb.b_paired_river, 0)::UInt8
                                                                      as board_paired,
         multiIf(st = 1, hb.b_flush_flop, st = 2, hb.b_flush_turn, st = 3, hb.b_flush_river, 0)::UInt8
@@ -250,14 +253,17 @@ from (
             b.flop_suitedness        as b_flop_suitedness,
             b.flop_pairing           as b_flop_pairing,
             b.flop_high_card         as b_flop_high_card,
-            b.flop_connectedness     as b_flop_connectedness,
+            b.flop_high_card_class   as b_flop_high_card_class,
+            b.flop_connectivity      as b_flop_connectivity,
             b.flop_span              as b_flop_span,
             b.turn_rank              as b_turn_rank,
             b.turn_completes_flush   as b_turn_completes_flush,
             b.turn_pairs_board       as b_turn_pairs_board,
+            b.turn_change            as b_turn_change,
             b.river_rank             as b_river_rank,
             b.river_completes_flush  as b_river_completes_flush,
             b.river_pairs_board      as b_river_pairs_board,
+            b.river_change           as b_river_change,
             b.paired_flop            as b_paired_flop,
             b.paired_turn            as b_paired_turn,
             b.paired_river           as b_paired_river,
@@ -469,7 +475,9 @@ where toYYYYMMDD(h.played_at_utc) in {partitions:Array(UInt32)} and h.user_id = 
 -- which is what the registry declares for "before the flop" (stats/registry/dimensions.yaml).
 --
 -- Ranks are 1..13 for 2..A via position() into one rank string, the same encoding as
--- macros/hand_arrays.sql uses for hole cards.
+-- macros/hand_arrays.sql uses for hole cards. Every classification is a macro in
+-- macros/board.sql, so the fixture both test suites parse can be run through the same SQL
+-- (plan H.3); this model only wires them to the columns.
 
 
 
@@ -525,56 +533,110 @@ select
         fs[1] = fs[2] and fs[2] = fs[3], 'monotone',
         fs[1] = fs[2] or fs[2] = fs[3] or fs[1] = fs[3], 'two_tone',
         'rainbow'
-    )::LowCardinality(String)                                            as flop_suitedness,
+    )::LowCardinality(String)                  as flop_suitedness,
     multiIf(
         fr[1] = fr[2] and fr[2] = fr[3], 'trips',
         fr[1] = fr[2] or fr[2] = fr[3] or fr[1] = fr[3], 'paired',
         'unpaired'
-    )::LowCardinality(String)                                            as flop_pairing,
+    )::LowCardinality(String)                     as flop_pairing,
     substring('23456789TJQKA', fr_desc[1], 1)::LowCardinality(String)      as flop_high_card,
-    toUInt8(fr_desc[1] - fr_desc[3])                                     as flop_span,
     multiIf(
-        fr_desc[1] - fr_desc[3] <= 2, 'connected',
-        fr_desc[1] - fr_desc[3] <= 4, 'semi_connected',
+        arrayMax(fr) = 13, 'ace',
+        arrayMax(fr) >= 11, 'king_queen',
+        arrayMax(fr) >= 9, 'jack_ten',
+        arrayMax(fr) >= 6, 'middle',
+        'low'
+    )::LowCardinality(String)             as flop_high_card_class,
+    multiIf(
+        toUInt8(arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(fr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, fr))))),
+        range(toUInt64(0), toUInt64(10))
+    )) >= 3) = 1, 'connected',
+        toUInt8(arrayExists(
+        l -> arrayCount(x -> x >= l and x <= l + 3, arrayDistinct(arrayConcat(fr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, fr))))) >= 2,
+        range(toUInt64(1), toUInt64(10))
+    )) = 1, 'oesd',
         'disconnected'
-    )::LowCardinality(String)                                            as flop_connectedness,
+    )::LowCardinality(String)                as flop_connectivity,
+    toUInt8(fr_desc[1] - fr_desc[3])                                     as flop_span,
     toUInt8(length(arrayDistinct(fr)) < length(fr))                      as paired_flop,
     toUInt8(arrayMax(arrayMap(s -> countEqual(fs, s), fs)) >= 3)                                           as flush_flop,
-    toUInt8(arrayExists(
-        l -> arrayCount(x -> x >= l and x <= l + 4,
-                        arrayDistinct(arrayConcat(fr,
-                                                  arrayMap(x -> toUInt64(0),
-                                                           arrayFilter(x -> x = 13, fr))))) >= 3,
+    toUInt8(arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(fr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, fr))))),
         range(toUInt64(0), toUInt64(10))
-    ))                                        as straight_flop,
+    )) >= 3)                                        as straight_flop,
 
     -- ---- the turn ------------------------------------------------------------------
     if(has_turn, substring('23456789TJQKA', r4, 1), '')::LowCardinality(String) as turn_rank,
     toUInt8(has_turn and has(fr, r4))                                    as turn_pairs_board,
     toUInt8(has_turn and countEqual(ts, s4) >= 3)                        as turn_completes_flush,
+    if(has_turn, multiIf(
+        countEqual(fs, s4) >= 2, 'turn_flush',
+        arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(arrayConcat(fr, [r4]),
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, arrayConcat(fr, [r4])))))),
+        range(toUInt64(0), toUInt64(10))
+    )) >= 3
+            and arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(arrayConcat(fr, [r4]),
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, arrayConcat(fr, [r4])))))),
+        range(toUInt64(0), toUInt64(10))
+    ))
+                > arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(fr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, fr))))),
+        range(toUInt64(0), toUInt64(10))
+    )), 'turn_straight',
+        has(fr, r4), 'turn_pair',
+        countEqual(fs, s4) = 1, 'turn_flush_draw',
+        r4 > arrayMax(fr), 'turn_overcard',
+        'turn_blank'
+    ), '')::LowCardinality(String)
+                                                                         as turn_change,
     toUInt8(length(arrayDistinct(tr)) < length(tr))                      as paired_turn,
     toUInt8(arrayMax(arrayMap(s -> countEqual(ts, s), ts)) >= 3)                                           as flush_turn,
-    toUInt8(arrayExists(
-        l -> arrayCount(x -> x >= l and x <= l + 4,
-                        arrayDistinct(arrayConcat(tr,
-                                                  arrayMap(x -> toUInt64(0),
-                                                           arrayFilter(x -> x = 13, tr))))) >= 3,
+    toUInt8(arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(tr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, tr))))),
         range(toUInt64(0), toUInt64(10))
-    ))                                        as straight_turn,
+    )) >= 3)                                        as straight_turn,
 
     -- ---- the river -----------------------------------------------------------------
     if(has_river, substring('23456789TJQKA', r5, 1), '')::LowCardinality(String) as river_rank,
     toUInt8(has_river and has(tr, r5))                                   as river_pairs_board,
     toUInt8(has_river and countEqual(rs, s5) >= 3 and countEqual(ts, s5) < 3) as river_completes_flush,
+    if(has_river, multiIf(
+        countEqual(ts, s5) >= 2, 'river_flush',
+        arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(arrayConcat(tr, [r5]),
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, arrayConcat(tr, [r5])))))),
+        range(toUInt64(0), toUInt64(10))
+    )) >= 3
+            and arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(arrayConcat(tr, [r5]),
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, arrayConcat(tr, [r5])))))),
+        range(toUInt64(0), toUInt64(10))
+    ))
+                > arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(tr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, tr))))),
+        range(toUInt64(0), toUInt64(10))
+    )), 'river_straight',
+        has(tr, r5), 'river_pair',
+        r5 > arrayMax(tr), 'river_overcard',
+        'river_blank'
+    ), '')::LowCardinality(String)
+                                                                         as river_change,
     toUInt8(length(arrayDistinct(rr)) < length(rr))                      as paired_river,
     toUInt8(arrayMax(arrayMap(s -> countEqual(rs, s), rs)) >= 3)                                           as flush_river,
-    toUInt8(arrayExists(
-        l -> arrayCount(x -> x >= l and x <= l + 4,
-                        arrayDistinct(arrayConcat(rr,
-                                                  arrayMap(x -> toUInt64(0),
-                                                           arrayFilter(x -> x = 13, rr))))) >= 3,
+    toUInt8(arrayMax(arrayMap(
+        l -> arrayCount(x -> x >= l and x <= l + 4, arrayDistinct(arrayConcat(rr,
+                              arrayMap(x -> toUInt64(0), arrayFilter(x -> x = 13, rr))))),
         range(toUInt64(0), toUInt64(10))
-    ))                                        as straight_river,
+    )) >= 3)                                        as straight_river,
 
     -- ---- the board as dealt (hand-grain stats) ---------------------------------------
     toUInt8(length(arrayDistinct(rr)) < length(rr))                      as paired_final,

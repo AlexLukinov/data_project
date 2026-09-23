@@ -280,12 +280,12 @@ describe('valueWords', () => {
 /**
  * The guard on the change that made this file's fixtures parse `value_labels` at all.
  *
- * `''` is a real value on ten dimensions and it means something different on nearly every one of
+ * `''` is a real value on thirteen dimensions and it means something different on nearly every one of
  * them: the board columns are blank before the flop, `opener_position` is blank when nobody has
  * raised, `hand_shape` is blank when the cards were never shown. The client used to render all ten
  * as one phrase, "not applicable", which is true of none of them and says nothing about any.
  *
- * So the ten are pinned by name, through `valueWords` rather than off the YAML, because the thing
+ * So the thirteen are pinned by name, through `valueWords` rather than off the YAML, because the thing
  * that must not come back is a client-side rule that collapses them again — and a rule like that
  * would still leave the registry file correct. A new dimension declaring `''` fails the sweep
  * below until it is listed here with what it means.
@@ -296,15 +296,18 @@ const BLANK_MEANS: Readonly<Record<string, string>> = {
   flop_suitedness: 'Before the flop',
   flop_pairing: 'Before the flop',
   flop_high_card: 'Before the flop',
-  flop_connectedness: 'Before the flop',
+  flop_high_card_class: 'Before the flop',
+  flop_connectivity: 'Before the flop',
   opener_position: 'Nobody has raised yet',
   last_raiser_position: 'No bet or raise yet',
   turn_rank: 'Before the turn',
+  turn_change: 'Before the turn',
   river_rank: 'Before the river',
+  river_change: 'Before the river',
 };
 
 describe('the empty value', () => {
-  it('says what it means on each of the ten dimensions that declare it', () => {
+  it('says what it means on each of the thirteen dimensions that declare it', () => {
     for (const [code, word] of Object.entries(BLANK_MEANS)) {
       expect(valueWords(registryDim(code), ''), code).toBe(word);
     }

@@ -23,6 +23,7 @@ classifyHand(parseCards('Ah Kh') as [number, number], parseCards('Kc 9h 2d')); /
 | `metrics/` | pot odds and sizing (MDF, alpha, required equity, bluff break-even, odds text, implied odds), rake raw vs adjusted, EQR, range advantage, nut advantage with both threshold modes | §8 |
 | `blockers/` | per-combo blocker scores, 52-card removal heatmap overall and per class, class-removal breakdown, board effects, bluff candidates sized to the bet, unblockers | §6 |
 | `distribution/` | the grouped combo distribution: six axes, nested tree with raw / weighted / share at every level, compare, CSV and text export | §7 |
+| `texture.ts` | `textureTags(board)`: the registry's board-texture values for a flop, turn or river — the twin of the dbt macros in `macros/board.sql`, held together by `tests/fixtures/board_texture.json`, which both suites run (ADR-083) | plan H.3 |
 
 ```ts
 const result = await computeEquity({ ranges: [hero, villain], board: parseCards('Kh 7d 2c') });

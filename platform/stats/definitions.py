@@ -56,7 +56,7 @@ class Dimension(_Strict):
     The value is the contract with the column and never changes for a reader's sake (ADR-053);
     this is the reader's half. Complete on purpose: a client that had to fall back would have
     to guess, and guessing is what put `5bet_plus` -> `5bet+` and `''` -> "not applicable" in
-    the client in the first place -- where the ten dimensions declaring `''` mean it seven
+    the client in the first place -- where the thirteen dimensions declaring `''` mean it seven
     different ways, and a pool player named `a_plus_b` read `a+b` (ADR-062).
     """
     ops: list[Op] | None = None
