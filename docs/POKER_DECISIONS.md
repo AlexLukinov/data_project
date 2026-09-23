@@ -90,6 +90,22 @@ not a change I've made.
 | [078](#adr-078--a-situation-is-a-line-across-streets-not-a-line-on-one-street) | A situation is a line across streets, not a line on one street | ✅ |
 | [079](#adr-079--the-pools-range-is-precomputed-because-a-tenant-may-hold-four-queries) | The pool's range is precomputed, because a tenant may hold four queries | ✅ |
 | [080](#adr-080--seven-labels-name-a-player-five-keys-describe-behaviour) | Seven labels name a player; five keys describe behaviour | ✅ |
+| [081](#adr-081--retiring-a-dimension-the-registry-refuses-the-code-a-count-says-the-values-are-safe-and-the-plans-file-list-is-corrected) | Retiring a dimension: the registry refuses the code, a count says the values are safe, and the plan's file list is corrected | ✅ |
+| [082](#adr-082--what-a-later-street-changed-one-class-per-card-by-precedence-with-the-street-in-the-value) | What a later street changed: one class per card, by precedence, with the street in the value | ✅ |
+| [083](#adr-083--one-rule-two-runtimes-one-fixture-the-board-macros-are-the-home-texturetags-is-the-twin-and-the-sql-itself-is-what-the-python-suite-proves) | One rule, two runtimes, one fixture: the board macros are the home, `textureTags` is the twin, and the SQL itself is what the Python suite proves | ✅ |
+| [084](#adr-084--the-real-marts-change-shape-by-alter-verified-against-the-tables-dbt-just-built-and-are-refilled-by-a-forced-backfill) | The real marts change shape by ALTER, verified against the tables dbt just built, and are refilled by a forced backfill | ✅ |
+| [085](#adr-085--a-field-added-to-nodekey-ships-with-a-data-migration-a-stored-key-stays-canonical) | A field added to `NodeKey` ships with a data migration; a stored key stays canonical | ✅ |
+| [086](#adr-086--the-sequence-is-this-street-line_so_far-is-the-earlier-streets-a-key-carries-one-account-of-a-street) | The sequence is this street; `line_so_far` is the earlier streets; a key carries one account of a street | ✅ |
+| [087](#adr-087--size_bucket-is-a-registry-bucket-name-of-the-bet-in-front-postflop-only-the-client-buckets-with-the-registrys-ranges) | `size_bucket` is a registry bucket name of the bet in front, postflop only; the client buckets with the registry's ranges | ✅ |
+| [088](#adr-088--the-replayer-keys-a-node-from-the-whole-hand-not-from-the-street) | The replayer keys a node from the whole hand, not from the street | ✅ |
+| [089](#adr-089--a-clustered-report-is-a-two-level-aggregate-the-compiler-emits-and-nothing-about-a-player-leaves-the-database) | A clustered report is a two-level aggregate the compiler emits, and nothing about a player leaves the database | ✅ |
+| [090](#adr-090--the-gate-is-the-wider-arm-of-the-binding-actions-interval-and-min_n-is-what-this-node-needs) | The gate is the wider arm of the binding action's interval, and `min_n` is what this node needs | ✅ |
+| [091](#adr-091--the-registrys-kind-picks-the-gate-never-the-estimator-a-dealt-sample-is-not-independent-at-a-node-either) | The registry's kind picks the gate, never the estimator: a dealt sample is not independent at a node either | ✅ |
+| [092](#adr-092--seven-labels-partition-the-pool-five-groups-are-unions-of-them-and-either-is-one-key-away-without-saving) | Seven labels partition the pool, five groups are unions of them, and either is one key away without saving | ✅ |
+| [093](#adr-093--the-reveal-is-what-the-field-showed-not-what-your-read-implies-groups-are-asked-on-a-press-one-after-another) | The reveal is what the field showed, not what your read implies; groups are asked on a press, one after another | ✅ |
+| [094](#adr-094--the-defenders-range-is-cut-at-the-pools-fold-rate-by-equity-a-per-class-split-at-a-facing-node-is-a-number-nobody-measured) | The defender's range is cut at the pool's fold rate, by equity; a per-class split at a facing node is a number nobody measured | ✅ |
+| [095](#adr-095--code-202-is-the-budget-working-a-429-that-names-itself-and-the-replayers-sentence-is-reserved-for-it) | Code 202 is the budget working: a 429 that names itself, and the replayer's sentence is reserved for it | ✅ |
+| [096](#adr-096--a-worker-that-cannot-start-rejects-a-blocker-row-is-a-control-exactly-when-it-is-one) | A Worker that cannot start rejects; a blocker row is a control exactly when it is one | ✅ |
 
 ---
 
@@ -1591,7 +1607,7 @@ database's `now()`, and `review_due_at` compares the two. So answering "still tr
 review **earlier** than the one just answered, by however far the clocks disagreed: the integration test
 saw 0.22 s while Docker Desktop's VM ran ahead of the host, and two production machines can disagree by
 seconds. `confirmed_at` is now `func.now()`, which the router's refresh reads back — one clock for both
-ends of the rule (`c36faa4`). The store's database-free unit test asserts the clock; the round trip
+ends of the rule (`817afa8`). The store's database-free unit test asserts the clock; the round trip
 stays in `tests/integration/test_heuristics.py`.
 
 ## ADR-039 — All-in EV redistributes the pot that was actually awarded, per side pot, and only where the runout happened
@@ -3263,8 +3279,8 @@ Gates: `make web-check` green (typecheck, ESLint, **1,015 tests / 99 files**, li
 
 **Context.** CI has never run. Four findings, each confirmed against the tree before anything changed:
 
-1. **Wrong place.** The workflow was committed at `platform/.github/workflows/ci.yml` (`bd097d8`,
-   extended by F.1 in `021e9c7`). GitHub reads workflows only from `.github/workflows/` at the
+1. **Wrong place.** The workflow was committed at `platform/.github/workflows/ci.yml` (`29339af`,
+   extended by F.1 in `3b4cdee`). GitHub reads workflows only from `.github/workflows/` at the
    repository root, and the git root is `ru_de/`, one level up. As far as GitHub was concerned,
    the repository had no workflow.
 2. **Wrong trigger.** `on: push: branches: [main]` plus `pull_request`. The work lives on
@@ -3334,7 +3350,7 @@ Gates: `make web-check` green (typecheck, ESLint, **1,015 tests / 99 files**, li
    more. **`timeout-minutes`** 20 / 20 / 60 guard against a hang; the integration value is loose
    because no full `make test-all` duration had been recorded. Tighten it after the first run.
 
-**Verified before any push** — in a git worktree of `93d32ae` with only this lane's four files
+**Verified before any push** — in a git worktree of `202bd74` with only this lane's four files
 applied, and no `.venv`, `.venv-dbt`, `node_modules`, caches or ignored files:
 
 - `make install`: CPython 3.12.14, 77 packages.
@@ -3380,7 +3396,7 @@ first runs showed:
    the merge's push.
 
 **The first runs (2026-09-15, at the founder's request).** Lane D's four code files were committed
-alone as `5c3b55f` and `feat/range-lab` was pushed. The round-5 docs, this ADR included, and the
+alone as `5d8327f` and `feat/range-lab` was pushed. The round-5 docs, this ADR included, and the
 other lanes' work stayed in the working tree.
 
 - **Run 34955622749:** quality ✓ and web ✓ — the first time CI had passed anything — and integration
@@ -3394,7 +3410,7 @@ other lanes' work stayed in the working tree.
     still running — usually true under Docker Desktop's VM, and lost on a fast Linux runner. The
     18 s, and the failure-only `docker compose logs` step parsing the file successfully, fit that
     and nothing else examined.
-- **Fix, `88625fd`:** `minio-init` has `profiles: ["init"]`, so `up --wait` leaves it out, and
+- **Fix, `99c9a5b`:** `minio-init` has `profiles: ["init"]`, so `up --wait` leaves it out, and
   `make up` runs `docker compose run --rm minio-init` once the stack is healthy. A failed bucket
   creation still fails the target. `run` replaces `container_name` with a generated name
   (pkg/compose/run.go), so a leftover `poker-minio-init` cannot collide. The rule held: the target
@@ -3952,7 +3968,7 @@ turning a refusal into "no data", and two ADR-051/053 follow-ups (`FetchOptions.
 broken by three lanes and two merges without anyone noticing, because a screen name in a test
 fixture or a verification note does not look like data. The round-5 merge found fourteen real
 handles reachable from a public branch; the history rewrite that followed removed those fourteen
-and missed a fifteenth, in a code comment, because its scan tokenised on word characters and the
+and missed a fifteenth (rewritten out of every commit on 2026-09-23), in a code comment, because its scan tokenised on word characters and the
 handle contains brackets. A rule that depends on remembering it is not a rule. It has to be a
 check, and the check has to run at the last moment before publication — the push.
 
@@ -5467,7 +5483,7 @@ drift that module was written to prevent.
 **Closes** the UX audit §2.1 bullet "Controls that render editable and do nothing".
 
 **Context.** The brief carried this as "PotOddsTrainer.vue is the other half of the bullet". **It is
-not: that half was closed by F.12a** (`a60611e`) and the audit's own §1b block says so ("the panels
+not: that half was closed by F.12a** (`250c189`) and the audit's own §1b block says so ("the panels
 on `/hands/[id]` and the trainers became editable, `useEditableOdds` — §2.1's first bullet is stale
 as written"); only §2.1's un-updated prose still names the file. Verified in a browser, not taken on
 the audit's word: typing `2` into the bet moves MDF from 39.8% to 69.2%, both panels share the
@@ -5523,7 +5539,7 @@ the element *say* it is a control? — is the test this ADR uses.
 
 ## ADR-075 — A flop's connectivity is what a hand can draw to, not the span between its ends
 
-**Status:** accepted · 2026-09-22 · queued as plan step **G.1**/**G.2** · supersedes the
+**Status:** accepted · 2026-09-22 · **built 2026-09-23 as ADR-081…084** (plan G.1, G.2) · supersedes the
 `flop_connectedness` dimension introduced with `int_board_by_street`.
 
 **Context.** A session of pool analysis needed board texture controlled, and reached for
@@ -5580,7 +5596,7 @@ so the buckets are balanced rather than tidy.
 
 ## ADR-076 — A population frequency needs a cluster-robust sample, and `MIN_N = 100` is not one
 
-**Status:** accepted · 2026-09-22 · queued as plan step **G.3** · amends the constants in
+**Status:** accepted · 2026-09-22 · **built 2026-09-23 as ADR-089…091** (plan G.3; erratum below) · amends the constants in
 `analysis/pool/node_query.py`.
 
 **Context.** `node_query.py` gates every pool answer on `MIN_N = 100` observations, below which it
@@ -5610,11 +5626,18 @@ stat kinds, because the sample a claim needs depends on which it is.
 are binomial over population counts they are ~2.1× too narrow; over hero's own hands, where hero is
 a single cluster, the question is different again.
 
+**Erratum, 2026-09-23 (ADR-089, ADR-091).** The measured sums put the intra-class correlation at
+**≈0.017**, not 0.24: the design effect is driven by cluster size — 210 rows per effective player —
+so "players are very consistent" should read "some players play a lot". The 4.59 this ADR gates
+on stands. And a *dealt* class at a node is not independent either (design effect 1.3–1.4, ADR-091):
+`MIN_BUCKET_N` stays an unscaled count, for the reason ADR-091 gives rather than the one above. The
+E.2 question is still open.
+
 ---
 
 ## ADR-077 — A VPIP label under 200 hands names nothing
 
-**Status:** accepted · 2026-09-22 · queued as plan step **G.4** · extends the two cohort presets in
+**Status:** accepted · 2026-09-22 · **built 2026-09-23 as ADR-092**, which spells the label `other` as `mid` and `regs` as `reg` · extends the two cohort presets in
 `analysis/pool/presets.yaml`.
 
 **Context.** The presets ship `regs` (VPIP <25 over ≥1,000 hands) and `fish` (VPIP ≥35 over ≥200).
@@ -5652,7 +5675,7 @@ analysed. The endogeneity is mild at these sample sizes and is recorded rather t
 
 ## ADR-078 — A situation is a line across streets, not a line on one street
 
-**Status:** accepted · 2026-09-23 · queued as plan step **H.1** · amends `NodeKey` (ADR-028) and
+**Status:** accepted · 2026-09-23 · **built 2026-09-23 as ADR-085…088**, texture conflicts as ADR-082 · amends `NodeKey` (ADR-028) and
 `node_filter`.
 
 **Context.** Phase H needs to ask the pool "what range do you have *here*". The starting assumption
@@ -5785,3 +5808,810 @@ player defends, and this is where that finding becomes behaviour rather than a n
 
 Each seat therefore carries **the group and the hands behind it**, so "this is a reg" and "this is a
 reg on 1,040 hands" are never confused.
+
+---
+
+## ADR-081 — Retiring a dimension: the registry refuses the code, a count says the values are safe, and the plan's file list is corrected
+
+**Status:** accepted · 2026-09-23 · round 9, lane texture · closes plan steps **G.1** and **G.2** ·
+implements ADR-075 · constrained by ADR-021 (the registry is the column contract), ADR-053 (a value
+never changes for a reader's sake).
+
+**Context.** ADR-075 retires `flop_connectedness` as a *new code, not a redefinition*, so that a
+saved filter naming it fails loudly in the registry. Implementing it showed where that guarantee
+stops. A `NodeKey.board_texture` tag is not looked up by code: `node_filter._texture_leaf` matches
+it **by value** across the texture dimensions (`node_filter.py:98-105` before this round). Two of
+the three old values, `connected` and `disconnected`, are values of the new dimension too, with a
+changed meaning — under ADR-075's own table an old `connected` board is now `connected` (129,978)
+*or* `oesd` (186,939), and an old `disconnected` one is mostly `oesd` (1,957,960 of 2,988,147). A
+key stored with either tag would keep validating and quietly ask a different question. Only
+`semi_connected`, which no longer exists, fails the way ADR-075 promised.
+
+**Measured, read-only, on the real Postgres** (every store that can hold a key, a filter, a
+texture word or a cohort):
+
+| table | rows | names `flop_connectedness` | carries `connected` / `semi_connected` / `disconnected` |
+|---|---|---|---|
+| `ranges.node_key` | 0 | 0 | 0 |
+| `analyses.node_key` + `steps` | 0 | 0 | 0 |
+| `heuristics.texture` + `tags` | 0 | 0 | 0 |
+| `saved_filters.ast` | 0 | 0 | 0 |
+| `saved_reports.definition` | 0 | 0 | 0 |
+| `saved_stats.definition` | 0 | 0 | 0 |
+| `cohorts.criteria` | 0 | 0 | 0 |
+
+The founder's database holds no saved object of any kind yet.
+
+**Decision.** *Neither migrate nor refuse the values; record the count, and keep the code loud.*
+
+- A refusal by value is impossible without refusing the two values the new dimension legitimately
+  declares. A migration has nothing to map: whether an old `connected` key means `connected` or
+  `oesd` is a property of the *boards* it was saved against, not of the key, so no rewrite is
+  correct. Had the count been non-zero, the honest option would have been to **name the rows to the
+  founder and leave them**, because a wrong rewrite is the silent failure this ADR exists to
+  prevent; that remains the rule if any such key is ever found (the audit query is below and takes
+  one second; re-run at the round-9 merge, still 0).
+- The code stays loud on the two paths that can be: `registry().dimension("flop_connectedness")`,
+  any filter leaf naming it (`stats/checks.py`) and the texture tag `semi_connected` all raise
+  `RegistryError` — `tests/test_texture_tags.py` pins all three.
+- `flop_high_card_class` lands beside `flop_high_card` (kept, as ADR-075 §4 says) with the five
+  classes measured there: on the 4,050,004 flops the plan counted (3,395,295 distinct hands under
+  `FINAL`, the intermediate's row count — the plan's figure was taken without `FINAL`, and the
+  shares are the same either way) **ace 20.82 · king_queen 33.37 · jack_ten 22.43 · middle 17.90 ·
+  low 5.47**, each within 0.5pp of the plan's 21 / 34 / 22 / 18 / 5.4.
+
+**The plan's G.1 file list was wrong in both directions.** Four files it did not name carry the
+column and had to change — `models/marts/player_hands.sql`, `models/intermediate/schema.yml` (the
+accepted-values test), `analysis/hero/presets.yaml:73` (`cbet_by_texture` groups by it, and presets
+are validated at load, so the API would not have started) and `analysis/pool/node_filter.py:41` —
+plus the web side, which reads the registry file directly: `app/stats/families.ts` (the Board
+family, whose coverage test fails on an unclassified column), `app/stats/vocabulary.test.ts`
+(`BLANK_MEANS`, swept against every dimension declaring `''`), and the two count tests
+(`tests/test_api_v2.py`, 80 → 83 dimensions; `tests/test_stats_registry_words.py`, 10 → 13 blanks).
+And one file it did name needs nothing: `core/schema/` describes the `core.*` tables, where the
+board is five raw card strings; every classification lives in dbt.
+
+**Consequences.** `semi_connected` is gone from every vocabulary. The `cbet_by_texture` hero preset
+now groups by `flop_connectivity`. The web's "ten dimensions declare `''`" is thirteen; the seven
+distinct words did not change. The reports in `platform/reports/*.md` and the `scripts/spot_*.py`
+analysis scripts still say *connectedness* — they are records of past analyses against tables that
+no longer exist (`marts.player_hand_flags`) and were left as history: `reports/pool_leaks.md`,
+`reports/spot_frequency.md`, `scripts/spot_texture.py`, `scripts/spot_plan.py`.
+
+**The audit** (real Postgres, read-only; every count 0 on 2026-09-23):
+
+```sql
+SELECT 'ranges' AS t, count(*) FROM ranges WHERE node_key::text LIKE '%connectedness%'
+   OR (node_key->'board_texture') ?| array['connected','semi_connected','disconnected']
+UNION ALL SELECT 'analyses', count(*) FROM analyses WHERE node_key::text LIKE '%connectedness%'
+   OR steps::text ~ '"(connected|semi_connected|disconnected)"'
+UNION ALL SELECT 'heuristics', count(*) FROM heuristics WHERE texture IN ('connected','semi_connected','disconnected')
+UNION ALL SELECT 'saved_filters', count(*) FROM saved_filters WHERE ast::text LIKE '%flop_connectedness%'
+UNION ALL SELECT 'saved_reports', count(*) FROM saved_reports WHERE definition::text LIKE '%flop_connectedness%'
+UNION ALL SELECT 'saved_stats', count(*) FROM saved_stats WHERE definition::text LIKE '%flop_connectedness%'
+UNION ALL SELECT 'cohorts', count(*) FROM cohorts WHERE criteria::text LIKE '%flop_connectedness%';
+```
+
+
+## ADR-082 — What a later street changed: one class per card, by precedence, with the street in the value
+
+**Status:** accepted · 2026-09-23 · round 9, lane texture · closes plan step **H.2** · amends the
+H.2 step text ("from columns that already exist") · serves ADR-079 (the cube's board hierarchy is
+`flop_class → turn_change → river_change`) and ADR-078 (texture-tag conflicts raise).
+
+**Context.** H.2 wants a node to say *"ace-high two-tone flop, blank turn"*. The columns
+`decisions` had — `turn_completes_flush`, `turn_pairs_board`, `river_completes_flush`,
+`river_pairs_board`, and the as-of-this-street bools — are four booleans and no *class*: nothing
+says the turn completed a straight, brought a flush draw or came over the top, and four bools are
+not one axis a cube can key or a reader can collapse. The cube needs one categorical per street
+whose values partition the deck.
+
+**Decision.** Two enum dimensions on `decisions`, computed by one macro (`street_change` in
+`macros/board.sql`) and stored by `int_board_by_street`:
+
+| dimension | values, **in order of precedence** |
+|---|---|
+| `turn_change` | `turn_flush` · `turn_straight` · `turn_pair` · `turn_flush_draw` · `turn_overcard` · `turn_blank` |
+| `river_change` | `river_flush` · `river_straight` · `river_pair` · `river_overcard` · `river_blank` |
+
+A card takes the **first** class that applies:
+
+1. **`_flush`** — at least two of its suit were already on the board: the third, fourth or fifth
+   card of a suit, so a flush is made with it (with two hole cards, one, or none).
+2. **`_straight`** — the card takes part in a straight that needs **fewer hole cards than
+   before**: `straight_cards` (the most board ranks inside any one five-card window, ace high or
+   low) reaches three, or rises from three to four, or from four to five. Three is a two-card
+   straight, four a one-card straight, five the straight on the board.
+3. **`_pair`** — its rank was already on the board.
+4. **`_flush_draw`** (turn only) — exactly one of its suit was already there: a second card of a
+   suit, so some holding now has four to a flush. The river has no card to come, so it has no draw.
+5. **`_overcard`** — above every earlier board card.
+6. **`_blank`** — none of the above.
+
+**Why this order.** The plan's own words are *what the card changed*. Made hands change more than
+draws, and a draw changes more than who holds top pair — so made hands, then the draw, then the
+overcard. Among the made hands the order is the hand rankings': a card that pairs the board *and*
+completes the flush (`Ah Kh 7d` + `7h`) is a flush card, because the flush is the stronger thing it
+made; a card that is an overcard *and* completes a flush (`Qh 7h 2s` + `Kh`) is a flush card for
+the same reason; a fourth heart on `Jh Th 9h` is a flush card before it is the one-card straight it
+also brings. The precedence is stated once, in the macro's comment and in the fixture's
+`precedence` block, and `tests/test_texture_tags.py` holds the fixture's lists to the registry's
+value order.
+
+**The first draft measured "newly" against the wrong thing, and the review caught it.** It
+called a flush card only the *third* of its suit and a straight card only the one that made a
+straight possible where none was — so a fourth flush card on a monotone flop and the five that
+puts A-2-3-4-5 *on the board* both read as blanks, which no player would say and which the plan's
+"what the card changed" does not mean. The rule was corrected before the marts were rebuilt: a
+flush card is any card of a suit already there twice (the same test the existing
+`turn_completes_flush` bool makes), and a straight card is one that makes a straight *cheaper* —
+fewer hole cards — which is also what `connected` means on the flop (three board cards). One
+consequence is kept and stated: a card that brings straight *draws* but no straight (`Qh 7h 2s` +
+`Tc`, two board ranks in every window before and after) is a **blank** — the class names what the
+card made, not what it threatens, and a draw-bringing class is a later dimension if the cube shows
+it is worth a row. `river_completes_flush`, the older bool, still excludes a fourth suited card; it
+was left as it was.
+
+**Every value carries its street as a prefix — that is the collision rule.** `_texture_leaf`
+resolves a `board_texture` tag by value across `TEXTURE_DIMENSIONS`, first dimension wins. A bare
+`blank` declared by both `turn_change` and `river_change` would make the river's unreachable, and
+nothing would say so. Two remedies were open: **distinct values** (`turn_blank`, `river_blank`)
+or a **qualified tag** (`river:blank`) parsed by the lookup. Distinct values were chosen: a tag
+stays a plain registry value with no grammar, the stored column reads unambiguously in any `GROUP
+BY` output, and `_texture_leaf` stays four lines. The cost is a value that repeats its dimension's
+name, which `value_labels` hides on screen ("Blank"). A unit test now asserts no non-empty value is
+declared by two texture dimensions, so the rule cannot be broken by the next entry either.
+
+**Two tags from one dimension raise, and so does a tag of a street the node has not reached.**
+`["monotone", "rainbow"]` used to become two contradictory `eq` leaves under one `All`: zero rows,
+no error (`node_filter.py:171`, ADR-078 gap 2). It is now `RegistryError("board_texture:
+'monotone' and 'rainbow' are both values of 'flop_suitedness'; a node carries one tag per
+dimension")`, raised before anything reaches the compiler. The review found the same silence one
+street over: `turn_change` is `''` on every flop row, so a flop node tagged `turn_blank` — or a
+preflop node tagged anything — compiled to a filter that matched no row and said nothing. Each
+texture dimension now names the first street it is set on (`TEXTURE_STREET`), and a tag ahead of
+the node's street is refused with the same shape of message. The same tag twice is one leaf, not
+an error — a repetition is not a contradiction.
+
+**Measured.** On the uniform deal (all 22,100 flops; 25,000 random turns; 25,000 random rivers):
+turn `straight` 27.5% · `flush_draw` 22.2% · `pair` 15.6% · `blank` 14.7% · `flush` 13.7% ·
+`overcard` 6.4%; river `straight` 28.1% · `flush` 23.1% · `blank` 21.4% · `pair` 18.6% ·
+`overcard` 8.7%. On the real corpus after the rebuild (hands that saw the street, tenant 1): turn
+`straight` 28.01 · `flush_draw` 22.16 · `pair` 15.90 · `blank` 13.81 · `flush` 13.39 · `overcard`
+6.73; river `straight` 27.43 · `flush` 23.13 · `blank` 21.78 · `pair` 18.75 · `overcard` 8.91 —
+within a point of the uniform deal, as a dealt card should be.
+
+**Consequences.** `TEXTURE_DIMENSIONS` is now seven: the six of the cube's hierarchy in order —
+the four flop classes, `turn_change`, `river_change` — and last the raw `flop_high_card`, a tag a
+person may type and the replayer never emits. H.5's collapse can drop tags from the end of what
+`textureTags` gives it. A node "ace-high
+two-tone flop, blank turn" is `board_texture: ["ace", "two_tone", "turn_blank"]` and compiles to
+`flop_high_card_class = 'ace' AND flop_suitedness = 'two_tone' AND turn_change = 'turn_blank'`
+(`tests/test_texture_tags.py`; on the real rows, ADR-084).
+
+## ADR-083 — One rule, two runtimes, one fixture: the board macros are the home, `textureTags` is the twin, and the SQL itself is what the Python suite proves
+
+**Status:** accepted · 2026-09-23 · round 9, lane texture · closes the poker-core half of plan step
+**H.3** (the replayer's call is the key lane's, in `hand/node.ts`) · the ADR-028/031 discipline
+applied to board texture · constrained by ADR-047 (the hot path renders the dbt models' own SQL).
+
+**Context.** `nodeKeyAt` hard-codes `board_texture: []` with the comment *"a guess made here would
+not match the pool's own bucketing"* (`hand/node.ts:132`). It was right: the flop classification
+lived inline in `int_board_by_street.sql`, callable on nothing but a table, and nothing tied a
+browser implementation to it. H.3 asks for the twin *with one fixture both suites parse*. The brief
+added the constraint that decides the shape: the Python side must prove that **the SQL** agrees —
+a Python re-implementation would be a third copy of the rule, agreeing with the fixture and
+proving nothing about the marts.
+
+**Decision.**
+
+1. **Every classification is a macro in `macros/board.sql`, and the model only wires columns.**
+   `flop_suitedness`, `flop_pairing`, `flop_connectivity` (over `straight_possible` and the new
+   `oesd_possible`), `flop_high_card_class`, `street_change`, and `ranks_ace_low` shared by the
+   window tests. The hot path already renders `board.sql` (`scripts/hot_path_sql.py`,
+   `DERIVATION_MACROS`), so the worker's INSERT and dbt's build are the same expressions — one home,
+   rendered twice, as ADR-047 wants.
+2. **`tests/fixtures/board_texture.json`** — 38 boards (flops, turns, rivers, the empty board) with
+   the expected tags, a `why` per board, the dimension order and the two precedence lists.
+   Every ADR-075 example is in it (`9♣7♥7♦` oesd, `5♠3♠A♥` connected, `Q♠A♦Q♦` disconnected) and
+   every precedence collision ADR-082 names.
+3. **The Python suite runs the fixture through the SQL** (`tests/integration/test_board_texture_fixture.py`):
+   it renders `int_board_by_street.sql` with `macros/board.sql` in plain Jinja — the hot-path
+   technique — with `ref('stg_hands')` replaced by a one-row-per-board subquery over a query
+   parameter, and compares. It reads no table, and it is an integration test only because an
+   expression needs a ClickHouse to evaluate it. A tag that reached `decisions` differently from the
+   fixture is a red test.
+4. **`web/packages/poker-core/src/texture.ts`** is the twin: `flopTexture`, `turnChange`,
+   `riverChange` and **`textureTags(board)`**, which returns the registry values in the cube's
+   hierarchy order — `[suitedness, pairing, connectivity, high_card_class]`, then the turn's class,
+   then the river's — `[]` for no board, and a `CardError` for one, two or more than five cards, a
+   misspelt card or a card dealt twice. It never emits the raw rank. `texture.test.ts` runs the
+   same 38 boards.
+5. **Brute-forced once at implementation, not made a test:** every one of the 22,100 flops plus
+   25,000 random four-card and 25,000 random five-card boards through both runtimes — **0
+   disagreements in 72,100**. Seventy thousand boards through ClickHouse on every `make test-all` is
+   not a unit test; the fixture carries the cases that decide the rule, and the two suites hold the
+   twins to it.
+
+**Consequences.** The key lane calls `textureTags(state.board)` from `nodeKeyAt` — the *visible*
+board at that step, not `ReplayHand.board`, or a flop node would carry the river's tags. A rule
+change is one macro edit, one fixture edit, and a red `texture.test.ts` until the twin follows.
+`MAX_TEXTURE_TAGS` stays 8: six is the most a board yields.
+
+## ADR-084 — The real marts change shape by ALTER, verified against the tables dbt just built, and are refilled by a forced backfill
+
+**Status:** accepted · 2026-09-23 · round 9, lane texture · **run, with the machine to itself,
+12:01–12:22 (wall clock of the session's terminal)** · records the one write to the real
+ClickHouse this round · constrained by ADR-019 (never
+`--full-refresh` a populated corpus), ADR-047 (`REPLACE PARTITION` wants identical structure), the
+`macros/incremental.sql` procedure for a column added without emptying the table.
+
+**Context.** Three tables change columns: `intermediate.int_board_by_street`, `marts.decisions`
+and `marts.player_hands` each lose `flop_connectedness` and gain `flop_high_card_class` and
+`flop_connectivity`; the first two also gain `turn_change` and `river_change`. `insert_overwrite`
+builds a temp table from the model's SELECT and swaps partitions into the target, so the target
+must have the SELECT's structure — names, types **and order** — before the first pass. The
+documented path is `ALTER TABLE … ADD COLUMN … AFTER <the column before it in the SELECT>` and then
+`scripts.backfill --skip-tests --rebuild-from <first day>`, because an ALTER dirties no partition
+and the gate would otherwise leave every untouched day with the type's zero forever
+(`macros/incremental.sql`, "Adding a column without emptying the table"). A dropped column the
+SELECT no longer names is the same case: `DROP COLUMN` makes the structures match.
+
+**The order was not guessed.** `make seed` builds the three tables from the models' own SELECT in
+the test environment. The planned ALTERs were applied to the real tables' `system.columns` lists
+*in Python*, and the result compared with the test tables' lists: **identical, name, type and
+position, on all three** (29, 84 and 47 columns). An adversarial reviewer repeated the check
+independently against the SELECT lists (84 / 49 / 29 names) and against a full outer join of the
+real and test `system.columns`, and found no pre-existing type difference the comparison could
+have hidden. That comparison is the pre-flight check, and it is what the recovery step repeats.
+
+**Backup and recovery, written before the first statement.** The marts are **derived** from
+`core.*` — `hands`, `hand_players`, `actions`, `pot_winners` — which this rebuild never reads
+for writing and never touches. Recovery from a failure at any point is to re-derive: put the
+structure back to the model's order with the same ALTERs, then
+`uv run python -m scripts.backfill --skip-tests --rebuild-from 2023-08-29`. Nothing is lost that
+was not derived. B.5b's `FREEZE` of `core.*` (`b5b_20260921`, 9.1 GB) is untouched and is not
+part of this. A `FREEZE` of the marts themselves was considered and **rejected, on the review's
+argument**: it costs nothing while the parts live and up to 6.3 GB the moment every partition is
+replaced; its restore recipe is not "attach the parts" but reverse the ALTERs, drop every
+partition, copy, chown and attach — because the frozen parts carry the old column set — and all
+of that to protect tables that a 30-minute loop recreates from their source while staying
+queryable. One recovery path, written above, is safer than two.
+
+**If the loop is interrupted**, the force floor lives only in the running process (`advance()`
+raises it pass by pass), so resume with `--rebuild-from <the day after the highest partition the
+last "pass N — … taking K" line built>`; re-running from the first day works and costs the whole
+loop again; re-running **without** the flag reports "caught up" at once and leaves `''` in every
+partition not yet rebuilt, because an ALTER moves no source row.
+
+**The worker.** `make start` had left a parser worker running against the real stack. Its
+hot-path statement is read from `ch/hot_path/*.sql` on first use and cached; the worker had
+derived no batch since it started (its log holds only Kafka session timeouts), so its cache was
+empty and the first upload it processes reads the regenerated file, whose positional
+`INSERT INTO marts.decisions SELECT *` matches the table **after** the ALTER and would have
+failed loudly **before** it. The window was the minutes between `make gen` and the ALTER, no
+upload arrived in it, and no restart is needed afterwards. (The first draft of the lane's note said the
+opposite — restart after the merge — and the review corrected it.)
+
+**The statements.**
+
+```sql
+ALTER TABLE intermediate.int_board_by_street
+    DROP COLUMN flop_connectedness,
+    ADD COLUMN flop_high_card_class LowCardinality(String) AFTER flop_high_card,
+    ADD COLUMN flop_connectivity    LowCardinality(String) AFTER flop_high_card_class,
+    ADD COLUMN turn_change          LowCardinality(String) AFTER turn_completes_flush,
+    ADD COLUMN river_change         LowCardinality(String) AFTER river_completes_flush;
+ALTER TABLE marts.decisions
+    DROP COLUMN flop_connectedness,
+    ADD COLUMN flop_high_card_class LowCardinality(String) AFTER flop_high_card,
+    ADD COLUMN flop_connectivity    LowCardinality(String) AFTER flop_high_card_class,
+    ADD COLUMN turn_change          LowCardinality(String) AFTER turn_pairs_board,
+    ADD COLUMN river_change         LowCardinality(String) AFTER river_pairs_board;
+ALTER TABLE marts.player_hands
+    DROP COLUMN flop_connectedness,
+    ADD COLUMN flop_high_card_class LowCardinality(String) AFTER flop_high_card,
+    ADD COLUMN flop_connectivity    LowCardinality(String) AFTER flop_high_card_class;
+```
+
+then, from `platform/`:
+
+```sh
+uv run python -m scripts.backfill --skip-tests --rebuild-from 2023-08-29
+make dbt-test
+```
+
+**What was measured.**
+
+| | before | after |
+|---|---|---|
+| `marts.decisions` rows | 73,679,949 | **73,679,949** |
+| `marts.player_hands` rows | 54,562,770 | **54,562,770** |
+| `intermediate.int_board_by_street` rows | 3,395,295 | **3,395,295** |
+| `built_by = 'hot'` rows | 0 / 0 | 0 / 0 |
+| hero fingerprint (hands · VPIP · PFR · bb/100) | 19,802 · .229573 · .188466 · −1.37 (STATUS, sessions 24 and 28) | **19,802 · .229573 · .188466 · −1.37** |
+| `sum(hands)` of the rollup vs `player_hands` rows | — | **54,562,770 = 54,562,770** |
+| passes · wall time · failed passes | — | **38 · 1,265 s · 0** (row budget never shrank) |
+| `dbt test` at the end of the loop · `make dbt-test` after | — | green · **29 / 29** |
+| `''` in a new column where a value is due (7 counts on `decisions`, 2 on `player_hands`) | — | **all 0** |
+
+**A fingerprint that moved, and why it is not a regression.** The pre-flight recorded
+`sum(cityHash64(*))` over `marts.stats_daily` (9058702607190188527) and it read
+14177895725407333674 afterwards. `stats_daily` is a **SummingMergeTree** with 176 active parts
+over 160 partitions: two half-rows of one key in two parts hash differently from their sum in one
+part, so a raw-row hash of that table measures merge state, not content. The rollup reads none of
+the four new columns; its *content* is checked above — the founder's own numbers bit-identical to
+two earlier sessions' record, and the hand total equal to the fact table's row count. The
+merge-independent form is `sum(cityHash64(*)) FROM marts.stats_daily FINAL` =
+**16179542610020891838**, recorded here for the next rebuild to compare against.
+
+**The four Done-means checks, on the rebuilt rows** (`user_id = 1`): the 14 `(pairing,
+suitedness, connectivity)` cells match the plan's table row for row (27.18 · 18.13 · 10.45 ·
+8.92 · 6.94 · 5.96 · 5.21 · 5.18 · 3.30 · 3.30 · 3.03 · 1.17 · 1.00 · 0.24 — each within
+0.01–0.02 of the plan's figure, which was taken on `core.hands` without `FINAL`); the five
+high-card classes **20.82 · 33.39 · 22.42 · 17.90 · 5.47**; every real hand dealt `9♣7♥7♦` (23
+hands) reads `oesd`, `5♠3♠A♥` (19) `connected`, `Q♠A♦Q♦` (31) `disconnected`; and the runout
+classes on the real corpus — turn `straight` 28.01 · `flush_draw` 22.16 · `pair` 15.90 · `blank`
+13.81 · `flush` 13.39 · `overcard` 6.73; river `straight` 27.43 · `flush` 23.13 · `blank` 21.78 ·
+`pair` 18.75 · `overcard` 8.91 — within a point of the uniform deal, as dealt cards should be.
+
+**The H.2 node on real rows.** `NodeKey(BB, turn, [BB check, BTN bet 66%, BB call],
+board_texture=["ace", "two_tone", "turn_blank"])` compiles to `position = 'BB' AND street =
+'turn' AND facing = 'bet' AND street_line = 'x' AND last_raiser_position = 'BTN' AND … AND
+flop_high_card_class = 'ace' AND flop_suitedness = 'two_tone' AND turn_change = 'turn_blank'`
+and answers on the population: **n = 2,276, fold 53.6%, call 921, raise 136** (any texture at
+that node: 73,894, fold 53.8%; a flush turn instead: 1,706, fold 54.0%). One trap met on the way
+and worth a sentence: a key that leaves out the BB's own check (`[BTN bet, BB call]`) compiles
+to `street_line = '' AND facing = 'bet'`, a seat that is first to act *and* facing a bet — zero
+rows, whatever the texture. The key lane's `hand/node.ts` keeps the check, and that convention
+(ADR-078: the fixture follows `node.ts`) is what makes the node real.
+
+**Consequences.** Between the ALTER and the pass that rebuilds a given day, that day's rows read
+`''` in the new columns — "before the flop" — and a texture report is wrong for those rows; the
+loop takes the oldest days first and every day is rebuilt exactly once. The API on `:8000` runs
+with `--reload` and picked the registry up on its own; from the moment the key lane's
+`textureTags` wiring landed in `hand/node.ts` until the ALTER, every postflop node query on the
+real marts answered 500 (ClickHouse 47, `flop_connectivity` unresolved) — the replayer lane
+measured it, and it is the reason the rebuild ran before their browser pass rather than after.
+**For any other environment whose marts predate this change** (the precedent is ADR-047's block
+for `built_by`): run the three statements above, then the backfill with `--rebuild-from` set to
+that corpus's first day, then the post-checks.
+
+---
+
+## ADR-085 — A field added to `NodeKey` ships with a data migration; a stored key stays canonical
+
+**Status:** accepted · 2026-09-23 · plan step **H.1** · builds on ADR-031, ADR-078.
+
+**Context.** ADR-031 stores a range at its situation as the key's **canonical JSON, every field
+present**, and `api/range_library.py:81` finds "my chart" at a node by `StoredRange.node_key ==
+key.canonical()` — a JSONB equality over the whole document, served by the btree on
+`(user_id, node_key)`. ADR-078 adds three fields. A key saved before them has eight fields, the key
+a client now sends has eleven, and JSONB equality says they differ: every stored range would have
+vanished from the compare page and the analyzer, **silently** — no error, an empty list. The plan
+step did not mention this. `analyses.node_key` stores the same document; heuristics store none
+(they read their analysis's key, `api/heuristic_store.py:129`). Counted read-only on 2026-09-23:
+the real Postgres holds **0 ranges, 0 analyses, 0 heuristics** (31 users), so nothing was at risk
+*today* — the decision is for the next field, not this one.
+
+**Decision.** A data migration. `b9c0d1e2f3a4` runs `UPDATE t SET node_key = defaults || node_key
+WHERE node_key IS NOT NULL AND (any of the three is missing)` on `ranges` and `analyses`: the
+stored key's own values win (`||` keeps the right operand's), a second run changes nothing, and the
+downgrade strips the three (lossy, backup noted). **The rule:** a field added to `NodeKey` ships,
+in the same commit, with a migration that writes its default into every stored key. The canonical
+form stays "every field present" (ADR-031), the index stays usable, and old and new spellings are
+equal because the rows were brought to the new spelling, not because equality was weakened.
+
+**Alternatives.** *A canonical form that omits fields at their default*, so an eight-field row
+equals an eleven-field key — rejected: it contradicts ADR-031's "every field present", both twins'
+`canonical()`/`nodeKeyJson` and the fixture would change, and it would still need a migration,
+because the stored rows already carry `"villain_position": null` and every other default spelled
+out. *Normalising at query time* (`(node_key || defaults) = :key`) — rejected: it defeats the
+index and leaves a permanent special case in the one query that must stay boring.
+
+**Consequences.** `tests/integration/test_node_key_migration.py` loads the revision as a module,
+saves a key the old way, proves the miss, runs the revision's own statements, proves the hit and
+the idempotence, and checks an analysis reopens either way. Reading a stored key never needed the
+migration — `NodeKey.model_validate` fills defaults — only equality did; the Dexie cache, the
+`?node=` link and a `poker-ranges/1` backup all parse old keys for the same reason
+(`parseNodeKey` fills a missing field and rejects only an *unknown* one).
+
+## ADR-086 — The sequence is this street; `line_so_far` is the earlier streets; a key carries one account of a street
+
+**Status:** accepted · 2026-09-23 · plan step **H.1** · implements ADR-078 gaps 3 and 5.
+
+**Context.** `hand/node.ts` keeps only the last street's decisions in `action_sequence` (a turn
+node carrying the preflop and flop steps would describe a line no seat took, ADR-028), while the
+fixture's flop check-raise entry carried the preflop steps under `street: "flop"` and compiled to
+`facing eq "raise"` where the seat faces a bet. Neither could say "opened, bet the flop, bet the
+turn" — the registry's `line_so_far` (`'r/b/b/'`) existed and `node_filter` never used it.
+
+**Decision.** `NodeKey.line_so_far: str | None` in the registry's line alphabet (`LETTER` moved to
+`nodes.py`; the TypeScript twin has `LINE_LETTERS` and `ownLine`). Three rules, enforced by the
+model in both twins and pinned by the fixture's invalid entries: **the field is postflop only**
+(preflop there is no earlier street — the sequence is the whole line, and `preflop_line` already
+filters it); the line's `/` count equals the street's index (`'r/b/'` is a turn line; on a river
+key it is "a street short", and the message says so); and its last segment equals hero's own
+letters in `action_sequence[:-1]` — the sequence already says what hero did on this street, so the
+line may not say otherwise. Hence **a key carries one or the other in the filter, never both**:
+`_line_leaf` emits `line_so_far eq` when set, else `street_line`/`preflop_line eq` as before. The
+fixture entry was corrected to its flop steps with `line_so_far: "c/x"`; the code was not changed
+to fit it.
+
+**Why postflop only, found by review.** The first cut let a preflop key carry `line_so_far='r'`
+(opened, answering a 3-bet) and the replayer spelled a first decision `''`. Both are *determined*
+by the sequence, so `''` and `null` were two spellings of one situation; ADR-031's lookup compares
+spellings, every chart the editor or an importer saves spells it `null`, and so no replayer preflop
+key could ever find a library chart again — a regression on the most common charts (RFI, 3-bet).
+Refusing the field preflop removes the second spelling instead of normalising it quietly.
+
+**Alternatives.** *Keep every street in the sequence and derive the line* — the sequence would
+have to carry street markers, every consumer of `action_sequence` (labels, the editor, the facing
+node, the importers) would change, and the pool would still need the line as one string.
+*No consistency rule* — a key could name two different lines for one street and return zero rows
+without a word, the failure mode ADR-078 exists to remove.
+
+**Consequences.** `nodeKeyAt` fills the line from the whole hand on a postflop node (one segment
+per street up to the node's, empty where hero has not acted) and leaves it null preflop. The
+label (`nodeKeyLabel`) does not yet mention the line; the cube (H.4) keys on it. **A postflop
+replayer key now carries a line, a pot type and texture tags that a chart authored in the editor
+or imported from a folder does not**, so the exact-equality lookup finds such a chart from a
+postflop replayer node only when the chart was saved from the replayer's own key ("Compare here"
+→ save). That was already true of `stake`, `eff_stack_bb` and `board_texture` before H.1; the
+proper answer is a lookup that treats a stored chart's unset fields as "any" — a decision of its
+own, recorded as a follow-up in POKER_STATUS.md's round-9 block, not taken here.
+
+## ADR-087 — `size_bucket` is a registry bucket name of the bet in front, postflop only; the client buckets with the registry's ranges
+
+**Status:** accepted · 2026-09-23 · plan step **H.1** · implements ADR-078 gap 4; builds on ADR-028.
+
+**Context.** Sizing moved the measured reg over-fold from +15.9 to +5.2 and was not a predicate:
+`ActionStep.size_pct` was carried and never became a `facing_size_pct` filter, pinned negatively
+at `tests/test_node_filter.py:67`. ADR-028 puts every bucket boundary in `dimensions.yaml`, reaching
+the client through `/v1/definitions`, with no boundary written in TypeScript. The cube (ADR-079)
+is keyed on a size *bucket*, and a key must be able to name a cube row.
+
+**Decision.** `NodeKey.size_bucket` is the **name** of a `facing_size_pct` bucket (`small`, `mid`,
+`large`, `pot`, `overbet`) — `SIZE_BUCKETS` in `nodes.py`, pinned to the registry's bucket names
+by `tests/test_nodes.py`, mirrored in `node.ts` and carried by the fixture. `node_filter` turns
+it into the same `between` leaf `_bucket_of` builds for `eff_stack_bb`, through `_bucket_named`,
+which reads the boundary from the registry and raises `RegistryError` for a name it does not have
+— never an empty answer. **A size means two things:** preflop it is a raise-to in big blinds and
+lives on the step (`size_bb`); postflop it is a fraction of the pot before the bet (`size_pct`,
+`amount / potBefore`, exactly dbt's `facing_size_pct`). The bucket is the postflop meaning, so a
+preflop key refuses `size_bucket` — the decision fact has no faced-raise-to column (`raise_to_bb`
+is the seat's *own* raise), and `facing_size_pct` preflop is a raise over the blinds that the
+buckets do not describe. `tests/test_node_filter.py:67` now pins that hero's *own* size is never a
+filter; the positive half is in `test_node_filter_situation.py`. On the client, `sizeBucketOf(size,
+buckets)` takes the registry's ranges (`Dimension.buckets` from definitions; low inclusive, high
+exclusive, a null low is 0, a null high open — `_bucket_of`'s rule) and `nodeKeyAt(hand, i, {
+sizeBuckets })` fills the bucket of the last bet or raise by another seat on this street; without
+the ranges it stays null.
+
+**Alternatives.** *A number on the key bucketed by the server* — two keys facing 40% and 50%
+would be different situations to the library and the same node to the pool, and a cube row could
+not be named. *Boundaries in TypeScript* — forbidden by ADR-028 and the drift it invites.
+
+**Consequences.** The replayer passes no buckets yet (`hands/panels.ts`, `HandReplayer.vue` call
+`nodeKeyAt(hand, index)`), so a replayer node carries no size bucket until a prop hands the
+buckets over — recorded by the replayer lane. `NodeKeyEditor.vue` has no control for the field.
+A `facing_raise_to_bb` column would make the preflop meaning filterable (a follow-up, POKER_STATUS.md's round-9 block).
+
+## ADR-088 — The replayer keys a node from the whole hand, not from the street
+
+**Status:** accepted · 2026-09-23 · plan step **H.1** (with H.3's `textureTags`) · amends ADR-032.
+
+**Context.** `nodeKeyAt` kept only the last street's decisions (right for the sequence, ADR-086)
+and hard-coded `board_texture: []` because a guess made client-side would not match the pool's
+bucketing. With ADR-078's fields and the texture twin (H.3, one fixture both suites parse), the
+client can now say everything the key can say.
+
+**Decision.** `nodeKeyAt(hand, index, options)` derives from the whole hand so far: `line_so_far`
+(hero's decisions street by street, excluding the one being keyed; null preflop, ADR-086);
+`pot_type` **after preflop only** — at a preflop node the pot is still being built, and a filter
+on how it ends would be a filter on the future — counted as dbt's `hand_arrays.sql` counts it (0
+raises `limped`, 1 `srp`, 2 `3bet`, 3 `4bet`, more `5bet_plus`; an all-in counts as a raise, as
+the line alphabet says); `size_bucket` with the registry's ranges (ADR-087), **bucketing the
+unrounded ratio** `amount / potBefore` exactly as the fact stores `facing_size_pct` — the step's
+`size_pct` is rounded to three places for the wire, and bucketing the rounded value keyed a
+0.85-into-2.30 bet (0.36957) one bucket up from its own row; **the effective stack before the
+decision**, not at the deal — the fact's `eff_stack_bb` is min(hero's chips behind, the largest
+live opponent's) before the decision, and on a river node after three streets of betting the
+deal-time stack put a quarter of the node's rows in another bucket; and `board_texture =
+textureTags(board face up at this step)` — never the whole board, or a flop node would carry the
+river's tags. A malformed board throws: that is a parser bug, not a situation. `facingNode()`
+(the defender's node built from hero's key) carries `pot_type` and the texture through and leaves
+the defender's `line_so_far` and `size_bucket` null: the defender's own earlier-street line is not
+in hero's key, and copying hero's would name a line the defender never took. **The editor drops
+what it cannot show:** `NodeKeyEditor` has no control for the three fields, and a replayer key
+arrives in it through "Compare here"; an edit of the street or a step now resets `line_so_far`
+(and `size_bucket` when the street becomes preflop), because a line kept invisibly would fail the
+one-account rule on the next request and leave the page answering 422 with nothing to clear it.
+
+**Consequences.** A replayer node now reaches the pool with its line, pot type and texture; the
+size bucket arrives once the buckets are passed. Every pool node query against the real marts
+returns ClickHouse code 47 until the texture lane's rebuild lands the new texture columns — a
+state of the mart, not of the key.
+
+---
+
+## ADR-089 — A clustered report is a two-level aggregate the compiler emits, and nothing about a player leaves the database
+
+**Status:** accepted · 2026-09-23 · plan step **G.3** · builds on ADR-076 (the measurement), ADR-040 (intervals on cells), ADR-022 (the compiler is the security boundary).
+
+**Context.** ADR-076 measured that a pool frequency's rows are decisions by players and the same player contributes many: on the BB facing a flop c-bet, regs only, 556,112 decisions from 7,708 players, the standard error clustered on the player is 0.143pp against a binomial 0.067pp. The interval that number needs is the ratio estimator's, and it needs per-player sums — `n_i`, `x_i`, and their squares — while every node tier asks its question through `run_report`, whose SQL groups rows straight into groups and whose registry puts `player_key` on the rollup only. Returning 7,708 per-player rows to Python was ruled out before the design started.
+
+**Decision.**
+
+1. **`ReportRequest.cluster: "player" | None`.** A request that names it is compiled by `stats/cluster_query.build_clustered` into two levels: the inner `SELECT` groups by the **bucketed** group columns and `player_key_norm` and emits, per stat, the per-player numerator and denominator (`<code>__x`, `<code>__n`) plus the hands as a HyperLogLog *state*; the outer `SELECT` reproduces the flat builder's `<value> AS code, <n> AS code__n` from the sums, merges the hands state, and adds five columns per proportion or per-100 stat — `__x` (the numerator sum), `__k` (players with an opportunity), `__xx`, `__xn`, `__nn`. Scope, filter and cohort are the same `WHERE` terms as the flat query (`stats/query.where_terms`, shared so the two shapes cannot disagree about who sees which rows); every value is the same bound parameter; every identifier is the same registry code. `stats/service.build` dispatches; `validate_request` builds the clustered shape too. It needs a `confidence` level (it changes the interval, not the value), the population dataset, and **no `player_key`** — one player's report is not a pool inference and would collapse to `K = 1`.
+2. **The bucket goes inside.** The first design grouped the inner level by the *raw* dimension and bucketed outside. That splits a player whose rows fall in two raw values of one bucket into two pseudo-clusters — `K` counted twice, the cross term dropped from `Σ(x_i − p·n_i)²` — and the interval comes out narrower, silently, on every bucketed clustered report. The panel confirmed it on the server with `numbers()`; the inner level now selects `group_expr(dim)` and the outer groups by the bucket name alone. `stats/order.py` already refuses an `OrderMatch` on a bucketed dimension, so ordering compiles unchanged.
+3. **The facts, never the rollup.** The rollup could answer — its per-(player, day) sums add up to exact per-player `x_i`, `n_i` — but it is read under a `WITH` prologue over its two producers (ADR-047) and nothing needs that nested inside a per-player aggregate yet. `stats/router.plan(cluster=True)` drops to the facts, like `dispersion` does.
+4. **What the sums become** is `stats/cluster.py`'s: `S = Σx_i² − 2p·Σx_i·n_i + p²·Σn_i²`, `Var_c = K/(K−1)·S/N²`, `DEFF = Var_c / (p(1−p)/N)` floored at 1, and the interval is **Wilson on the effective sample `N / DEFF`** — Wilson's shape at the ends, never a zero width. `Interval` gains `method: "cluster"`, `players`, `effective_n` and `design_effect`; `Cell` gains `players`, so a sample of eight players has a size even when it earns no band. A per-100 mean is clustered the same way (normal on the cluster-robust SE) and reports no design effect, since a per-player sum has thrown the per-row spread away.
+
+5. **A stat must add up over players.** The outer sums reproduce the flat value only for a count, a sum, and sums and differences of those; a product or a quotient inside the expression does not (the sum of per-player ratios is not the ratio of the sums, and per-player `nullIf` NULLs would vanish into the outer `sum`). Every built-in stat adds up — a test pins it — and a custom stat that does not is **refused by name** (`cluster_query.adds_up`), because a number that is quietly wrong is the one failure this whole step exists to prevent. Found by the diff review, not by the design panel.
+
+**Measured, through the engine, read-only.** Tier 1's own request on ADR-076's node and cohort: `N = 556,112`, `K = 7,708`, fold `45.37%`, interval `[45.09%, 45.65%]`, SE `0.1429pp`, `DEFF = 4.586`, effective sample `121,269`; call `4.686`, raise `5.848`; 2.1 s on the 4 GB node against 1.6 s flat — the per-player aggregate is 94k groups, not a second scan. Whole-field, the widest possible inner level (13.7M BB decisions, ~94k players) peaks at 264 MB against the tenant profile's 2.5 GB (the panel's read). The cache key is the request's canonical JSON, and `cluster` is a field, so a clustered and a flat question never share an entry.
+
+**Recorded, not fixed.** *Overflow*: `Σx_i²` on `UInt64` wraps silently past `1.8×10^19`; per-player counts are bounded by a player's decisions (~10^5), so the sums sit five orders below it, and a per-100 stat's `Decimal(38, 4)` raises rather than wraps. *Rollback*: `Interval` and `Cell` are `extra="forbid"`, so rows this build caches with the three new fields fail validation under the previous build until the cache TTL — flush `report:*` if rolling back. *ICC*: ADR-076 wrote "about 0.24"; from the measured sums the effect is cluster-size-driven — `Σn_i²/N = 210` rows per effective player (mean 72, median 39, p90 161, max 1,750) — and `DEFF = 1 + (210−1)·ρ` gives **ρ ≈ 0.017**. The number ADR-076 gates on, 4.59, is unaffected; the intuition "players are very consistent" should read "some players play a lot".
+
+**Alternatives.** *A `groupArray` of per-player pairs reduced in ClickHouse* — arcane SQL and the same scan. *A separate node-only query path* — would have to repeat tenancy, the dataset rule and the cache, which is what the node tiers exist to not do. *Clustering on the rollup too* — deferred, see 3.
+
+---
+
+## ADR-090 — The gate is the wider arm of the binding action's interval, and `min_n` is what this node needs
+
+**Status:** accepted · 2026-09-23 · plan step **G.3** · amends `analysis/pool/node_query.py` (now `node_gate.py`) · constrained by ADR-067 (the verdict is the server's), ADR-053 (a field's meaning does not move under a reader).
+
+**Context.** With the interval in hand (ADR-089), tier 1 has to say `enough` from it. Three questions had to be settled: what "width" means for an asymmetric interval, what stops a node besides width, and what happens to `min_n`, which six client files print in the sentence "N of the min_n needed".
+
+**Decision.**
+
+1. **The width is the wider arm.** Wilson is asymmetric on purpose; at `p = 1` the whole interval is below the point and the symmetric half-width would pass a band the reader cannot act on. `stats/cluster.wilson_arm` is `max(p − low, high − p)`, and `MAX_HALF_WIDTH = 0.05` (±5 points at 95%) is judged on it. `needed(p, DEFF, bar, level)` bisects the same function on the effective sample and scales back by the design effect.
+2. **Three things stop a node.** Fewer than `MIN_N = 100` rows: nothing is measured yet and the answer carries the count and nothing else. Fewer than **`MIN_PLAYERS = 30`**: the engine offers no interval at all — the `K/(K−1)` variance is itself noise from a handful of players, and the normal quantile understates Student's t by 42% at K = 5 — so `enough` is false however many rows there are; this is `stats/interval.MIN_N_MEAN`'s rule with the players as the units. And the binding action's arm past the bar.
+3. **`min_n` keeps its name and becomes the requirement.** It is the rows at which, *at this node's own design effect*, the binding action's interval meets the bar — computed by the same bisection the gate uses, so `enough ⇔ sample_size ≥ min_n ∧ players ≥ min_players` by construction and the two can never disagree. Under the floor it is the pool's typical requirement, `needed(0.5, DEFAULT_DESIGN_EFFECT = 4.59, 0.05)` ≈ 1,750, not the floor itself: a reader told "57 of the 100 needed" and then, at 100, "100 of the 1,800 needed" would have been given one field with two meanings, and the switch at the number they were just told. Every sentence that prints it (`PoolDataBadge`, `analyze/context.ts`, `hands/reveal.ts`, `ranges/compare.vue`, `PoolBlockers.vue`) stays true unchanged, and tier 3 repeats tier 1's `min_n` in **both** states (the design panel caught the withheld branch falling back to the constant; the diff review caught the enough branch doing the same, which would have given one field two meanings on one route); the EQR repeats it when tier 1 withholds and keeps its own count gate on the action's rows otherwise, where `sample_size` and `min_n` are then the same sample. The answer also carries `players`, `design_effect` (the binding action's, when measured), `max_half_width` and `min_players`, so a client can say what "enough" meant without a constant of its own.
+4. **The maps are shipped above the floor whether or not `enough`.** "A frequency without its interval is not shipped" (ADR-076) reads the other way too: a measured `fold 45%, ±12` at 1,200 rows is not fabricated, and "1,200 of the 1,800 needed" with no noun is the number a reader cannot act on. Under 100 rows the maps stay empty; above it `actions`, `frequencies` and `intervals` are filled, `enough` stays the verdict, and every reader guards on it before treating a number as one to act on (all nine were checked). The badge can now say *why* a number is withheld.
+5. **`needed` is an estimate at the current design effect**, and says so. A node that grows by the same players playing more hands raises its design effect as it grows and shrinks its interval less than the number promises; one that grows by new players shrinks it as promised. `players` is shown beside `min_n` for that reason.
+
+**Measured.** On ADR-076's node `min_n = 1,801` (binding: call, DEFF 4.686), against ADR-076's "wants n ≈ 1,800". On a hand-worked node of twenty players who always fold and twenty who never do — 400 rows, DEFF 10.26, 39 effective — the interval is `[35.03%, 64.97%]`, `enough` is false, and `min_n` is 3,901.
+
+**Not done, recorded.** An action nobody took at a node is not in the maps, so "the pool never raises here" carries no bound; legal-but-unobserved and illegal actions are indistinguishable from the decision fact, and a Wilson-at-zero interval for `check` when facing a bet would be nonsense. A zero-row answer is live server behaviour (`GROUP BY ()` on an empty set returns no row on 25.8 with the analyzer on), so `result.rows[0] if result.rows else None` is the path, not a guard.
+
+---
+
+## ADR-091 — The registry's kind picks the gate, never the estimator: a dealt sample is not independent at a node either
+
+**Status:** accepted · 2026-09-23 · plan step **G.3** · amends ADR-076's paragraph "the correction is not uniform".
+
+**Context.** ADR-076 reasoned that what a player is *dealt* — a 169-class bucket — is randomised by the deck, so its between-player correlation is ≈0, its design effect ≈1, and `MIN_BUCKET_N = 200` must not be scaled by 4.59. The first design took the second half literally and gave `kind = "dealt"` stats the plain binomial interval under `cluster`.
+
+**Measured, read-only, on ADR-076's node and cohort, over the 124,494 revealed rows from 7,624 players:** the design effect of "pocket pair" is **1.41**, of "suited" **1.30**, of "an ace" **1.29**. The deck randomises what is dealt preflop; who *arrives* at a node, and who reaches showdown there, is selected by each player's choices, so a class at a node carries a between-player component. Plain Wilson would be 14–19% too narrow on tier 2's weights.
+
+**Decision.** `Stat.kind` and `CustomStatSpec.kind` (`chosen` by default, `dealt` declared, never inferred; carried on `ResolvedStat` and `StatMeta`, serialised by `/v1/definitions`) decide **which gate** a sample must pass, not how its interval is computed:
+
+- **chosen** — a frequency of what the seat did: gated on its interval's wider arm (ADR-090).
+- **dealt** — a showdown range, a class bucket: gated on a **count** — `MIN_N` revealed rows for tier 2's range, `MIN_BUCKET_N = 200` revealed rows of a class before tier 3 reweights it or the EQR shows a per-class number — and never on the design effect of a chosen stat. `analysis/pool/node_gate.verdict_for(kind, …)` is the one place the choice is made; tier 2 calls it with `dealt`, tier 1 with `chosen`.
+
+Under `cluster` every proportion gets the clustered interval, measured and floored at 1, so a genuinely independent sample pays nothing for it. ADR-076's *conclusion* stands — `MIN_BUCKET_N` is a count and is not scaled — on a corrected premise: not "the deck makes rows independent" but "a bucket's threshold is a count because a bucket is a slice of a sample the gate above it already judged".
+
+**Consequence.** Every built-in stat is `chosen`; no YAML entry changed, `make gen-check` is unaffected (`SEED_COLUMNS` lists the seed's columns explicitly), and the TypeScript `Stat` type ignores the new key.
+
+---
+
+## ADR-092 — Seven labels partition the pool, five groups are unions of them, and either is one key away without saving
+
+**Status:** accepted · 2026-09-23 · plan step **G.4** · builds on ADR-077 (the seven), ADR-080 (the five) · amends ADR-077's table: the label `other` is spelled **`mid`**.
+
+**Context.** ADR-077 named seven cohorts and ADR-080 keyed the cube on five groups. Three things were not decided: how the seven are proven disjoint and total, how a group that is not a rectangle in the (VPIP, hands) plane (`other` = the mid-VPIP label ∪ `reg_m`) is evaluated by an engine whose cohort is a conjunction of rules, and how a reader who never saved "reg" asks for it when a cohort is a Postgres row addressed by UUID (`api/routers/pool_nodes.py`).
+
+**Decision.**
+
+1. **The seven, in `analysis/pool/presets.yaml`**, each with its `group` and its measured fold-to-flop-c-bet **with the sample and the date** in the description ("45.4% over 556,112 decisions, measured 2026-09-22"), because a bare frequency is the thing ADR-076 does not ship. `tests/test_cohort_presets.py` proves the partition: the rules are axis-aligned thresholds, so a check at every threshold, just under, just over and far past it, on both axes, visits every cell and every edge of the plane — a proof for rules of this shape, and one that grows with the rules. On the real pool the seven sum to **94,276 = every player with a VPIP row** (0 players lack one): `reg` 7,711 · `reg_m` 9,509 · `mid` 8,130 · `fish` 1,640 · `reg_s` 25,859 · `mid_s` 18,149 · `fish_s` 23,278. **71% of the pool is under 200 hands.** `tests/integration/test_pool_cohorts.py` re-proves the sum on the built rollup.
+2. **`other` → `mid`.** ADR-077's label `other` (VPIP 25–35, ≥200 hands) and ADR-080's group `other` (that label plus `reg_m`) would have been one word with two memberships, and the fact that `reg`/`reg` and `fish`/`fish` collide *harmlessly* would have taught a reader the spelling does not matter — until `other`. The group key is the durable one (it becomes a column value in `marts.node_ranges`, plan H.4), so the *preset* is renamed: `mid` and `mid_s`, label "Mid-VPIP (25–35)". Nothing shipped those codes. **`regs` is also renamed `reg`**, as ADR-077 and ADR-080 spell it; the client treats codes as data but writes them into `/pool?cohort=preset:<code>` links, so a bookmarked `preset:regs` now fails with the "deleted or typed by hand" sentence — accepted, the product is unshipped and the sentence is nearly right.
+3. **A group is a `CohortUnion`** — `{any: [CohortSpec, …]}` beside `CohortSpec` on `ReportRequest.cohort`, told apart by the field it carries — and `stats/query.cohort_subquery` compiles it as **one** rollup scan, `HAVING (rules) OR (rules)`; a single-preset group hands back that preset's own `CohortSpec`, so `group:reg` and `preset:reg` are the same document and the same cache key. `group:all` is no cohort at all (`None`). The group→presets map lives in `analysis/pool/cohorts.py` and nothing under `stats/` resolves a group key, which keeps the layer contract (ADR-023).
+4. **One parameter, the client's own key scheme.** `?cohort=preset:<code>` or `?cohort=group:<key>` on the four node routes and `/v1/pool/stats`, beside the unchanged `?cohort_id=<uuid>`. The client already keys a shipped cohort `preset:<code>` (`pool/stats.ts#cohortChoices`) and the replayer's `RevealGroup.key` is one string, so a chooser's key is sent as it stands; `pool/api.ts#cohortQuery` maps it to the right parameter. Both parameters at once is a 400 in words; an unknown code or key is a 400 that lists the ones there are; on `/v1/pool/stats` a cohort in the body *and* in the query is a 400 rather than the silent override the route used to perform. `GET /v1/pool/presets` gains `cohorts[].group` (what a seat badge reads, plan H.8) and `groups: [{key, label, cohorts}]` (what a selector reads; `all` lists all seven, which is literally true and lets a client verify totality). The shipped presets are loaded and compiled once per process (`cohorts.shipped()`, 6 ms otherwise, on every replayer step).
+
+**Not done, recorded.** `/v1/hero/leaks` still takes `cohort_id` only; the same resolver applies and lives in `api/routers/pool.py`, where `hero.py` already imports from — one line, the hero module's. A `CohortUnion` *can* be sent in a `/v1/reports/run` body or stored in a saved report; the engine answers it and the client's `describeRules` has no words for it. The labels are computed over the whole history, including the hands being analysed (ADR-077's endogeneity note stands).
+
+---
+
+## ADR-093 — The reveal is what the field showed, not what your read implies; groups are asked on a press, one after another
+
+**Status:** accepted · 2026-09-23 · plan step **H.7a** · **Constrained by** ADR-033 (a showdown
+range says what it is), ADR-035 (tier 3 estimates a likelihood ratio and grades a *prior*),
+ADR-067 (the client does not decide what the server decided), ADR-079 (a tenant may hold four
+queries).
+
+**Context.** Spec §15's order — guess, then reveal — was already decided for the analyzer; the
+founder wants it in the replayer for the pool's *range*, before the cube exists. Two existing
+services could draw the pool's range at a node: tier 2 (`showdownRange`) and tier 3
+(`estimatedRange`, which takes a prior). The obvious pairing — the reader's painted guess as the
+prior, tier 3 as the reveal — is wrong twice over, and choosing between the tiers is the decision.
+
+**Decisions.**
+
+1. **The reveal is tier 2.** A reveal must be **independent of the guess**. Tier 3 reweights the
+   prior it is handed and keeps every class the prior omitted at zero (ADR-035: "it would discard
+   the shape inside a class" — the reconstruction is a per-class multiplier on the prior), so a
+   read that leaves 22 out can never learn that the field has 22 there. A reveal that depends on
+   the guess is a mirror, not a reveal. Tier 2 is a direct measurement with a stated bias
+   (`covers` on the badge, ADR-033), and it is the same answer whatever was painted.
+2. **Tier 3 grades the wrong thing here anyway.** Its `implied_frequency` against
+   `observed_frequency` is a reading on a *pre-action* prior — "the range you gave implies the
+   field would bet more often than it does". A read of the range *at* a decision is a post-action
+   picture; feeding it in as a prior makes "too heavy on hands that bet" the expected outcome of a
+   good read, not an error. So the check is not shown on the reveal. Tier 3 is used where its
+   contract fits: the blocker split (ADR-094), whose prior is the range *before* the answer.
+3. **The question is worded "before".** The pool's filter is everything in front of the acting seat
+   and never its own last step (`node_filter.py`), so tier 2 at `nodeKeyAt`'s node is the hands the
+   seat **arrives at this decision with**, whatever it then does. The panel asks exactly that
+   ("What is CO holding when the action reaches them here — before they bet?") and the `hand` tool
+   entry says it too. A reveal worded "after the bet" would be a claim the data does not make.
+4. **On a press, groups one after another, never per step.** One step already fires up to four
+   ClickHouse queries against a ceiling of four (ADR-079, H.0). The reveal fires only on Reveal,
+   asks the whole field first (so there is always a baseline) and then the one chosen group, and
+   the Reveal button is off until something is painted — the decided order is enforced by the
+   control, not by a note. Each group is two queries (tier 2 calls tier 1 for `covers`); two groups
+   at most; a late answer for a situation the reader has left is dropped by the same
+   situation-marker guard `askThePool` uses; a real answer is kept per (situation, group) so a
+   second press asks nothing, and a refusal is never kept.
+5. **The group chooser renders what the server lists**, one `<select>` shared by the reveal and
+   the blocker panel through `v-model:group`: the field, then ADR-080's five behaviour groups from
+   `GET /v1/pool/presets` (`groups[]`, addressed as `group:<key>` — the inference lane's round-9
+   addressing, with `all` listed once as the field), then the reader's saved cohorts from
+   `GET /v1/pool/cohorts`. Each list can fail on its own and the panel says which is missing; the
+   labels are the server's, and the key is sent as it stands (`cohortQuery` decides `?cohort=` or
+   `?cohort_id=`). Nothing computes `enough` in the client (ADR-067): the withheld state is the
+   server's `enough: false`, rendered with the server's own counts ("57 of the 20,000 decisions at
+   this spot were turned over, and 100 are needed").
+6. **A refused group is a sentence beside the answered one**, in `hands/study.ts`'s voice, with the
+   button as the retry: the field's answer stands when the cohort's ask fails, and the diff draws
+   whatever answered.
+
+**Alternatives.** *Tier 3 with the read as prior* — rejected above, twice. *Ask every saved cohort
+at once* — the ceiling. *Reveal per step* — ADR-079's whole point. *A per-group tab instead of a
+diff* — `RangeDiffView` already draws N ranges against a reference, and "more in your read / more
+in the pool" is the sentence the exercise exists to produce.
+
+**Consequences.** The replayer now asks tier 2, which it never did. Every postflop node the
+replayer keys carries the texture lane's tags, so on the real corpus the reveal's sample is per
+board class from the moment the rebuilt mart exists — and until then it 500s (measured in the
+browser by the replayer lane on 2026-09-23, before the rebuild landed). When H.4/H.5 land, the cube answers the same `showdownRange` call; the
+panel does not change. H.7b (the exploit panel) follows H.6.
+
+---
+
+## ADR-094 — The defender's range is cut at the pool's fold rate, by equity; a per-class split at a facing node is a number nobody measured
+
+**Status:** accepted · 2026-09-23 · plan step **H.7a** · **Builds on** ADR-033 (never a
+fabricated number), ADR-034 (`facingNode()`, and "a reveal says where it comes from"), ADR-035
+(what showdown data can and cannot say), ADR-074, ADR-079.
+
+**Context.** `BlockerPanel` wants villain's calling range and villain's folding range. On the
+trainers they are hand-painted; H.7 asked for a pool-derived split via `facingNode()`. The seat
+that has to answer a bet is at `facingNode(node)` — the same street and steps, seats swapped,
+villain's answer as the last step.
+
+**The design that was built first, and why it was taken out the same day.** Tier 3 at the facing
+node, asked once as `call` and once as `raise`, gives a per-class `action_rate = P(action) × L`;
+summing the two looked like `P(continue | class)`, and the prior (the reader's chart, else the
+pool's tier-2 range) could be cut by it combo by combo. The round's adversarial review did the
+algebra: hole cards are seen at showdown and a seat that folds is almost never shown, so the
+revealed hands at a facing node are the continuers, and the likelihood ratio then only tells
+callers from raisers. With no folds revealed, `P(call) × L + P(raise) × L'` collapses to the
+node's own continue rate **for every class** — `splitByRates` would return `0.45 × prior` and
+`0.55 × prior` everywhere and the blocker score would be 0 for every candidate: a table that
+ranks nothing under a sentence that said "cut by the pool's own rates". What fold information the
+ratio does carry comes from the one seat whose folded cards are recorded — the founder's own —
+which would present the founder's folds as the pool's. That is exactly the shape of number
+ADR-033 forbids. It was removed before it reached the browser.
+
+**Decisions.**
+
+1. **The pool supplies the share; the chart supplies the composition; the ordering is a stated
+   rule of thumb.** One ask on a press: **tier 1** at the facing node — how often that seat folds,
+   calls and raises — which is unbiased because every decision records its action, and works per
+   group. The reader's chart for the defender is then cut at `1 − fold` **by its equity against the
+   bettor's range**, taking the strongest combos until the share is met: `defendingSet` from
+   poker-core, the very construction the MDF panel already uses, with the pool's measured rate in
+   place of the theoretical MDF. The provenance line says both halves in one breath: "The pool
+   folds 43.2% of the time here as the whole field, so 56.8% of your chart for BB is taken as what
+   continues — its strongest 56.8% by equity against BTN's range. The rate is measured; the
+   ordering is a rule of thumb, and no solver was asked."
+2. **What is needed, and what is said when it is missing.** The rate alone is shown with its
+   badge (tier 1, `n`, `min_n`). Cutting needs the reader's chart for the defender — the library's
+   "villain" node, only when it really is the defender's seat, the same guard the MDF panel has
+   (ADR-068) — and that chart's equities, which the calculator produces once both charts exist.
+   Each absence is its own sentence, and a split asked before the equities land is cut the moment
+   they do, without asking again.
+3. **Withheld stays withheld.** Under `min_n` the badge and the words stay and nothing is cut.
+4. **A combo the engine gave no equity is in neither half** (blocked by the board, or outside the
+   chart), rather than counted as a fold.
+5. **The rows are controls, said so.** A picked row is rung on the bettor's own grid and a new
+   ask clears both the table's pin and the host's ring (`comboSelect` carries `null`). The
+   provenance names the group the split was **asked for**, not the one the chooser has since moved
+   to. `BlockerPanel` gains `selectable` (ADR-096).
+
+**Alternatives.** *Tier 3 per class* — above. *Tier 2's shown range as the defender's prior* —
+the same bias: 69% continuers where the node has 45%, and its folding slice is one player's.
+*Tier 1's fold rate applied uniformly to the chart* — a split with no ordering is not a blocker
+table either; equity order is the assumption every MDF chart already makes, and it is named.
+
+**Consequences.** The blocker table on the replayer is fed from the pool for its *rate*, which is
+the part the pool can measure at a facing node, and from the reader's chart for its *shape*, which
+is the part the reader can be held to. One ClickHouse query per press. A per-class split becomes
+honest only where folded hands are revealed — the founder's own seat, which is the hero surface's
+question, not the pool's.
+
+---
+
+## ADR-095 — Code 202 is the budget working: a 429 that names itself, and the replayer's sentence is reserved for it
+
+**Status:** accepted · 2026-09-23 · plan step **H.0** · **Amends** ADR-043 (the per-tenant budget's
+refusal table) and the F.12c sentences in `hands/study.ts`.
+
+**Context.** ADR-079 found that `max_concurrent_queries_for_user` refusing the fifth query
+(ClickHouse code 202) was absent from `stats/tenancy.py`'s `REJECTIONS`, so a fast-stepping reader
+met an unclassified 500. The client had already worded that 500 as "stepping quickly through a
+hand asks several questions at once" (`UNDER_LOAD`) — a correct guess about a sanitized fault.
+
+**Decisions.**
+
+1. **202 → 429**, with `Retry-After` from `api/main.py`'s handler, which keys on the status alone
+   and needed no change. The sentence is `QUERIES_AT_ONCE`, a named constant.
+2. **The sentence is pinned on both sides.** `hands/study.ts` holds the same literal — the
+   precedent is `SANITIZED = 'Internal server error'`, which both `auth/api.ts` and `study.ts`
+   already know — and recognises the refusal by it, answering with the replayer's own
+   `UNDER_LOAD`, which names the thing that asked too much and the retry (stepping again). The
+   unit test in `tests/test_ch_budget.py` pins the literal so a change on one side fails with the
+   sentence in it; the client cannot read a Python constant, so this is the seam.
+3. **A sanitized 500 is no longer "under load" — anywhere.** Once the refusal is classified, what
+   remains behind "Internal server error" is a fault — on 2026-09-23, a column the real mart did
+   not have yet — and telling the reader to retry it is wrong. The replayer's `API_FAULT` says the
+   reason is in the terminal running `make api`; the app-wide `describeApiError` (`auth/api.ts`,
+   `API_BROKE`) now says the same, and `analyze/problems.ts`'s note and test follow. **Out of
+   lane and taken anyway**, the way ADR-069 took `train/session.ts`: the review confirmed that
+   leaving the app-wide sentence made every screen but the replayer misdescribe a genuine 500 and
+   prompt a retry that cannot help, and the change is one literal — pinned in five tests
+   (`auth/api.test.ts`, `ranges/library.test.ts`, `HandNotes.test.ts`, `UploadQueue.test.ts`,
+   `PokerAccounts.test.ts`), each updated to the new sentence.
+4. **The hour's quota (201) keeps the server's sentence.** It is also a 429, and "stepping again
+   asks afresh" would be a lie for it; only the concurrency refusal gets the replayer's wording.
+
+**Verified.** Unit; integration (`tests/integration/test_quotas_concurrency.py`, its own file
+because `test_quotas.py` sits at the 300-line ceiling: a tenant on a one-query budget, a
+`SELECT sleep(3)` held on its own connection — built on the main thread first, and the report
+sent only once `system.processes` shows it running, so nothing is timed — the API's report is the
+one too many → 429, `Retry-After`, the sentence, no leak); and live on the real ClickHouse as
+tenant 1 — eight node queries at once: `200 429 429 429 200 200 200 200`, each 429 carrying
+`retry-after: 60` and the sentence.
+
+---
+
+## ADR-096 — A Worker that cannot start rejects; a blocker row is a control exactly when it is one
+
+**Status:** accepted · 2026-09-23 · round-8 follow-ups on the replayer's path ·
+**Closes** ADR-069's "left, and said plainly" and ADR-074's "the root cause is out of lane".
+
+**Decisions.**
+
+1. **`useEquityService` races every job against the Worker's own failure.** A module Worker whose
+   script fails to load fires `error` on the Worker object and then answers nothing, so a Comlink
+   call over it never settles — `PredictionGate` and `EquityCalculator` showed "Computing…" for
+   ever. The composable now builds one promise that rejects on that event (observed once, so a
+   failure with no job in flight is not an unhandled rejection of its own) and `Promise.race`s
+   both `compute` and `cancel` against it, so a job started before the failure and one started
+   after both reject at once. The message is the composable's (`WORKER_UNREACHABLE`): the
+   browser's `ErrorEvent` for a script that would not load is usually blank, and ADR-069 forbids
+   the class name. Exercised in a browser by replacing `window.Worker` with one that fires `error`
+   and opening `/lab`: the calculator printed the sentence, not "Computing…".
+2. **`BlockerPanel` gains `selectable`.** ADR-074 found the panel advertised every row as clickable
+   whether or not a host listened, and fixed three call sites while naming the component as the
+   root cause. Now, **only** with `selectable`, a row's combo cell holds a real `<button>` (the
+   keyboard and screen-reader control, `aria-pressed` on the pinned one) and the row answers a
+   mouse click with the pointer and hover to say so; `comboSelect` is emitted only then. The row
+   itself stays a `<tr>` — the first cut gave the row `role="button"`, which the review pointed
+   out flattens its six cells and the column headings into one announced string and takes the
+   table out of the accessibility tree; a native button in the cell needs no ARIA and no
+   shortcut-registry row. The hosts that listen pass it (`BlockersTrainer`, `Step8ValueBluffs`,
+   `/lab`, `/dev/components`, and the new `PoolBlockers`); `Step5Blockers`, which deliberately
+   does not listen (ADR-074), is now honest without a change.
