@@ -14,7 +14,8 @@ import type { Street } from '../node';
 import type { ActionStreet, HandState, ReplayAction, ReplayHand, SeatState } from './types';
 import { CONTRIBUTING, DECISIONS } from './types';
 
-const STREET_CARDS: Record<Street, number> = { preflop: 0, flop: 3, turn: 4, river: 5 };
+/** How many board cards are face up on each street. */
+export const STREET_CARDS: Readonly<Record<Street, number>> = { preflop: 0, flop: 3, turn: 4, river: 5 };
 const BETTING: readonly Street[] = ['preflop', 'flop', 'turn', 'river'];
 
 /** The betting round an action belongs to; `showdown` shows the river's board. */

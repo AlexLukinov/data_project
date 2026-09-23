@@ -21,8 +21,18 @@ const MIN_STACK_BB = 1;
 const MIN_TABLE_SIZE = 2;
 const MAX_TABLE_SIZE = 10;
 
+/**
+ * Apply a change. A line or a faced size that came in with the key (from the replayer) describes
+ * the street and the steps it came with: another street or sequence would contradict it and the
+ * key would fail the one-account rule on every lookup, with nothing on the page able to clear
+ * it — so they go with the change (ADR-078). A preflop key has no faced size at all.
+ */
 function patch(change: Partial<NodeKey>): void {
-  model.value = { ...model.value, ...change };
+  const resets: Partial<NodeKey> = {
+    ...('street' in change || 'action_sequence' in change ? { line_so_far: null } : {}),
+    ...(change.street === 'preflop' ? { size_bucket: null } : {}),
+  };
+  model.value = { ...model.value, ...resets, ...change };
 }
 
 function text(event: Event): string {

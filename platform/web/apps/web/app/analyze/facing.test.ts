@@ -14,6 +14,7 @@ const TURN_BET = nodeKey('BB', {
   street: 'turn',
   stake: 'NL10',
   eff_stack_bb: 40,
+  pot_type: 'srp',
   board_texture: ['two_tone'],
   action_sequence: [step('BB', 'check'), step('CO', 'check'), step('BB', 'bet', { size_pct: 0.5 })],
 });
@@ -30,6 +31,10 @@ describe('facingNode', () => {
     expect(facing!.stake).toBe('NL10');
     expect(facing!.eff_stack_bb).toBe(40);
     expect(facing!.board_texture).toEqual(['two_tone']);
+    // The pot was built the same way for both seats; the rest of ADR-078 is villain's own to fill.
+    expect(facing!.pot_type).toBe('srp');
+    expect(facing!.line_so_far).toBeNull();
+    expect(facing!.size_bucket).toBeNull();
   });
 
   it('keeps the actions that came before, so it is the same point in the hand', () => {

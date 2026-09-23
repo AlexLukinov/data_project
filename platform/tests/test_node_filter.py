@@ -65,6 +65,9 @@ def test_the_last_step_is_the_question_not_the_filter() -> None:
     assert "action" not in _leaves(UTG_RFI)
     assert "action" not in _leaves(BTN_3BET)
     assert "raise_to_bb" not in _leaves(UTG_RFI)
+    # Nor is hero's own size: a size is a filter only when the key names the bucket of the
+    # bet *in front* (ADR-078) -- `tests/test_node_filter_situation.py`.
+    assert "size_pct" not in _leaves(BTN_3BET) and "facing_size_pct" not in _leaves(BTN_3BET)
 
 
 def test_a_three_bet_faces_one_raise_from_the_named_seat() -> None:

@@ -31,6 +31,9 @@ export function facingNode(key: NodeKey | null): NodeKey | null {
     villain_position: key.hero_position,
     action_sequence: [...key.action_sequence, step(villain, VILLAIN_ANSWER)],
     street: key.street,
+    // Same hand, same pot. Villain's own earlier-street line is not in hero's key, and the size
+    // villain faces needs the registry's buckets, so those two stay unset (ADR-078).
+    pot_type: key.pot_type,
     board_texture: [...key.board_texture],
   });
 }

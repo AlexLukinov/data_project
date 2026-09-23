@@ -59,7 +59,7 @@ describe('createRangesApi', () => {
       ['/v1/ranges/export', 'GET'],
     ]);
     const created = jsonBody(calls[3]);
-    expect(created.node_key).toEqual({ stake: '', table_size: 6, eff_stack_bb: 100, hero_position: 'UTG', villain_position: null, action_sequence: [{ position: 'UTG', action: 'raise', size_bb: 2.5, size_pct: null }], street: 'preflop', board_texture: [] });
+    expect(created.node_key).toEqual({ stake: '', table_size: 6, eff_stack_bb: 100, hero_position: 'UTG', villain_position: null, action_sequence: [{ position: 'UTG', action: 'raise', size_bb: 2.5, size_pct: null }], street: 'preflop', line_so_far: null, size_bucket: null, pot_type: null, board_texture: [] });
     expect(created.weights).toBe('AsAh: 1');
     expect(calls[4]!.options!.body).toEqual({ name: 'UTG open' });
     expect(jsonBody(calls[9]).hero_position).toBe('UTG');

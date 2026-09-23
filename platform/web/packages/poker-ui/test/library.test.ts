@@ -29,6 +29,23 @@ describe('NodeKeyEditor', () => {
     expect((emitted[3]![0] as NodeKey).villain_position).toBeNull();
   });
 
+  it('drops a line the changed street or steps would contradict, and a faced size on preflop (ADR-078)', async () => {
+    const key = nodeKey('BB', { villain_position: 'CO', street: 'flop', line_so_far: 'r/', size_bucket: 'mid', action_sequence: [step('CO', 'bet', { size_pct: 0.5 }), step('BB', 'call')] });
+    const wrapper = mount(NodeKeyEditor, { props: { modelValue: key, 'onUpdate:modelValue': (k: NodeKey) => wrapper.setProps({ modelValue: k }) } });
+    const latest = () => wrapper.emitted('update:modelValue')!.at(-1)![0] as NodeKey;
+    // A stack is not a street: the line from the replayer survives.
+    await wrapper.find('[data-testid="node-stack"]').setValue('40');
+    expect(latest()).toMatchObject({ eff_stack_bb: 40, line_so_far: 'r/', size_bucket: 'mid' });
+    await wrapper.find('[data-testid="node-street"]').setValue('turn');
+    expect(latest()).toMatchObject({ street: 'turn', line_so_far: null, size_bucket: 'mid' });
+    await wrapper.find('[data-testid="node-street"]').setValue('preflop');
+    expect(latest()).toMatchObject({ street: 'preflop', line_so_far: null, size_bucket: null });
+
+    const fresh = mount(NodeKeyEditor, { props: { modelValue: key } });
+    await fresh.find('[data-testid="node-add-step"]').trigger('click');
+    expect((fresh.emitted('update:modelValue')![0]![0] as NodeKey).line_so_far).toBeNull();
+  });
+
   it('adds, edits and removes steps; the sizes are bb and % of pot', async () => {
     const wrapper = mount(NodeKeyEditor, { props: { modelValue: nodeKey('BTN'), 'onUpdate:modelValue': (k: NodeKey) => wrapper.setProps({ modelValue: k }) } });
     await wrapper.find('[data-testid="node-add-step"]').trigger('click');

@@ -1,6 +1,8 @@
 {
-  "_comment": "NodeKey fixture parsed by both test suites (ADR-028): tests/test_nodes.py and web/packages/poker-core/test/node.test.ts. `valid` entries must validate to exactly `canonical`; `invalid` entries must be rejected.",
+  "_comment": "NodeKey fixture parsed by both test suites (ADR-028, ADR-078): tests/test_nodes.py and web/packages/poker-core/test/node.test.ts. `valid` entries must validate to exactly `canonical`; `invalid` entries must be rejected. `positions`, `pot_types` and `size_buckets` are the vocabularies both twins declare; Python pins them to the registry.",
   "positions": ["UTG", "UTG1", "UTG2", "MP", "MP1", "HJ", "CO", "BTN", "SB", "BB"],
+  "pot_types": ["limped", "srp", "3bet", "4bet", "5bet_plus"],
+  "size_buckets": ["small", "mid", "large", "pot", "overbet"],
   "valid": [
     {
       "name": "UTG RFI 100bb",
@@ -17,6 +19,9 @@
         "villain_position": null,
         "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5, "size_pct": null }],
         "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
         "board_texture": []
       }
     },
@@ -42,6 +47,9 @@
           { "position": "BTN", "action": "raise", "size_bb": null, "size_pct": null }
         ],
         "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
         "board_texture": []
       }
     },
@@ -69,23 +77,27 @@
           { "position": "BB", "action": "call", "size_bb": null, "size_pct": null }
         ],
         "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
         "board_texture": []
       }
     },
     {
-      "name": "BB flop check-raise vs a third-pot c-bet",
+      "name": "BB flop check-raise vs a third-pot c-bet: this street's steps, the earlier streets as the line",
       "label": "BB raise vs CO 33% · flop · 100bb",
       "input": {
         "hero_position": "BB",
         "villain_position": "CO",
         "street": "flop",
         "action_sequence": [
-          { "position": "CO", "action": "raise", "size_bb": 2.5 },
-          { "position": "BB", "action": "call" },
           { "position": "BB", "action": "check" },
           { "position": "CO", "action": "bet", "size_pct": 0.33 },
           { "position": "BB", "action": "raise", "size_pct": 3 }
         ],
+        "line_so_far": "c/x",
+        "size_bucket": "small",
+        "pot_type": "srp",
         "board_texture": ["rainbow", "unpaired"]
       },
       "canonical": {
@@ -95,14 +107,71 @@
         "hero_position": "BB",
         "villain_position": "CO",
         "action_sequence": [
-          { "position": "CO", "action": "raise", "size_bb": 2.5, "size_pct": null },
-          { "position": "BB", "action": "call", "size_bb": null, "size_pct": null },
           { "position": "BB", "action": "check", "size_bb": null, "size_pct": null },
           { "position": "CO", "action": "bet", "size_bb": null, "size_pct": 0.33 },
           { "position": "BB", "action": "raise", "size_bb": null, "size_pct": 3.0 }
         ],
         "street": "flop",
+        "line_so_far": "c/x",
+        "size_bucket": "small",
+        "pot_type": "srp",
         "board_texture": ["rainbow", "unpaired"]
+      }
+    },
+    {
+      "name": "the river barrel node of ADR-078: opened, bet the flop, bet the turn, checked to on the river",
+      "label": "BTN bet vs BB · river · 100bb",
+      "input": {
+        "hero_position": "BTN",
+        "villain_position": "BB",
+        "street": "river",
+        "action_sequence": [
+          { "position": "BB", "action": "check" },
+          { "position": "BTN", "action": "bet", "size_pct": 0.66 }
+        ],
+        "line_so_far": "r/b/b/",
+        "pot_type": "srp"
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "BTN",
+        "villain_position": "BB",
+        "action_sequence": [
+          { "position": "BB", "action": "check", "size_bb": null, "size_pct": null },
+          { "position": "BTN", "action": "bet", "size_bb": null, "size_pct": 0.66 }
+        ],
+        "street": "river",
+        "line_so_far": "r/b/b/",
+        "size_bucket": null,
+        "pot_type": "srp",
+        "board_texture": []
+      }
+    },
+    {
+      "name": "a turn line with no action of hero's on the flop",
+      "label": "BB bet vs CO · turn · 100bb",
+      "input": {
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "street": "turn",
+        "action_sequence": [{ "position": "BB", "action": "bet", "size_pct": 0.5 }],
+        "line_so_far": "c/x-c/",
+        "pot_type": "srp"
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "action_sequence": [{ "position": "BB", "action": "bet", "size_bb": null, "size_pct": 0.5 }],
+        "street": "turn",
+        "line_so_far": "c/x-c/",
+        "size_bucket": null,
+        "pot_type": "srp",
+        "board_texture": []
       }
     },
     {
@@ -116,6 +185,9 @@
         "villain_position": null,
         "action_sequence": [{ "position": "SB", "action": "raise", "size_bb": null, "size_pct": null }],
         "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
         "board_texture": []
       },
       "canonical": {
@@ -126,6 +198,36 @@
         "villain_position": null,
         "action_sequence": [{ "position": "SB", "action": "raise", "size_bb": null, "size_pct": null }],
         "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
+        "board_texture": []
+      }
+    },
+    {
+      "name": "a key stored before ADR-078 reads back with the three fields at their defaults",
+      "label": "UTG RFI · 100bb",
+      "input": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "UTG",
+        "villain_position": null,
+        "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5, "size_pct": null }],
+        "street": "preflop",
+        "board_texture": []
+      },
+      "canonical": {
+        "stake": "",
+        "table_size": 6,
+        "eff_stack_bb": 100,
+        "hero_position": "UTG",
+        "villain_position": null,
+        "action_sequence": [{ "position": "UTG", "action": "raise", "size_bb": 2.5, "size_pct": null }],
+        "street": "preflop",
+        "line_so_far": null,
+        "size_bucket": null,
+        "pot_type": null,
         "board_texture": []
       }
     }
@@ -141,6 +243,40 @@
     { "reason": "table size out of range", "input": { "hero_position": "UTG", "table_size": 1 } },
     { "reason": "stack must be a positive integer", "input": { "hero_position": "UTG", "eff_stack_bb": 0 } },
     { "reason": "a texture tag must be a string", "input": { "hero_position": "UTG", "board_texture": [1] } },
+    { "reason": "a line with a letter outside the alphabet", "input": { "hero_position": "BB", "street": "flop", "line_so_far": "c/q" } },
+    { "reason": "a line must be a string", "input": { "hero_position": "BB", "street": "flop", "line_so_far": 3 } },
+    {
+      "reason": "a line on a preflop key, where the sequence is the whole line",
+      "input": {
+        "hero_position": "CO",
+        "villain_position": "BTN",
+        "line_so_far": "r",
+        "action_sequence": [
+          { "position": "CO", "action": "raise", "size_bb": 2.5 },
+          { "position": "BTN", "action": "raise", "size_bb": 8 },
+          { "position": "CO", "action": "call" }
+        ]
+      }
+    },
+    { "reason": "a line that stops one street short of the key's", "input": { "hero_position": "BTN", "street": "river", "line_so_far": "r/b/" } },
+    { "reason": "a line that runs past the key's street", "input": { "hero_position": "BTN", "street": "flop", "line_so_far": "r/b/b/" } },
+    {
+      "reason": "a line whose last street contradicts the sequence",
+      "input": {
+        "hero_position": "BB",
+        "villain_position": "CO",
+        "street": "flop",
+        "line_so_far": "c/x",
+        "action_sequence": [
+          { "position": "BB", "action": "bet", "size_pct": 0.5 },
+          { "position": "CO", "action": "raise", "size_pct": 1 },
+          { "position": "BB", "action": "call" }
+        ]
+      }
+    },
+    { "reason": "a size bucket on a preflop key", "input": { "hero_position": "BB", "size_bucket": "small" } },
+    { "reason": "a size bucket outside the registry's names", "input": { "hero_position": "BB", "street": "flop", "size_bucket": "huge" } },
+    { "reason": "a pot type outside the vocabulary", "input": { "hero_position": "BB", "street": "flop", "pot_type": "single" } },
     { "reason": "not an object", "input": "UTG RFI" }
   ]
 }

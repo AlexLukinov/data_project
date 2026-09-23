@@ -12,24 +12,16 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from analysis.pool.nodes import ActionStep, NodeKey, Position, Street
+from analysis.pool.nodes import ActionStep, NodeKey, Position, Street, own_line
 from stats.ast import All, Leaf, Node
 from stats.definitions import Dimension
 from stats.errors import RegistryError
 from stats.registry import Registry, registry
 
-LETTER: dict[str, str] = {
-    "fold": "f",
-    "check": "x",
-    "limp": "l",
-    "call": "c",
-    "bet": "b",
-    "raise": "r",
-    "allin": "r",
-}
-"""The line alphabet of `dimensions.yaml`. An all-in is a raise as far as a line is concerned."""
-
 AGGRESSIVE = frozenset({"bet", "raise", "allin"})
+
+FACED_SIZE = "facing_size_pct"
+"""The dimension a key's `size_bucket` names a bucket of: the bet in front, over the pot."""
 
 PREFLOP_FACING: dict[int, str] = {0: "raise", 1: "3bet", 2: "4bet"}
 """Raises in front -> `facing`, preflop. Three or more is `5bet_plus`."""
@@ -88,9 +80,17 @@ POSTFLOP_ORDER: tuple[str, ...] = (
 """Who acts first after the flop. Later in this list is later to act, which is `is_ip`."""
 
 
-def _line_of(steps: list[ActionStep], hero: Position) -> str:
-    """Hero's own actions, in the alphabet `dimensions.yaml` documents."""
-    return "-".join(LETTER[s.action] for s in steps if s.position == hero)
+def _line_leaf(key: NodeKey, before: list[ActionStep]) -> Leaf:
+    """Hero's own line: across streets when the key says so, else this street only (ADR-078).
+
+    A key carries one or the other, never both: `line_so_far` already ends with this street's
+    actions (the model checks that against the sequence), so a `street_line` leaf beside it
+    would say the same thing twice.
+    """
+    if key.line_so_far is not None:
+        return Leaf(dim="line_so_far", op="eq", value=key.line_so_far)
+    line_dim = "preflop_line" if key.street == "preflop" else "street_line"
+    return Leaf(dim=line_dim, op="eq", value=own_line(before, key.hero_position))
 
 
 def _facing(steps: list[ActionStep], street: Street) -> str:
@@ -117,14 +117,43 @@ def _last_aggressor(steps: list[ActionStep], hero: Position) -> Position | None:
     return None
 
 
+def _bucket_leaf(dim: Dimension, low: float | None, high: float | None) -> Leaf:
+    """One registry bucket as a `between` leaf; an open end is closed far beyond any value."""
+    bottom = low if low is not None else 0.0
+    top = high if high is not None else OPEN_ENDED
+    return Leaf(dim=dim.code, op="between", value=[bottom, top])
+
+
 def _bucket_of(value: float, dim: Dimension) -> Leaf:
     """The registry bucket `value` falls in, as a `between` leaf — never an exact float match."""
     for low, high in dim.buckets.values():
         bottom = low if low is not None else 0.0
         if value >= bottom and (high is None or value < high):
-            top = high if high is not None else OPEN_ENDED
-            return Leaf(dim=dim.code, op="between", value=[bottom, top])
+            return _bucket_leaf(dim, low, high)
     return Leaf(dim=dim.code, op="gte", value=0)
+
+
+def _bucket_named(name: str, dim: Dimension) -> Leaf:
+    """The registry bucket called `name`, as the same leaf `_bucket_of` builds from a value.
+
+    The key carries the name and the registry the boundary, so no boundary is written twice
+    (ADR-028); a name the registry does not know is an error, never an empty answer.
+    """
+    bounds = dim.buckets.get(name)
+    if bounds is None:
+        known = ", ".join(dim.buckets)
+        raise RegistryError(f"unknown {dim.code} bucket {name!r}; the registry offers: {known}")
+    return _bucket_leaf(dim, *bounds)
+
+
+def _situation_leaves(key: NodeKey, reg: Registry) -> list[Node]:
+    """The ADR-078 fields that are set: the pot's shape and the bet in front, by bucket."""
+    leaves: list[Node] = []
+    if key.pot_type is not None:
+        leaves.append(Leaf(dim="pot_type", op="eq", value=key.pot_type))
+    if key.size_bucket is not None:
+        leaves.append(_bucket_named(key.size_bucket, reg.dimension(FACED_SIZE)))
+    return leaves
 
 
 def _texture_leaf(tag: str, reg: Registry) -> Leaf:
@@ -211,7 +240,8 @@ def node_filter(key: NodeKey, reg: Registry | None = None) -> Node:
     """The decisions this node covers. The key's **last step is excluded**: it is the answer.
 
     Raises `RegistryError` when the key names a texture the registry does not know, two
-    textures from one dimension, or a texture of a street the node has not reached.
+    textures from one dimension, a texture of a street the node has not reached, or a size
+    bucket the registry does not have.
     """
     reg = reg or registry()
     before = list(key.action_sequence[:-1])
@@ -220,11 +250,8 @@ def node_filter(key: NodeKey, reg: Registry | None = None) -> Node:
         Leaf(dim="street", op="eq", value=key.street),
         Leaf(dim="facing", op="eq", value=_facing(before, key.street)),
         Leaf(dim="players_dealt_in", op="eq", value=key.table_size),
+        _line_leaf(key, before),
     ]
-
-    line_dim = "preflop_line" if key.street == "preflop" else "street_line"
-    leaves.append(Leaf(dim=line_dim, op="eq", value=_line_of(before, key.hero_position)))
-
     leaves.extend(_villain_leaves(key, before))
 
     stack = reg.dimensions.get("eff_stack_bb")
@@ -232,5 +259,6 @@ def node_filter(key: NodeKey, reg: Registry | None = None) -> Node:
         leaves.append(_bucket_of(float(key.eff_stack_bb), stack))
     if key.stake:
         leaves.append(Leaf(dim="stake_level", op="eq", value=key.stake))
+    leaves.extend(_situation_leaves(key, reg))
     leaves.extend(_texture_leaves(key.board_texture, key.street, reg))
     return All(all=leaves)
