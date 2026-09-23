@@ -118,7 +118,7 @@ app, backgrounded; logs in `platform/.run/logs`). `make pause` frees the memory 
 ---
 ### ✅ Round 9 is merged (2026-09-23) — four lanes, **pool ranges in the replayer**, and the fifteenth handle gone
 
-**Committed:** texture `281b748` · key `ad82b26` · inference `c93c141` · replayer `bf9932b`. **Pushed** after the rewrite below.
+**Committed:** texture `281b748` · key `ad82b26` · inference `c93c141` · replayer `bf9932b`. **Pushed** after the rewrite below; CI run `35866451723` green on all four jobs on the rewritten tip.
 
 **Gates over the combined tree**, re-run at the merge: `make check` **1,844** · `make web-check` **1,791 / 163** · `make seed && make test-all` **1,964 passed, 6 skipped** · `make e2e` **2 / 2** · `make privacy-check` clean. The rebuilt real marts re-checked
 read-only: the six new columns present, `flop_connectedness` gone, 73,679,949 / 54,562,770 rows.
